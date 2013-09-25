@@ -18,6 +18,7 @@
 package org.apache.cassandra.io.compress;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -83,13 +84,19 @@ public class SnappyCompressor implements ICompressor
         return Snappy.maxCompressedLength(chunkLength);
     }
 
-    public int compress(byte[] input, int inputOffset, int inputLength, ICompressor.WrappedArray output, int outputOffset) throws IOException
-    {
-        return Snappy.rawCompress(input, inputOffset, inputLength, output.buffer, outputOffset);
-    }
-
+    @Override
     public int uncompress(byte[] input, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException
     {
         return Snappy.rawUncompress(input, inputOffset, inputLength, output, outputOffset);
+    }
+
+    public int compress(ByteBuffer input, int inputLength, ByteBuffer compressed) throws IOException
+    {
+        return Snappy.compress(input, compressed);
+    }
+
+    public int uncompress(ByteBuffer compressed, int inputLength, ByteBuffer output) throws IOException
+    {
+        return Snappy.uncompress(compressed, output);
     }
 }

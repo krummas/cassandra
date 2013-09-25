@@ -18,6 +18,7 @@
 package org.apache.cassandra.io.compress;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -68,7 +69,7 @@ public class DeflateCompressor implements ICompressor
         return chunkLength;
     }
 
-    public int compress(byte[] input, int inputOffset, int inputLength, ICompressor.WrappedArray output, int outputOffset)
+    public int compress(byte[] input, int inputOffset, int inputLength, byte [] buffer, int outputOffset)
     {
         Deflater def = deflater.get();
         def.reset();
@@ -80,7 +81,7 @@ public class DeflateCompressor implements ICompressor
         int offs = outputOffset;
         while (true)
         {
-            offs += def.deflate(output.buffer, offs, output.buffer.length - offs);
+            offs += def.deflate(buffer, offs, buffer.length - offs);
             if (def.finished())
             {
                 return offs - outputOffset;
@@ -88,9 +89,9 @@ public class DeflateCompressor implements ICompressor
             else
             {
                 // We're not done, output was too small. Increase it and continue
-                byte[] newBuffer = new byte[(output.buffer.length*4)/3 + 1];
-                System.arraycopy(output.buffer, 0, newBuffer, 0, offs);
-                output.buffer = newBuffer;
+                byte[] newBuffer = new byte[(buffer.length*4)/3 + 1];
+                System.arraycopy(buffer, 0, newBuffer, 0, offs);
+                buffer = newBuffer;
             }
         }
     }
@@ -112,5 +113,27 @@ public class DeflateCompressor implements ICompressor
         {
             throw new IOException(e);
         }
+    }
+
+    /**
+     * TODO: horribly slow, only for backwards compatibility...
+     */
+    @Override
+    public int compress(ByteBuffer input, int inputLength, ByteBuffer compressed) throws IOException
+    {
+        byte [] buffer = new byte[inputLength];
+        byte [] compressedBuffer = new byte[inputLength];
+        input.get(buffer);
+        int compressedLength = compress(buffer, 0, inputLength, compressedBuffer, 0);
+        compressed.put(compressedBuffer, 0, compressedLength);
+        compressed.flip();
+        return compressedLength;
+    }
+
+    @Override
+    public int uncompress(ByteBuffer compressed, int inputLength, ByteBuffer output) throws IOException
+    {
+        // TODO: not used
+        return 0;
     }
 }

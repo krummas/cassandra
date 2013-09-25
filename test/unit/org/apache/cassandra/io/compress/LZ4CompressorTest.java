@@ -23,8 +23,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Random;
 
-import org.apache.cassandra.io.compress.ICompressor.WrappedArray;
-
 import org.junit.Before;
 import org.junit.Test;
 
@@ -44,13 +42,13 @@ public class LZ4CompressorTest
     public void test(byte[] data, int off, int len) throws IOException
     {
         final int outOffset = 3;
-        final WrappedArray out = new WrappedArray(new byte[outOffset + compressor.initialCompressedBufferLength(len)]);
-        new Random().nextBytes(out.buffer);
+        final byte [] out = new byte[outOffset + compressor.initialCompressedBufferLength(len)];
+        new Random().nextBytes(out);
         final int compressedLength = compressor.compress(data, off, len, out, outOffset);
         final int restoredOffset = 5;
         final byte[] restored = new byte[restoredOffset + len];
         new Random().nextBytes(restored);
-        final int decompressedLength = compressor.uncompress(out.buffer, outOffset, compressedLength, restored, restoredOffset);
+        final int decompressedLength = compressor.uncompress(out, outOffset, compressedLength, restored, restoredOffset);
         assertEquals(decompressedLength, len);
         assertArrayEquals(Arrays.copyOfRange(data, off, off + len),
                           Arrays.copyOfRange(restored, restoredOffset, restoredOffset + decompressedLength));

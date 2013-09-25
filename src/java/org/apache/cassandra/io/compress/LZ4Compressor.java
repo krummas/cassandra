@@ -18,6 +18,7 @@
 package org.apache.cassandra.io.compress;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
@@ -52,9 +53,9 @@ public class LZ4Compressor implements ICompressor
         return INTEGER_BYTES + compressor.maxCompressedLength(chunkLength);
     }
 
-    public int compress(byte[] input, int inputOffset, int inputLength, WrappedArray output, int outputOffset) throws IOException
+    public int compress(byte[] input, int inputOffset, int inputLength, byte[] buffer, int outputOffset) throws IOException
     {
-        final byte[] dest = output.buffer;
+        final byte[] dest = buffer;
         dest[outputOffset] = (byte) inputLength;
         dest[outputOffset + 1] = (byte) (inputLength >>> 8);
         dest[outputOffset + 2] = (byte) (inputLength >>> 16);
@@ -95,6 +96,24 @@ public class LZ4Compressor implements ICompressor
         }
 
         return decompressedLength;
+    }
+
+    @Override
+    public int compress(ByteBuffer input, int inputLength, ByteBuffer compressed) throws IOException
+    {
+        byte [] inputBuf = new byte[inputLength];
+        input.get(inputBuf);
+        byte [] compressedBuf = new byte[compressed.capacity()];
+        int compressedLen = compress(inputBuf, 0, inputLength, compressedBuf, 0);
+        compressed.put(compressedBuf, 0, compressedLen);
+        compressed.flip();
+        return compressedLen;
+    }
+
+    @Override
+    public int uncompress(ByteBuffer compressed, int inputLength, ByteBuffer output) throws IOException
+    {
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
     public Set<String> supportedOptions()

@@ -53,7 +53,7 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.io.compress.CompressionParameters;
-import org.apache.cassandra.io.compress.LZ4Compressor;
+import org.apache.cassandra.io.compress.SnappyCompressor;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.thrift.CqlRow;
@@ -87,7 +87,7 @@ public final class CFMetaData
     public final static boolean DEFAULT_POPULATE_IO_CACHE_ON_FLUSH = false;
 
     // Note that this is the default only for user created tables
-    public final static String DEFAULT_COMPRESSOR = LZ4Compressor.class.getCanonicalName();
+    public final static String DEFAULT_COMPRESSOR = SnappyCompressor.class.getCanonicalName();//LZ4Compressor.class.getCanonicalName();
 
     public static final CFMetaData IndexCf = compile("CREATE TABLE \"" + SystemKeyspace.INDEX_CF + "\" ("
                                                      + "table_name text,"

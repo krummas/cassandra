@@ -18,7 +18,9 @@
 package org.apache.cassandra.io.util;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.FileChannel;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.FSReadError;
@@ -36,7 +38,7 @@ public class SequentialWriter extends OutputStream
     // so we can use the write(int) path w/o tons of new byte[] allocations
     private final byte[] singleByteBuffer = new byte[1];
 
-    protected byte[] buffer;
+    protected final ByteBuffer byteBuffer;
     private final boolean skipIOCache;
     private final int fd;
     private final int directoryFD;
@@ -45,8 +47,7 @@ public class SequentialWriter extends OutputStream
 
     protected long current = 0, bufferOffset;
     protected int validBufferBytes;
-
-    protected final RandomAccessFile out;
+    protected final FileChannel fileChannel;
 
     // used if skip I/O cache was enabled
     private long ioCacheStartOffset = 0, bytesSinceCacheFlush = 0;
@@ -64,28 +65,21 @@ public class SequentialWriter extends OutputStream
     {
         try
         {
-            out = new RandomAccessFile(file, "rw");
+            RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            fileChannel = raf.getChannel();
+            fd = CLibrary.getfd(raf.getFD());
         }
-        catch (FileNotFoundException e)
+        catch (IOException e)
         {
             throw new RuntimeException(e);
         }
 
         filePath = file.getAbsolutePath();
 
-        buffer = new byte[bufferSize];
+        byteBuffer = ByteBuffer.allocateDirect(bufferSize);
         this.skipIOCache = skipIOCache;
         this.trickleFsync = DatabaseDescriptor.getTrickleFsync();
         this.trickleFsyncByteInterval = DatabaseDescriptor.getTrickleFsyncIntervalInKb() * 1024;
-
-        try
-        {
-            fd = CLibrary.getfd(out.getFD());
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e); // shouldn't happen
-        }
 
         directoryFD = CLibrary.tryOpenDirectory(file.getParent());
         stream = new DataOutputStream(this);
@@ -119,7 +113,7 @@ public class SequentialWriter extends OutputStream
 
     public void write(byte[] data, int offset, int length) throws ClosedChannelException
     {
-        if (buffer == null)
+        if (!fileChannel.isOpen())
             throw new ClosedChannelException();
 
         while (length > 0)
@@ -139,23 +133,26 @@ public class SequentialWriter extends OutputStream
      */
     private int writeAtMost(byte[] data, int offset, int length)
     {
-        if (current >= bufferOffset + buffer.length)
+        if (current >= bufferOffset + byteBuffer.capacity())
             reBuffer();
 
-        assert current < bufferOffset + buffer.length
+        assert current < bufferOffset + byteBuffer.capacity()
                 : String.format("File (%s) offset %d, buffer offset %d.", getPath(), current, bufferOffset);
 
 
-        int toCopy = Math.min(length, buffer.length - bufferCursor());
+        int toCopy = Math.min(length, byteBuffer.capacity() - bufferCursor());
 
         // copy bytes from external buffer
-        System.arraycopy(data, offset, buffer, bufferCursor(), toCopy);
-
-        assert current <= bufferOffset + buffer.length
+        byteBuffer.put(data, offset, toCopy);
+        assert current <= bufferOffset + byteBuffer.capacity()
                 : String.format("File (%s) offset %d, buffer offset %d.", getPath(), current, bufferOffset);
 
         validBufferBytes = Math.max(validBufferBytes, bufferCursor() + toCopy);
         current += toCopy;
+
+        // TODO: this wont work (scrub):
+        if (metadata != null)
+            metadata.append(data, offset, length);
 
         return toCopy;
     }
@@ -172,7 +169,7 @@ public class SequentialWriter extends OutputStream
     {
         try
         {
-            out.getFD().sync();
+            fileChannel.force(true);
         }
         catch (IOException e)
         {
@@ -256,15 +253,13 @@ public class SequentialWriter extends OutputStream
     {
         try
         {
-            out.write(buffer, 0, validBufferBytes);
+            byteBuffer.flip();
+            fileChannel.write(byteBuffer);
         }
         catch (IOException e)
         {
             throw new FSWriteError(e, getPath());
         }
-
-        if (metadata != null)
-            metadata.append(buffer, 0, validBufferBytes);
     }
 
     public long getFilePointer()
@@ -288,7 +283,7 @@ public class SequentialWriter extends OutputStream
     {
         try
         {
-            return Math.max(Math.max(current, out.length()), bufferOffset + validBufferBytes);
+            return Math.max(Math.max(current, fileChannel.size()), bufferOffset + validBufferBytes);
         }
         catch (IOException e)
         {
@@ -311,6 +306,7 @@ public class SequentialWriter extends OutputStream
     {
         bufferOffset = current;
         validBufferBytes = 0;
+        byteBuffer.clear();
     }
 
     private int bufferCursor()
@@ -346,7 +342,7 @@ public class SequentialWriter extends OutputStream
         // reset channel position
         try
         {
-            out.seek(current);
+            fileChannel.position(current);
         }
         catch (IOException e)
         {
@@ -360,7 +356,7 @@ public class SequentialWriter extends OutputStream
     {
         try
         {
-            out.getChannel().truncate(toSize);
+            fileChannel.truncate(toSize);
         }
         catch (IOException e)
         {
@@ -371,19 +367,17 @@ public class SequentialWriter extends OutputStream
     @Override
     public void close()
     {
-        if (buffer == null)
-            return; // already closed
+        if (!fileChannel.isOpen())
+            return;
 
         syncInternal();
-
-        buffer = null;
 
         if (skipIOCache && bytesSinceCacheFlush > 0)
             CLibrary.trySkipCache(fd, 0, 0);
 
         try
         {
-            out.close();
+            fileChannel.close();
         }
         catch (IOException e)
         {
@@ -404,7 +398,7 @@ public class SequentialWriter extends OutputStream
         if (current != 0)
             throw new IllegalStateException();
         metadata = writer;
-        metadata.writeChunkSize(buffer.length);
+        metadata.writeChunkSize(byteBuffer.capacity());
     }
 
     /**
@@ -419,4 +413,21 @@ public class SequentialWriter extends OutputStream
             this.pointer = pointer;
         }
     }
+
+//    public static void main(String ... args) throws ClosedChannelException
+//    {
+//        int FILE_SIZE=1024*1024*20;
+//        byte [] test = new byte[FILE_SIZE];
+//        for (int i = 0; i < FILE_SIZE; i++)
+//            test[i] = (byte)(i%100);
+//        long start = System.currentTimeMillis();
+//        for (int i = 0; i < 1099; i++)
+//        {
+//            SequentialWriter sw = new SequentialWriter(new File("/tmp/testu"), 65535, true);
+//            sw.write(test);
+//            sw.flush();
+//            sw.close();
+//        }
+//        System.out.println(System.currentTimeMillis() - start);
+//    }
 }
