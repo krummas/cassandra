@@ -32,7 +32,6 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.AbstractCompactedRow;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
@@ -112,18 +111,17 @@ public class SSTableWriter extends SSTable
         if (compression)
         {
             dbuilder = SegmentedFile.getCompressedBuilder();
-            dataFile = CompressedSequentialWriter.open(getFilename(),
-                                                       descriptor.filenameFor(Component.COMPRESSION_INFO),
-                                                       !metadata.populateIoCacheOnFlush(),
-                                                       metadata.compressionParameters(),
-                                                       sstableMetadataCollector);
+            dataFile = SequentialWriter.open(getFilename(),
+                                             descriptor.filenameFor(Component.COMPRESSION_INFO),
+                                             !metadata.populateIoCacheOnFlush(),
+                                             metadata.compressionParameters(),
+                                             sstableMetadataCollector);
         }
         else
         {
             dbuilder = SegmentedFile.getBuilder(DatabaseDescriptor.getDiskAccessMode());
-            dataFile = SequentialWriter.open(new File(getFilename()), !metadata.populateIoCacheOnFlush());
+            dataFile = SequentialWriter.open(new File(getFilename()), !metadata.populateIoCacheOnFlush(), new File(descriptor.filenameFor(Component.CRC)));
         }
-        dataFile.setDataIntegrityWriter(DataIntegrityMetadata.checksumWriter(descriptor, compression));
 
         this.sstableMetadataCollector = sstableMetadataCollector;
     }
@@ -369,6 +367,7 @@ public class SSTableWriter extends SSTable
 
     private Pair<Descriptor, StatsMetadata> close(long repairedAt)
     {
+        dataFile.writeFullChecksum(descriptor);
         // index and filter
         iwriter.close();
         // main data, close will truncate if necessary
