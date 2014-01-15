@@ -73,6 +73,7 @@ import org.apache.cassandra.io.sstable.metadata.CompactionMetadata;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.ColumnFamilyMetrics;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
 
@@ -1601,6 +1602,24 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public Collection<SSTableReader> markCurrentSSTablesReferenced()
     {
         return markCurrentViewReferenced().sstables;
+    }
+
+    public Set<SSTableReader> getUnrepairedSSTables()
+    {
+        Set<SSTableReader> unRepairedSSTables = new HashSet<>(getSSTables());
+        Iterator<SSTableReader> sstableIterator = unRepairedSSTables.iterator();
+        while(sstableIterator.hasNext())
+        {
+            SSTableReader sstable = sstableIterator.next();
+            if (sstable.getSSTableMetadata().repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
+                sstableIterator.remove();
+        }
+        return unRepairedSSTables;
+    }
+
+    public Set<SSTableReader> getRepairedSSTables()
+    {
+        return Sets.difference(new HashSet<>(getSSTables()), getUnrepairedSSTables());
     }
 
     abstract class AbstractViewSSTableFinder

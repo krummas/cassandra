@@ -20,6 +20,7 @@ package org.apache.cassandra.db.compaction;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.UUID;
@@ -36,6 +37,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.Validator;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertEquals;
@@ -82,7 +84,9 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
 
         Range<Token> range = new Range<Token>(Util.token(""), Util.token(""));
         int gcBefore = keyspace.getColumnFamilyStore(cfname).gcBefore(System.currentTimeMillis());
-        RepairJobDesc desc = new RepairJobDesc(UUID.randomUUID(), ksname, cfname, range);
+        UUID parentRepSession = UUID.randomUUID();
+        ActiveRepairService.instance.registerParentRepairSession(parentRepSession, cfs, Collections.<String>emptyList(), Arrays.asList(range), true);
+        RepairJobDesc desc = new RepairJobDesc(parentRepSession, UUID.randomUUID(), ksname, cfname, range);
         Validator validator = new Validator(desc, FBUtilities.getBroadcastAddress(), gcBefore);
         CompactionManager.instance.submitValidation(cfs, validator).get();
     }

@@ -38,6 +38,7 @@ import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.CloseableIterator;
 
 public class CompactionTask extends AbstractCompactionTask
@@ -143,7 +144,7 @@ public class CompactionTask extends AbstractCompactionTask
 
         Collection<SSTableReader> sstables = new ArrayList<>();
         Collection<SSTableWriter> writers = new ArrayList<>();
-
+        long minRepairedAt = getMinRepairedAt(actuallyCompact);
         if (collector != null)
             collector.beginCompaction(ci);
         try
@@ -157,7 +158,7 @@ public class CompactionTask extends AbstractCompactionTask
                 return;
             }
 
-            SSTableWriter writer = createCompactionWriter(sstableDirectory, keysPerSSTable);
+            SSTableWriter writer = createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt);
             writers.add(writer);
             while (iter.hasNext())
             {
@@ -191,7 +192,7 @@ public class CompactionTask extends AbstractCompactionTask
                 {
                     // tmp = false because later we want to query it with descriptor from SSTableReader
                     cachedKeyMap.put(writer.descriptor.asTemporary(false), cachedKeys);
-                    writer = createCompactionWriter(sstableDirectory, keysPerSSTable);
+                    writer = createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt);
                     writers.add(writer);
                     cachedKeys = new HashMap<>();
                 }
@@ -286,10 +287,21 @@ public class CompactionTask extends AbstractCompactionTask
         logger.debug("Actual #keys: {}, Estimated #keys:{}, Err%: {}", totalKeysWritten, estimatedTotalKeys, ((double)(totalKeysWritten - estimatedTotalKeys)/totalKeysWritten));
     }
 
-    private SSTableWriter createCompactionWriter(File sstableDirectory, long keysPerSSTable)
+    private long getMinRepairedAt(Set<SSTableReader> actuallyCompact)
+    {
+        long minRepairedAt= Long.MAX_VALUE;
+        for (SSTableReader sstable : actuallyCompact)
+            minRepairedAt = Math.min(minRepairedAt, sstable.getSSTableMetadata().repairedAt);
+        if (minRepairedAt == Long.MAX_VALUE)
+            return ActiveRepairService.UNREPAIRED_SSTABLE;
+        return minRepairedAt;
+    }
+
+    private SSTableWriter createCompactionWriter(File sstableDirectory, long keysPerSSTable, long repairedAt)
     {
         return new SSTableWriter(cfs.getTempSSTablePath(sstableDirectory),
                                  keysPerSSTable,
+                                 repairedAt,
                                  cfs.metadata,
                                  cfs.partitioner,
                                  new MetadataCollector(toCompact, cfs.metadata.comparator, getLevel()));

@@ -1,0 +1,85 @@
+package org.apache.cassandra.db.compaction;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import org.junit.Test;
+
+import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.Util;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
+import org.apache.cassandra.dht.BytesToken;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
+import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.sstable.SSTableScanner;
+import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import static junit.framework.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+public class AntiCompactionTest extends SchemaLoader
+{
+    private static String KEYSPACE1 = "Keyspace1";
+    private static String CF = "Standard1";
+    @Test
+    public void antiCompactOne() throws InterruptedException, ExecutionException, IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF);
+        store.disableAutoCompaction();
+        long timestamp = System.currentTimeMillis();
+        for (int i = 0; i < 10; i++)
+        {
+            DecoratedKey key = Util.dk(Integer.toString(i));
+            Mutation rm = new Mutation(KEYSPACE1, key.key);
+            for (int j = 0; j < 10; j++)
+                rm.add("Standard1", Util.cellname(Integer.toString(j)),
+                       ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                       timestamp,
+                       0);
+            rm.apply();
+        }
+        store.forceBlockingFlush();
+        Collection<SSTableReader> sstables = store.getUnrepairedSSTables();
+        assertEquals(store.getSSTables().size(), sstables.size());
+        Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("4".getBytes()));
+        List<Range<Token>> ranges = Arrays.asList(range);
+
+        long repairedAt = 1000;
+        CompactionManager.instance.performAnticompaction(store, ranges, sstables, repairedAt);
+
+        assertEquals(2, store.getSSTables().size());
+        int repairedKeys=0;
+        int nonRepairedKeys=0;
+        for (SSTableReader sstable : store.getSSTables())
+        {
+            boolean isRepaired = sstable.getSSTableMetadata().repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE;
+            SSTableScanner scanner = sstable.getScanner();
+            while(scanner.hasNext())
+            {
+                SSTableIdentityIterator row = (SSTableIdentityIterator) scanner.next();
+                if (isRepaired)
+                {
+                    assertTrue(range.contains(row.getKey().token));
+                    repairedKeys++;
+                }
+                else
+                {
+                    assertFalse(range.contains(row.getKey().token));
+                    nonRepairedKeys++;
+                }
+            }
+        }
+        assertEquals(repairedKeys, 4);
+        assertEquals(nonRepairedKeys, 6);
+    }
+}

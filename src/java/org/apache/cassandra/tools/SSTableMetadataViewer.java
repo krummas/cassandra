@@ -63,6 +63,7 @@ public class SSTableMetadataViewer
                 out.printf("Compression ratio: %s%n", stats.compressionRatio);
                 out.printf("Estimated droppable tombstones: %s%n", stats.getEstimatedDroppableTombstoneRatio((int) (System.currentTimeMillis() / 1000)));
                 out.printf("SSTable Level: %d%n", stats.sstableLevel);
+                out.printf("Repaired at: %d%n", stats.repairedAt);
                 out.println(stats.replayPosition);
                 printHistograms(stats, out);
             }

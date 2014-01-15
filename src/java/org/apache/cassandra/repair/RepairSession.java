@@ -93,6 +93,7 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
 
     private final SimpleCondition completed = new SimpleCondition();
     public final Condition differencingDone = new SimpleCondition();
+    public final Map<String, UUID> parentRepairSessions;
 
     private volatile boolean terminated = false;
 
@@ -105,13 +106,14 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
      * @param dataCenters the data centers that should be part of the repair; null for all DCs
      * @param cfnames names of columnfamilies
      */
-    public RepairSession(Range<Token> range, String keyspace, boolean isSequential, Collection<String> dataCenters, String... cfnames)
+    public RepairSession(Map<String, UUID> parentRepairSessions, Range<Token> range, String keyspace, boolean isSequential, Collection<String> dataCenters, String... cfnames)
     {
-        this(UUIDGen.getTimeUUID(), range, keyspace, isSequential, dataCenters, cfnames);
+        this(parentRepairSessions, UUIDGen.getTimeUUID(), range, keyspace, isSequential, dataCenters, cfnames);
     }
 
-    public RepairSession(UUID id, Range<Token> range, String keyspace, boolean isSequential, Collection<String> dataCenters, String[] cfnames)
+    public RepairSession(Map<String, UUID> parentRepairSessions, UUID id, Range<Token> range, String keyspace, boolean isSequential, Collection<String> dataCenters, String[] cfnames)
     {
+        this.parentRepairSessions = parentRepairSessions;
         this.id = id;
         this.isSequential = isSequential;
         this.keyspace = keyspace;
@@ -260,15 +262,17 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
             // Create and queue a RepairJob for each column family
             for (String cfname : cfnames)
             {
-                RepairJob job = new RepairJob(id, keyspace, cfname, range, isSequential);
+                UUID parentSessionId = parentRepairSessions.get(cfname);
+                RepairJob job = new RepairJob(parentSessionId, id, keyspace, cfname, range, isSequential);
                 jobs.offer(job);
             }
-
+            logger.debug("Sending tree requests to endpoints {}", endpoints);
             jobs.peek().sendTreeRequests(endpoints);
 
             // block whatever thread started this session until all requests have been returned:
             // if this thread dies, the session will still complete in the background
             completed.await();
+
             if (exception == null)
             {
                 logger.info(String.format("[repair #%s] session completed successfully", getId()));
@@ -307,6 +311,7 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
     {
         differencingDone.signalAll();
         completed.signalAll();
+        ActiveRepairService.instance.clearParentRepairSessions();
     }
 
     void failedNode(InetAddress remote)
