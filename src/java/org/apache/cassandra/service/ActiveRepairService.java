@@ -311,7 +311,7 @@ public class ActiveRepairService
                 success = sstables.isEmpty() || prs.cfs.getDataTracker().markCompacting(sstables);
             }
 
-            CompactionManager.instance.performAnticompaction(prs.cfs, prs.ranges, sstables, prs.repairedAt);
+            CompactionManager.instance.submitAntiCompaction(prs.cfs, prs.ranges, sstables, prs.repairedAt);
         }
         finally
         {

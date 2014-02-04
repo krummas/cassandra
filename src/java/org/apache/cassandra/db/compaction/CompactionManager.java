@@ -281,6 +281,22 @@ public class CompactionManager implements CompactionManagerMBean
         });
     }
 
+    public Future<?> submitAntiCompaction(final ColumnFamilyStore cfs,
+                                          final Collection<Range<Token>> ranges,
+                                          final Collection<SSTableReader> validatedForRepair,
+                                          final long repairedAt)
+    {
+        Runnable runnable = new WrappedRunnable() {
+
+            @Override
+            public void runMayThrow() throws Exception
+            {
+                performAnticompaction(cfs, ranges, validatedForRepair, repairedAt);
+            }
+        };
+        return executor.submit(runnable);
+    }
+
     /**
      * Make sure the {validatedForRepair} are marked for compaction before calling this.
      *
