@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.repair;
 
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.compaction.CompactionManager;
@@ -30,6 +31,7 @@ import org.apache.cassandra.repair.messages.RepairMessage;
 import org.apache.cassandra.repair.messages.SyncRequest;
 import org.apache.cassandra.repair.messages.ValidationRequest;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Pair;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +52,8 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
         {
             case PREPARE_MESSAGE:
                 PrepareMessage prepareMessage = (PrepareMessage) message.payload;
-                ColumnFamilyStore columnFamilyStore = Keyspace.open(prepareMessage.keyspace).getColumnFamilyStore(prepareMessage.columnFamily);
+                Pair<String, String> kscf = Schema.instance.getCF(prepareMessage.cfId);
+                ColumnFamilyStore columnFamilyStore = Keyspace.open(kscf.left).getColumnFamilyStore(kscf.right);
                 ActiveRepairService.instance.registerParentRepairSession(prepareMessage.parentRepairSession,
                                                                          columnFamilyStore,
                                                                          prepareMessage.ranges,

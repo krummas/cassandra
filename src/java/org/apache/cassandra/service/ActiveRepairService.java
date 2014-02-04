@@ -232,9 +232,10 @@ public class ActiveRepairService
             }
         };
 
+        UUID cfId = cfs.metadata.cfId;
         for(InetAddress neighbour : endpoints)
         {
-            PrepareMessage message = new PrepareMessage(parentRepairSession, cfs.keyspace.getName(), cfs.name, ranges, fullRepair);
+            PrepareMessage message = new PrepareMessage(parentRepairSession, cfId, ranges, fullRepair);
             MessageOut<RepairMessage> msg = message.createMessage();
             MessagingService.instance().sendRR(msg, neighbour, callback);
         }
