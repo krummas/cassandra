@@ -343,14 +343,13 @@ public class CompactionManager implements CompactionManagerMBean
             }
         }
         cfs.getDataTracker().notifySSTableRepairedStatusChanged(mutatedRepairStatuses);
-        cfs.getDataTracker().unmarkCompacting(nonAnticompacting);
-        cfs.getDataTracker().unmarkCompacting(mutatedRepairStatuses);
+        cfs.getDataTracker().unmarkCompacting(Sets.union(nonAnticompacting, mutatedRepairStatuses));
         // if all the required sstables are available then we anticompact
         Collection<SSTableReader> antiCompactedSSTables = doAntiCompaction(cfs, ranges, sstables, repairedAt);
         // verify that there are tables to be swapped, otherwise CFS#replaceCompactedSSTables will hang.
         if (antiCompactedSSTables.size() > 0)
-            cfs.replaceCompactedSSTables(sstables, antiCompactedSSTables, OperationType.COMPACTION);
-
+            cfs.replaceCompactedSSTables(sstables, antiCompactedSSTables, OperationType.ANTICOMPACTION);
+        cfs.getDataTracker().unmarkCompacting(sstables);
         logger.info(String.format("Completed anticompaction successfully"));
     }
 
@@ -364,14 +363,15 @@ public class CompactionManager implements CompactionManagerMBean
         // here we compute the task off the compaction executor, so having that present doesn't
         // confuse runWithCompactionsDisabled -- i.e., we don't want to deadlock ourselves, waiting
         // for ourselves to finish/acknowledge cancellation before continuing.
-        final AbstractCompactionTask task = cfStore.getCompactionStrategy().getMaximalTask(gcBefore);
+        final Collection<AbstractCompactionTask> tasks = cfStore.getCompactionStrategy().getMaximalTask(gcBefore);
         Runnable runnable = new WrappedRunnable()
         {
             protected void runMayThrow() throws IOException
             {
-                if (task == null)
+                if (tasks == null)
                     return;
-                task.execute(metrics);
+                for (AbstractCompactionTask task : tasks)
+                    task.execute(metrics);
             }
         };
         return executor.submit(runnable);
@@ -907,7 +907,7 @@ public class CompactionManager implements CompactionManagerMBean
         {
             logger.info("Anticompacting {}", sstable);
             File destination = cfs.directories.getDirectoryForNewSSTables();
-            SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, sstable.getSSTableMetadata().repairedAt, sstable);
+            SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
             SSTableWriter unRepairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstable);
             CompactionController controller = new CompactionController(cfs,
                                                                        new HashSet<>(repairedSSTables),

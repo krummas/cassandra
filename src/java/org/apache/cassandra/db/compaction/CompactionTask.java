@@ -100,6 +100,9 @@ public class CompactionTask extends AbstractCompactionTask
         // it is not empty, it may compact down to nothing if all rows are deleted.
         assert sstables != null && sstableDirectory != null;
 
+        if (toCompact.size() == 0)
+            return;
+
         // Note that the current compaction strategy, is not necessarily the one this task was created under.
         // This should be harmless; see comments to CFS.maybeReloadCompactionStrategy.
         AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();

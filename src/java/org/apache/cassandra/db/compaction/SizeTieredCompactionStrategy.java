@@ -274,7 +274,7 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
         }
     }
 
-    public AbstractCompactionTask getMaximalTask(final int gcBefore)
+    public Collection<AbstractCompactionTask> getMaximalTask(final int gcBefore)
     {
         Iterable<SSTableReader> allSSTables = cfs.markAllCompacting();
         if (allSSTables == null)
@@ -289,14 +289,7 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
             else
                 unrepaired.add(sstable);
         }
-
-        if (repaired.size() > unrepaired.size())
-        {
-            cfs.getDataTracker().unmarkCompacting(unrepaired);
-            return new CompactionTask(cfs, repaired, gcBefore);
-        }
-        cfs.getDataTracker().unmarkCompacting(repaired);
-        return new CompactionTask(cfs, unrepaired, gcBefore);
+        return Arrays.<AbstractCompactionTask>asList(new CompactionTask(cfs, repaired, gcBefore), new CompactionTask(cfs, unrepaired, gcBefore));
     }
 
     public AbstractCompactionTask getUserDefinedTask(Collection<SSTableReader> sstables, final int gcBefore)

@@ -109,11 +109,13 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
     {
         if (!isEnabled())
             return null;
-
-        return getMaximalTask(gcBefore);
+        Collection<AbstractCompactionTask> tasks = getMaximalTask(gcBefore);
+        if (tasks == null || tasks.size() == 0)
+            return null;
+        return tasks.iterator().next();
     }
 
-    public AbstractCompactionTask getMaximalTask(int gcBefore)
+    public Collection<AbstractCompactionTask> getMaximalTask(int gcBefore)
     {
         while (true)
         {
@@ -142,7 +144,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
             {
                 LeveledCompactionTask newTask = new LeveledCompactionTask(cfs, candidate.sstables, candidate.level, gcBefore, candidate.maxSSTableBytes);
                 newTask.setCompactionType(op);
-                return newTask;
+                return Arrays.<AbstractCompactionTask>asList(newTask);
             }
         }
     }
