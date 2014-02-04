@@ -218,7 +218,6 @@ public class StreamSession implements IEndpointStateChangeSubscriber, IFailureDe
      */
     public void addStreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, long repairedAt)
     {
-        logger.info("YYYY adding stream request with repairedAt={}", repairedAt);
         requests.add(new StreamRequest(keyspace, ranges, columnFamilies, repairedAt));
     }
 

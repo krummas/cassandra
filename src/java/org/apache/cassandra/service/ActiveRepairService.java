@@ -257,7 +257,7 @@ public class ActiveRepairService
         {
             if (new Bounds<>(sstable.first.token, sstable.last.token).intersects(ranges))
             {
-                if ((fullRepair || sstable.getSSTableMetadata().repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE))
+                if ((fullRepair || !sstable.isRepaired()))
                 {
                     sstablesToRepair.add(sstable);
                 }

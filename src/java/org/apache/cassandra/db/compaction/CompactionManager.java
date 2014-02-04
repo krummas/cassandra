@@ -50,7 +50,6 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.CompactionMetrics;
 import org.apache.cassandra.repair.Validator;
@@ -297,6 +296,7 @@ public class CompactionManager implements CompactionManagerMBean
     {
         logger.info("Starting anticompaction for ranges {}", ranges);
         Set<SSTableReader> sstables = new HashSet<>(validatedForRepair);
+        Set<SSTableReader> mutatedRepairStatuses = new HashSet<>();
         Set<SSTableReader> nonAnticompacting = new HashSet<>();
         Iterator<SSTableReader> sstableIterator = sstables.iterator();
         while (sstableIterator.hasNext())
@@ -310,7 +310,7 @@ public class CompactionManager implements CompactionManagerMBean
                     logger.info("SSTable {} fully contained in range {}, mutating repairedAt instead of anticompacting", sstable, r);
                     sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, repairedAt);
                     sstable.reloadSSTableMetadata();
-                    nonAnticompacting.add(sstable);
+                    mutatedRepairStatuses.add(sstable);
                     sstableIterator.remove();
                     break;
                 }
@@ -326,7 +326,9 @@ public class CompactionManager implements CompactionManagerMBean
                 }
             }
         }
+        cfs.getDataTracker().notifySSTableRepairedStatusChanged(mutatedRepairStatuses);
         cfs.getDataTracker().unmarkCompacting(nonAnticompacting);
+        cfs.getDataTracker().unmarkCompacting(mutatedRepairStatuses);
         // if all the required sstables are available then we anticompact
         Collection<SSTableReader> antiCompactedSSTables = doAntiCompaction(cfs, ranges, sstables, repairedAt);
         // verify that there are tables to be swapped, otherwise CFS#replaceCompactedSSTables will hang.

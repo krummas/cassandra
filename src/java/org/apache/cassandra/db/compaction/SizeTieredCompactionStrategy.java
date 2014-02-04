@@ -119,7 +119,7 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
         Set<SSTableReader> unRepaired = new HashSet<>();
         for(SSTableReader candidate : candidates)
         {
-            if (candidate.getSSTableMetadata().repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
+            if (!candidate.isRepaired())
                 unRepaired.add(candidate);
             else
                 repaired.add(candidate);
@@ -281,12 +281,15 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
             return null;
         Set<SSTableReader> sstables = Sets.newHashSet(allSSTables);
         Set<SSTableReader> repaired = new HashSet<>();
+        Set<SSTableReader> unrepaired = new HashSet<>();
         for (SSTableReader sstable : sstables)
         {
-            if (sstable.getSSTableMetadata().repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE)
+            if (sstable.isRepaired())
                 repaired.add(sstable);
+            else
+                unrepaired.add(sstable);
         }
-        Set<SSTableReader> unrepaired = Sets.difference(sstables, repaired);
+
         if (repaired.size() > unrepaired.size())
         {
             cfs.getDataTracker().unmarkCompacting(unrepaired);

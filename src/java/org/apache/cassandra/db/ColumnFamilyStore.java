@@ -1611,7 +1611,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         while(sstableIterator.hasNext())
         {
             SSTableReader sstable = sstableIterator.next();
-            if (sstable.getSSTableMetadata().repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
+            if (sstable.isRepaired())
                 sstableIterator.remove();
         }
         return unRepairedSSTables;
@@ -1619,7 +1619,15 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public Set<SSTableReader> getRepairedSSTables()
     {
-        return Sets.difference(new HashSet<>(getSSTables()), getUnrepairedSSTables());
+        Set<SSTableReader> repairedSSTables = new HashSet<>(getSSTables());
+        Iterator<SSTableReader> sstableIterator = repairedSSTables.iterator();
+        while(sstableIterator.hasNext())
+        {
+            SSTableReader sstable = sstableIterator.next();
+            if (!sstable.isRepaired())
+                sstableIterator.remove();
+        }
+        return repairedSSTables;
     }
 
     abstract class AbstractViewSSTableFinder

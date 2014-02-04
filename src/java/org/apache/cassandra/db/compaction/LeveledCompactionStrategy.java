@@ -37,6 +37,7 @@ import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.INotificationConsumer;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableListChangedNotification;
+import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
 
 public class LeveledCompactionStrategy extends AbstractCompactionStrategy implements INotificationConsumer
 {
@@ -168,6 +169,10 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
             SSTableListChangedNotification listChangedNotification = (SSTableListChangedNotification) notification;
             manifest.replace(listChangedNotification.removed, listChangedNotification.added);
         }
+        else if (notification instanceof SSTableRepairStatusChanged)
+        {
+            manifest.repairStatusChanged(((SSTableRepairStatusChanged) notification).sstable);
+        }
     }
 
     public long getMaxSSTableBytes()
@@ -179,7 +184,12 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
     {
         Multimap<Integer, SSTableReader> byLevel = ArrayListMultimap.create();
         for (SSTableReader sstable : sstables)
-            byLevel.get(sstable.getSSTableLevel()).add(sstable);
+        {
+            if (manifest.hasRepairedData() && !sstable.isRepaired())
+                byLevel.get(0).add(sstable);
+            else
+                byLevel.get(sstable.getSSTableLevel()).add(sstable);
+        }
 
         List<ICompactionScanner> scanners = new ArrayList<ICompactionScanner>(sstables.size());
         for (Integer level : byLevel.keySet())

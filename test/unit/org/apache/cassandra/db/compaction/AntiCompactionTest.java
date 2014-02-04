@@ -62,12 +62,11 @@ public class AntiCompactionTest extends SchemaLoader
         int nonRepairedKeys=0;
         for (SSTableReader sstable : store.getSSTables())
         {
-            boolean isRepaired = sstable.getSSTableMetadata().repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE;
             SSTableScanner scanner = sstable.getScanner();
             while(scanner.hasNext())
             {
                 SSTableIdentityIterator row = (SSTableIdentityIterator) scanner.next();
-                if (isRepaired)
+                if (sstable.isRepaired())
                 {
                     assertTrue(range.contains(row.getKey().token));
                     repairedKeys++;
