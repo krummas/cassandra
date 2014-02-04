@@ -20,11 +20,12 @@ package org.apache.cassandra.db.compaction;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.UUID;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -47,17 +48,32 @@ import static org.junit.Assert.assertTrue;
 @RunWith(OrderedJUnit4ClassRunner.class)
 public class LeveledCompactionStrategyTest extends SchemaLoader
 {
+    private String ksname = "Keyspace1";
+    private String cfname = "StandardLeveled";
+    private Keyspace keyspace = Keyspace.open(ksname);
+    private ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
+
+    @Before
+    public void enableCompaction()
+    {
+        cfs.enableAutoCompaction();
+    }
+
+    /**
+     * Since we use StandardLeveled CF for every test, we want to clean up after the test.
+     */
+    @After
+    public void truncateSTandardLeveled()
+    {
+        cfs.truncateBlocking();
+    }
+
     /*
      * This exercises in particular the code of #4142
      */
     @Test
     public void testValidationMultipleSSTablePerLevel() throws Exception
     {
-        String ksname = "Keyspace1";
-        String cfname = "StandardLeveled";
-        Keyspace keyspace = Keyspace.open(ksname);
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
-
         ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
 
         // Enough data to have a level 1 and 2
@@ -106,11 +122,6 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
     @Test
     public void testCompactionProgress() throws Exception
     {
-        String ksname = "Keyspace1";
-        String cfname = "StandardLeveled";
-        Keyspace keyspace = Keyspace.open(ksname);
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
-
         // make sure we have SSTables in L1
         ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]);
         int rows = 2;
@@ -147,11 +158,6 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
     @Test
     public void testMutateLevel() throws Exception
     {
-        String ksname = "Keyspace1";
-        String cfname = "StandardLeveled";
-        Keyspace keyspace = Keyspace.open(ksname);
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
-
         ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
 
         // Enough data to have a level 1 and 2
@@ -198,11 +204,6 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
     @Test
     public void testNewRepairedSSTable() throws Exception
     {
-        String ksname = "Keyspace1";
-        String cfname = "StandardLeveled";
-        Keyspace keyspace = Keyspace.open(ksname);
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
-
         ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
 
         // Enough data to have a level 1 and 2

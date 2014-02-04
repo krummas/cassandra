@@ -30,7 +30,6 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.UUIDSerializer;
 
 /**
@@ -62,13 +61,7 @@ public class RepairJobDesc
     @Override
     public String toString()
     {
-        StringBuilder sb = new StringBuilder("[repair #");
-        sb.append(sessionId);
-        sb.append(" on ");
-        sb.append(keyspace).append("/").append(columnFamily);
-        sb.append(", ").append(range);
-        sb.append("]");
-        return sb.toString();
+        return "[repair #" + sessionId + " on " + keyspace + "/" + columnFamily + ", " + range + "]";
     }
 
     @Override
@@ -83,7 +76,7 @@ public class RepairJobDesc
         if (!keyspace.equals(that.keyspace)) return false;
         if (range != null ? !range.equals(that.range) : that.range != null) return false;
         if (!sessionId.equals(that.sessionId)) return false;
-        if (!parentSessionId.equals(that.parentSessionId)) return false;
+        if (parentSessionId != null ? !parentSessionId.equals(that.parentSessionId) : that.parentSessionId != null) return false;
 
         return true;
     }
@@ -112,7 +105,7 @@ public class RepairJobDesc
             if (version >= MessagingService.VERSION_21)
                 parentSessionId = UUIDSerializer.serializer.deserialize(in, version);
             else
-                parentSessionId = UUIDGen.getTimeUUID();
+                parentSessionId = null;
             UUID sessionId = UUIDSerializer.serializer.deserialize(in, version);
             String keyspace = in.readUTF();
             String columnFamily = in.readUTF();

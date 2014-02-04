@@ -153,7 +153,9 @@ public class ActiveRepairService
     {
         Map<String, UUID> psid = new HashMap<>();
         psid.put(desc.columnFamily, desc.parentSessionId);
-        RepairSession session = new RepairSession(psid, desc.sessionId, desc.range, desc.keyspace, false, null, new String[]{desc.columnFamily});
+        Set<InetAddress> neighbours = new HashSet<>();
+        neighbours.addAll(ActiveRepairService.getNeighbors(desc.keyspace, desc.range, null));
+        RepairSession session = new RepairSession(psid, desc.sessionId, desc.range, desc.keyspace, false, neighbours, new String[]{desc.columnFamily});
         sessions.put(session.getId(), session);
         RepairFuture futureTask = new RepairFuture(session);
         executor.execute(futureTask);
