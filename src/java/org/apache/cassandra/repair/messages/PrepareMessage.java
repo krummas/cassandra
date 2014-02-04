@@ -5,7 +5,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,9 +22,8 @@ public class PrepareMessage extends RepairMessage
     public final boolean fullRepair;
     public final String columnFamily;
     public final UUID parentRepairSession;
-    public final Collection<String> dataCenters;
 
-    public PrepareMessage(UUID parentRepairSession, String keyspace, String columnFamily, Collection<String> dataCenters, Collection<Range<Token>> ranges, boolean fullRepair)
+    public PrepareMessage(UUID parentRepairSession, String keyspace, String columnFamily, Collection<Range<Token>> ranges, boolean fullRepair)
     {
         super(Type.PREPARE_MESSAGE, null);
         this.parentRepairSession = parentRepairSession;
@@ -33,7 +31,6 @@ public class PrepareMessage extends RepairMessage
         this.ranges = ranges;
         this.fullRepair = fullRepair;
         this.columnFamily = columnFamily;
-        this.dataCenters = dataCenters == null ? Collections.<String>emptyList() : dataCenters;
     }
 
     public static class PrepareMessageSerializer implements MessageSerializer<PrepareMessage>
@@ -47,9 +44,6 @@ public class PrepareMessage extends RepairMessage
                 Range.serializer.serialize(r, out, version);
             out.writeBoolean(message.fullRepair);
             out.writeUTF(message.columnFamily);
-            out.writeInt(message.dataCenters.size());
-            for (String dc : message.dataCenters)
-                out.writeUTF(dc);
 
         }
 
@@ -63,11 +57,7 @@ public class PrepareMessage extends RepairMessage
                 ranges.add((Range<Token>) Range.serializer.deserialize(in, version).toTokenBounds());
             boolean fullRepair = in.readBoolean();
             String columnFamily = in.readUTF();
-            int dcCount = in.readInt();
-            List<String> dcs = new ArrayList<>(dcCount);
-            for (int i = 0; i < dcCount; i++)
-                dcs.add(in.readUTF());
-            return new PrepareMessage(parentRepairSession, keyspace, columnFamily, dcs, ranges, fullRepair);
+            return new PrepareMessage(parentRepairSession, keyspace, columnFamily, ranges, fullRepair);
         }
 
         public long serializedSize(PrepareMessage message, int version)
@@ -83,9 +73,6 @@ public class PrepareMessage extends RepairMessage
             }
             size += sizes.sizeof(message.fullRepair);
             size += sizes.sizeof(message.columnFamily);
-            size += sizes.sizeof(message.dataCenters.size());
-            for (String dc : message.dataCenters)
-                size += sizes.sizeof(dc);
             return size;
         }
     }
@@ -99,7 +86,6 @@ public class PrepareMessage extends RepairMessage
                 ", fullRepair=" + fullRepair +
                 ", columnFamily='" + columnFamily + '\'' +
                 ", parentRepairSession=" + parentRepairSession +
-                ", dataCenters=" + dataCenters +
                 '}';
     }
 }

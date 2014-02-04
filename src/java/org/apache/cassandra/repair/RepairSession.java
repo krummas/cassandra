@@ -103,15 +103,15 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
      * @param range range to repair
      * @param keyspace name of keyspace
      * @param isSequential true if performing repair on snapshots sequentially
-     * @param dataCenters the data centers that should be part of the repair; null for all DCs
+     * @param endpoints the data centers that should be part of the repair; null for all DCs
      * @param cfnames names of columnfamilies
      */
-    public RepairSession(Map<String, UUID> parentRepairSessions, Range<Token> range, String keyspace, boolean isSequential, Collection<String> dataCenters, String... cfnames)
+    public RepairSession(Map<String, UUID> parentRepairSessions, Range<Token> range, String keyspace, boolean isSequential, Set<InetAddress> endpoints, String... cfnames)
     {
-        this(parentRepairSessions, UUIDGen.getTimeUUID(), range, keyspace, isSequential, dataCenters, cfnames);
+        this(parentRepairSessions, UUIDGen.getTimeUUID(), range, keyspace, isSequential, endpoints, cfnames);
     }
 
-    public RepairSession(Map<String, UUID> parentRepairSessions, UUID id, Range<Token> range, String keyspace, boolean isSequential, Collection<String> dataCenters, String[] cfnames)
+    public RepairSession(Map<String, UUID> parentRepairSessions, UUID id, Range<Token> range, String keyspace, boolean isSequential, Set<InetAddress> endpoints, String[] cfnames)
     {
         this.parentRepairSessions = parentRepairSessions;
         this.id = id;
@@ -120,7 +120,7 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
         this.cfnames = cfnames;
         assert cfnames.length > 0 : "Repairing no column families seems pointless, doesn't it";
         this.range = range;
-        this.endpoints = ActiveRepairService.getNeighbors(keyspace, range, dataCenters);
+        this.endpoints = endpoints;
     }
 
     public UUID getId()

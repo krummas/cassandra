@@ -2540,9 +2540,6 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 String message = String.format("Starting repair command #%d, repairing %d ranges for keyspace %s (seq=%b, full=%b)", cmd, ranges.size(), keyspace, isSequential, fullRepair);
                 logger.info(message);
                 sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.STARTED.ordinal()});
-                Map<String, UUID> parentSessions = new HashMap<>();
-                for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
-                    parentSessions.put(cfs.name, ActiveRepairService.instance.prepareForRepair(cfs, dataCenters, ranges, fullRepair));
 
                 if (dataCenters != null && !dataCenters.contains(DatabaseDescriptor.getLocalDataCenter()))
                 {
@@ -2551,13 +2548,21 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
                     return;
                 }
+
+                Set<InetAddress> neighbours = new HashSet<>();
+                for (Range<Token> range : ranges)
+                    neighbours.addAll(ActiveRepairService.getNeighbors(keyspace, range, dataCenters));
+
+                Map<String, UUID> parentSessions = new HashMap<>();
+                for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
+                    parentSessions.put(cfs.name, ActiveRepairService.instance.prepareForRepair(cfs, neighbours, ranges, fullRepair));
                 List<RepairFuture> futures = new ArrayList<>(ranges.size());
                 for (Range<Token> range : ranges)
                 {
                     RepairFuture future;
                     try
                     {
-                        future = forceKeyspaceRepair(parentSessions, range, keyspace, isSequential, dataCenters);
+                        future = forceKeyspaceRepair(parentSessions, range, keyspace, isSequential, neighbours);
                     }
                     catch (IllegalArgumentException e)
                     {
@@ -2603,7 +2608,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                         sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
                     }
                 }
-                ActiveRepairService.instance.finishParentSessions(parentSessions.values());
+                ActiveRepairService.instance.finishParentSessions(parentSessions.values(), neighbours);
                 sendNotification("repair", String.format("Repair command #%d finished", cmd), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
             }
         }, null);
@@ -2614,7 +2619,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                                             final Range<Token> range,
                                             final String keyspaceName,
                                             boolean isSequential,
-                                            Collection<String> dataCenters) throws IOException
+                                            Set<InetAddress> endpoints) throws IOException
     {
         ArrayList<String> names = new ArrayList<>(parentRepairSessions.keySet());
 
@@ -2624,7 +2629,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             return null;
         }
 
-        return ActiveRepairService.instance.submitRepairSession(parentRepairSessions, range, keyspaceName, isSequential, dataCenters, names.toArray(new String[names.size()]));
+        return ActiveRepairService.instance.submitRepairSession(parentRepairSessions, range, keyspaceName, isSequential, endpoints, names.toArray(new String[names.size()]));
     }
 
     public void forceTerminateAllRepairSessions() {

@@ -53,7 +53,6 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                 ColumnFamilyStore columnFamilyStore = Keyspace.open(prepareMessage.keyspace).getColumnFamilyStore(prepareMessage.columnFamily);
                 ActiveRepairService.instance.registerParentRepairSession(prepareMessage.parentRepairSession,
                                                                          columnFamilyStore,
-                                                                         prepareMessage.dataCenters,
                                                                          prepareMessage.ranges,
                                                                          prepareMessage.fullRepair);
                 MessagingService.instance().sendReply(new MessageOut(MessagingService.Verb.INTERNAL_RESPONSE), id, message.from);
