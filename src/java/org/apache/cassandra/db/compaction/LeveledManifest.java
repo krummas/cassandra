@@ -50,8 +50,10 @@ public class LeveledManifest
     private static final int MAX_COMPACTING_L0 = 32;
 
     private final ColumnFamilyStore cfs;
-    private final List<SSTableReader>[] generations;
-    private final List<SSTableReader> unrepairedL0;
+    @VisibleForTesting
+    protected final List<SSTableReader>[] generations;
+    @VisibleForTesting
+    protected final List<SSTableReader> unrepairedL0;
     private final RowPosition[] lastCompactedKeys;
     private final int maxSSTableSizeInBytes;
     private final SizeTieredCompactionStrategyOptions options;
