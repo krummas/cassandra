@@ -334,6 +334,8 @@ public class LeveledManifest
             if (!unrepairedMostInterresting.isEmpty())
             {
                 logger.info("Unrepaired data is most interresting, compacting {} sstables with STCS", unrepairedMostInterresting.size());
+                for (SSTableReader reader : unrepairedMostInterresting)
+                    assert !reader.isRepaired();
                 return new CompactionCandidate(unrepairedMostInterresting, 0, Long.MAX_VALUE);
             }
         }
@@ -643,8 +645,6 @@ public class LeveledManifest
 
     public List<SSTableReader> getLevel(int i)
     {
-        if(i == 0 && hasRepairedData)
-            return unrepairedL0;
         return generations[i];
     }
 

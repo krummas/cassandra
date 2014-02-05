@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.tools;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.EnumSet;
@@ -44,6 +45,11 @@ public class SSTableMetadataViewer
 
         for (String fname : args)
         {
+            if (!new File(fname).exists())
+            {
+                System.err.printf("Could not find file %s%n", fname);
+                continue;
+            }
             Descriptor descriptor = Descriptor.fromFilename(fname);
             Map<MetadataType, MetadataComponent> metadata = descriptor.getMetadataSerializer().deserialize(descriptor, EnumSet.allOf(MetadataType.class));
             ValidationMetadata validation = (ValidationMetadata) metadata.get(MetadataType.VALIDATION);
