@@ -844,8 +844,11 @@ public class CompactionManager implements CompactionManagerMBean
             StorageService.instance.forceKeyspaceFlush(cfs.keyspace.getName(), cfs.name);
             // we don't mark validating sstables as compacting in DataTracker, so we have to mark them referenced
             // instead so they won't be cleaned up if they do get compacted during the validation
+            if (validator.desc.parentSessionId == null || ActiveRepairService.instance.getParentRepairSession(validator.desc.parentSessionId) == null)
+                sstables = cfs.markCurrentSSTablesReferenced();
+            else
+                sstables = ActiveRepairService.instance.getParentRepairSession(validator.desc.parentSessionId).getAndReferenceSSTables(cfs.metadata.cfId);
 
-            sstables = ActiveRepairService.instance.getParentRepairSession(validator.desc.parentSessionId).getAndReferenceSSTables(cfs.metadata.cfId);
             if (validator.gcBefore > 0)
                 gcBefore = validator.gcBefore;
             else

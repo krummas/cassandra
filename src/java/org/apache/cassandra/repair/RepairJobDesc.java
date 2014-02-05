@@ -30,6 +30,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.UUIDSerializer;
 
 /**
@@ -92,7 +93,11 @@ public class RepairJobDesc
         public void serialize(RepairJobDesc desc, DataOutput out, int version) throws IOException
         {
             if (version >= MessagingService.VERSION_21)
-                UUIDSerializer.serializer.serialize(desc.parentSessionId, out, version);
+            {
+                out.writeBoolean(desc.parentSessionId != null);
+                if (desc.parentSessionId != null)
+                    UUIDSerializer.serializer.serialize(desc.parentSessionId, out, version);
+            }
             UUIDSerializer.serializer.serialize(desc.sessionId, out, version);
             out.writeUTF(desc.keyspace);
             out.writeUTF(desc.columnFamily);
@@ -101,11 +106,12 @@ public class RepairJobDesc
 
         public RepairJobDesc deserialize(DataInput in, int version) throws IOException
         {
-            UUID parentSessionId;
+            UUID parentSessionId = null;
             if (version >= MessagingService.VERSION_21)
-                parentSessionId = UUIDSerializer.serializer.deserialize(in, version);
-            else
-                parentSessionId = null;
+            {
+                if (in.readBoolean())
+                    parentSessionId = UUIDSerializer.serializer.deserialize(in, version);
+            }
             UUID sessionId = UUIDSerializer.serializer.deserialize(in, version);
             String keyspace = in.readUTF();
             String columnFamily = in.readUTF();
@@ -117,7 +123,11 @@ public class RepairJobDesc
         {
             int size = 0;
             if (version >= MessagingService.VERSION_21)
-                size += UUIDSerializer.serializer.serializedSize(desc.parentSessionId, version);
+            {
+                size += TypeSizes.NATIVE.sizeof(desc.parentSessionId != null);
+                if (desc.parentSessionId != null)
+                    size += UUIDSerializer.serializer.serializedSize(desc.parentSessionId, version);
+            }
             size += UUIDSerializer.serializer.serializedSize(desc.sessionId, version);
             size += TypeSizes.NATIVE.sizeof(desc.keyspace);
             size += TypeSizes.NATIVE.sizeof(desc.columnFamily);

@@ -304,14 +304,11 @@ public class ActiveRepairService
 
     public List<Future<?>> doAntiCompaction(UUID parentRepairSession) throws InterruptedException, ExecutionException, IOException
     {
-        if (getParentRepairSession(parentRepairSession).fullRepair)
-        {
-            logger.info("Doing full repair - will not do anticompaction.");
-            parentRepairSessions.remove(parentRepairSession);
-            return Arrays.<Future<?>>asList(Futures.immediateFuture(null));
-        }
-        List<Future<?>> futures = new ArrayList<>();
+        assert parentRepairSession != null;
         ParentRepairSession prs = getParentRepairSession(parentRepairSession);
+        assert !prs.fullRepair;
+
+        List<Future<?>> futures = new ArrayList<>();
         for (Map.Entry<UUID, ColumnFamilyStore> columnFamilyStoreEntry : prs.columnFamilyStores.entrySet())
         {
 
@@ -376,10 +373,7 @@ public class ActiveRepairService
 
         public Collection<SSTableReader> getAndReferenceSSTables(UUID cfId)
         {
-            ColumnFamilyStore cfs = columnFamilyStores.get(cfId);
-            if (fullRepair)
-                return cfs.markCurrentSSTablesReferenced();
-
+            assert !fullRepair;
             Set<SSTableReader> sstables = sstableMap.get(cfId);
             Iterator<SSTableReader> sstableIterator = sstables.iterator();
             while (sstableIterator.hasNext())

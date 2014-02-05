@@ -66,9 +66,10 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
 
     private void initiateStreaming()
     {
-        ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
-        // we set repairedAt to UNREPAIRED if we are doing a full repair.
-        long repairedAt = prs.fullRepair ? ActiveRepairService.UNREPAIRED_SSTABLE : prs.repairedAt;
+        long repairedAt = ActiveRepairService.UNREPAIRED_SSTABLE;
+        if (desc.parentSessionId != null && ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId) != null)
+            repairedAt = ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId).repairedAt;
+
         logger.info(String.format("[streaming task #%s] Performing streaming repair of %d ranges with %s", desc.sessionId, request.ranges.size(), request.dst));
         StreamResultFuture op = new StreamPlan("Repair", repairedAt)
                                     .flushBeforeTransfer(true)

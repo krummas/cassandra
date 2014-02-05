@@ -2558,14 +2558,17 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
                     columnFamilyStores.add(cfs);
 
-                UUID parentSession = ActiveRepairService.instance.prepareForRepair(neighbours, ranges, fullRepair, columnFamilyStores);
+                UUID parentSession = null;
+                if (!fullRepair)
+                    parentSession = ActiveRepairService.instance.prepareForRepair(neighbours, ranges, fullRepair, columnFamilyStores);
+
                 List<RepairFuture> futures = new ArrayList<>(ranges.size());
                 for (Range<Token> range : ranges)
                 {
                     RepairFuture future;
                     try
                     {
-                        future = forceKeyspaceRepair(parentSession, range, keyspace, isSequential, neighbours);
+                        future = forceKeyspaceRepair(parentSession, range, keyspace, isSequential, neighbours, columnFamilies);
                     }
                     catch (IllegalArgumentException e)
                     {
@@ -2611,7 +2614,8 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                         sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
                     }
                 }
-                ActiveRepairService.instance.finishParentSession(parentSession, neighbours);
+                if (!fullRepair)
+                    ActiveRepairService.instance.finishParentSession(parentSession, neighbours);
                 sendNotification("repair", String.format("Repair command #%d finished", cmd), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
             }
         }, null);
@@ -2622,15 +2626,14 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                                             final Range<Token> range,
                                             final String keyspaceName,
                                             boolean isSequential,
-                                            Set<InetAddress> endpoints) throws IOException
+                                            Set<InetAddress> endpoints,
+                                            String ... columnFamilies) throws IOException
     {
-        ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(parentRepairSession);
         ArrayList<String> names = new ArrayList<>();
-        for (ColumnFamilyStore cfs : prs.columnFamilyStores.values())
+        for (ColumnFamilyStore cfStore : getValidColumnFamilies(false, false, keyspaceName, columnFamilies))
         {
-            names.add(cfs.name);
+            names.add(cfStore.name);
         }
-
 
         if (names.isEmpty())
         {
