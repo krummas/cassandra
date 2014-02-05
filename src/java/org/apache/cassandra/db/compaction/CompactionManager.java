@@ -349,6 +349,7 @@ public class CompactionManager implements CompactionManagerMBean
         // verify that there are tables to be swapped, otherwise CFS#replaceCompactedSSTables will hang.
         if (antiCompactedSSTables.size() > 0)
             cfs.replaceCompactedSSTables(sstables, antiCompactedSSTables, OperationType.ANTICOMPACTION);
+        SSTableReader.releaseReferences(sstables);
         cfs.getDataTracker().unmarkCompacting(sstables);
         logger.info(String.format("Completed anticompaction successfully"));
     }
@@ -844,7 +845,7 @@ public class CompactionManager implements CompactionManagerMBean
             // we don't mark validating sstables as compacting in DataTracker, so we have to mark them referenced
             // instead so they won't be cleaned up if they do get compacted during the validation
 
-            sstables = ActiveRepairService.instance.getParentRepairSession(validator.desc.parentSessionId).getAndReferenceSSTables();
+            sstables = ActiveRepairService.instance.getParentRepairSession(validator.desc.parentSessionId).getAndReferenceSSTables(cfs.metadata.cfId);
             if (validator.gcBefore > 0)
                 gcBefore = validator.gcBefore;
             else

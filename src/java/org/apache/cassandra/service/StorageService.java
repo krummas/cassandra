@@ -2554,16 +2554,18 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     neighbours.addAll(ActiveRepairService.getNeighbors(keyspace, range, dataCenters));
 
                 // TODO since we don't anticompact on full repair, why send prepare if full repair == true?
-                Map<String, UUID> parentSessions = new HashMap<>();
+                List<ColumnFamilyStore> columnFamilyStores = new ArrayList<>();
                 for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
-                    parentSessions.put(cfs.name, ActiveRepairService.instance.prepareForRepair(cfs, neighbours, ranges, fullRepair));
+                    columnFamilyStores.add(cfs);
+
+                UUID parentSession = ActiveRepairService.instance.prepareForRepair(neighbours, ranges, fullRepair, columnFamilyStores);
                 List<RepairFuture> futures = new ArrayList<>(ranges.size());
                 for (Range<Token> range : ranges)
                 {
                     RepairFuture future;
                     try
                     {
-                        future = forceKeyspaceRepair(parentSessions, range, keyspace, isSequential, neighbours);
+                        future = forceKeyspaceRepair(parentSession, range, keyspace, isSequential, neighbours);
                     }
                     catch (IllegalArgumentException e)
                     {
@@ -2609,20 +2611,26 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                         sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
                     }
                 }
-                ActiveRepairService.instance.finishParentSessions(parentSessions.values(), neighbours);
+                ActiveRepairService.instance.finishParentSession(parentSession, neighbours);
                 sendNotification("repair", String.format("Repair command #%d finished", cmd), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
             }
         }, null);
     }
 
 
-    public RepairFuture forceKeyspaceRepair(final Map<String, UUID> parentRepairSessions,
+    public RepairFuture forceKeyspaceRepair(final UUID parentRepairSession,
                                             final Range<Token> range,
                                             final String keyspaceName,
                                             boolean isSequential,
                                             Set<InetAddress> endpoints) throws IOException
     {
-        ArrayList<String> names = new ArrayList<>(parentRepairSessions.keySet());
+        ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(parentRepairSession);
+        ArrayList<String> names = new ArrayList<>();
+        for (ColumnFamilyStore cfs : prs.columnFamilyStores.values())
+        {
+            names.add(cfs.name);
+        }
+
 
         if (names.isEmpty())
         {
@@ -2630,7 +2638,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             return null;
         }
 
-        return ActiveRepairService.instance.submitRepairSession(parentRepairSessions, range, keyspaceName, isSequential, endpoints, names.toArray(new String[names.size()]));
+        return ActiveRepairService.instance.submitRepairSession(parentRepairSession, range, keyspaceName, isSequential, endpoints, names.toArray(new String[names.size()]));
     }
 
     public void forceTerminateAllRepairSessions() {
