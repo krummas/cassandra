@@ -2541,6 +2541,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 logger.info(message);
                 sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.STARTED.ordinal()});
 
+                if (isSequential && !fullRepair)
+                {
+                    message = "It is not possible to mix sequential repair and incremental repairs.";
+                    logger.error(message);
+                    sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
+                    return;
+                }
                 if (dataCenters != null && !dataCenters.contains(DatabaseDescriptor.getLocalDataCenter()))
                 {
                     message = String.format("Cancelling repair command #%d (the local data center must be part of the repair)", cmd);
@@ -2553,7 +2560,6 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 for (Range<Token> range : ranges)
                     neighbours.addAll(ActiveRepairService.getNeighbors(keyspace, range, dataCenters));
 
-                // TODO since we don't anticompact on full repair, why send prepare if full repair == true?
                 List<ColumnFamilyStore> columnFamilyStores = new ArrayList<>();
                 for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
                     columnFamilyStores.add(cfs);
