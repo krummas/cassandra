@@ -279,6 +279,7 @@ public class ActiveRepairService
                 MessageOut<RepairMessage> req = acr.createMessage();
                 MessagingService.instance().sendOneWay(req, neighbor);
             }
+            // TODO not need to wait on complete?
             doAntiCompaction(parentSessionId);
         }
     }
@@ -317,6 +318,7 @@ public class ActiveRepairService
         }
         finally
         {
+            // TODO we just can't release reference here since sstables are used in other thread
             if (sstables != null)
                 SSTableReader.releaseReferences(sstables);
             parentRepairSessions.remove(parentRepairSession);

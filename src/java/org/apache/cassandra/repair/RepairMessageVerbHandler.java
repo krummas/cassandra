@@ -82,6 +82,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                 AnticompactionRequest anticompactionRequest = (AnticompactionRequest) message.payload;
                 try
                 {
+                    // TODO not need to wait on complete?
                     ActiveRepairService.instance.doAntiCompaction(anticompactionRequest.parentRepairSession);
                 }
                 catch (Exception e)

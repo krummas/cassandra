@@ -2553,6 +2553,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 for (Range<Token> range : ranges)
                     neighbours.addAll(ActiveRepairService.getNeighbors(keyspace, range, dataCenters));
 
+                // TODO since we don't anticompact on full repair, why send prepare if full repair == true?
                 Map<String, UUID> parentSessions = new HashMap<>();
                 for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
                     parentSessions.put(cfs.name, ActiveRepairService.instance.prepareForRepair(cfs, neighbours, ranges, fullRepair));
