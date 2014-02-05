@@ -919,7 +919,7 @@ public class CompactionManager implements CompactionManagerMBean
             SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
             SSTableWriter unRepairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstable);
 
-            try (CompactionController controller = new CompactionController(cfs, new HashSet<>(repairedSSTables), CFMetaData.DEFAULT_GC_GRACE_SECONDS))
+            try (CompactionController controller = new CompactionController(cfs, new HashSet<>(Collections.singleton(sstable)), CFMetaData.DEFAULT_GC_GRACE_SECONDS))
             {
                 AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
                 List<ICompactionScanner> scanners = strategy.getScanners(Arrays.asList(sstable));
