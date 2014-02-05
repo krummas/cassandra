@@ -901,10 +901,18 @@ public class CompactionManager implements CompactionManagerMBean
         int unrepairedKeyCount = 0;
         // TODO(5351): we can do better here:
         int expectedBloomFilterSize = Math.max(cfs.metadata.getIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(repairedSSTables)));
-        logger.info("Doing anticompaction on {} sstables", repairedSSTables.size());
+        logger.info("Performing anticompaction on {} sstables", repairedSSTables.size());
         // iterate over sstables to check if the repaired / unrepaired ranges intersect them.
         for (SSTableReader sstable : repairedSSTables)
         {
+            // check that compaction hasn't stolen any sstables used in previous repair sessions
+            // if we need to skip the anticompaction, it will be carried out by the next repair
+            if (!new File(sstable.getFilename()).exists())
+            {
+                logger.info("Skipping anticompaction for {}, required sstable was compacted and is no longer available.", sstable);
+                continue;
+            }
+
             logger.info("Anticompacting {}", sstable);
             File destination = cfs.directories.getDirectoryForNewSSTables();
             SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
@@ -912,45 +920,51 @@ public class CompactionManager implements CompactionManagerMBean
             CompactionController controller = new CompactionController(cfs,
                                                                        new HashSet<>(repairedSSTables),
                                                                        CFMetaData.DEFAULT_GC_GRACE_SECONDS);
-            AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
-            // check that compaction hasn't stolen any sstables used in previous repair sessions
-            // if we need to skip the anticompaction, it will be carried out by the next repair
-            if (!new File(sstable.getFilename()).exists())
+            try
             {
-                logger.info("Skipping anticompaction for {}, required sstable was compacted and is no longer available.", ranges.size());
-                return anticompactedSSTables;
-            }
+                AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
+                List<ICompactionScanner> scanners = strategy.getScanners(Arrays.asList(sstable));
+                CompactionIterable ci = new CompactionIterable(OperationType.ANTICOMPACTION, scanners, controller);
 
-            List<ICompactionScanner> scanners = strategy.getScanners(Arrays.asList(sstable));
-            CompactionIterable ci = new CompactionIterable(OperationType.ANTICOMPACTION, scanners, controller);
-
-            for (AbstractCompactedRow row : ci)
-            {
-                // if current range from sstable is repaired, save it into the new repaired sstable
-                if (Range.isInRanges(row.key.token, ranges))
+                // TODO I think we need to close scanners through ci, but it is only possible with ci.iterator?
+                for (AbstractCompactedRow row : ci)
                 {
-                    repairedSSTableWriter.append(row);
-                    repairedKeyCount++;
+                    // if current range from sstable is repaired, save it into the new repaired sstable
+                    if (Range.isInRanges(row.key.token, ranges))
+                    {
+                        repairedSSTableWriter.append(row);
+                        repairedKeyCount++;
+                    }
+                    // otherwise save into the new 'non-repaired' table
+                    else
+                    {
+                        unRepairedSSTableWriter.append(row);
+                        unrepairedKeyCount++;
+                    }
                 }
-                // otherwise save into the new 'non-repaired' table
+                // add repaired table with a non-null timestamp field to be saved in SSTableMetadata#repairedAt
+                if (repairedKeyCount > 0)
+                    anticompactedSSTables.add(repairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
                 else
-                {
-                    unRepairedSSTableWriter.append(row);
-                    unrepairedKeyCount++;
-                }
+                    repairedSSTableWriter.abort();
+                // supply null as we keep SSTableMetadata#repairedAt empty if the table isn't repaired
+                if (unrepairedKeyCount > 0)
+                    anticompactedSSTables.add(unRepairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
+                else
+                    unRepairedSSTableWriter.abort();
             }
-            // add repaired table with a non-null timestamp field to be saved in SSTableMetadata#repairedAt
-            if(repairedKeyCount > 0)
-                anticompactedSSTables.add(repairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
-            else
+            catch (Throwable e)
+            {
+                logger.error("Error anticompacting " + sstable, e);
                 repairedSSTableWriter.abort();
-            // supply null as we keep SSTableMetadata#repairedAt empty if the table isn't repaired
-            if(unrepairedKeyCount > 0)
-                anticompactedSSTables.add(unRepairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
-            else
                 unRepairedSSTableWriter.abort();
+            }
+            finally
+            {
+                controller.close();
+            }
         }
-        String format = "Repaired {} keys of {} for KS {} CF {}";
+        String format = "Repaired {} keys of {} for {}/{}";
         logger.debug(format, repairedKeyCount, (repairedKeyCount + unrepairedKeyCount), cfs.keyspace, cfs.getColumnFamilyName());
         String format2 = "Anticompaction completed successfully, anticompacted from {} to {} sstable(s).";
         logger.info(format2, repairedSSTables.size(), anticompactedSSTables.size());
