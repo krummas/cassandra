@@ -918,29 +918,30 @@ public class CompactionManager implements CompactionManagerMBean
             File destination = cfs.directories.getDirectoryForNewSSTables();
             SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
             SSTableWriter unRepairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstable);
-            CompactionController controller = new CompactionController(cfs,
-                                                                       new HashSet<>(repairedSSTables),
-                                                                       CFMetaData.DEFAULT_GC_GRACE_SECONDS);
-            try
+
+            try (CompactionController controller = new CompactionController(cfs, new HashSet<>(repairedSSTables), CFMetaData.DEFAULT_GC_GRACE_SECONDS))
             {
                 AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
                 List<ICompactionScanner> scanners = strategy.getScanners(Arrays.asList(sstable));
                 CompactionIterable ci = new CompactionIterable(OperationType.ANTICOMPACTION, scanners, controller);
 
-                // TODO I think we need to close scanners through ci, but it is only possible with ci.iterator?
-                for (AbstractCompactedRow row : ci)
+                try (CloseableIterator<AbstractCompactedRow> iter = ci.iterator())
                 {
-                    // if current range from sstable is repaired, save it into the new repaired sstable
-                    if (Range.isInRanges(row.key.token, ranges))
+                    while(iter.hasNext())
                     {
-                        repairedSSTableWriter.append(row);
-                        repairedKeyCount++;
-                    }
-                    // otherwise save into the new 'non-repaired' table
-                    else
-                    {
-                        unRepairedSSTableWriter.append(row);
-                        unrepairedKeyCount++;
+                        AbstractCompactedRow row = iter.next();
+                        // if current range from sstable is repaired, save it into the new repaired sstable
+                        if (Range.isInRanges(row.key.token, ranges))
+                        {
+                            repairedSSTableWriter.append(row);
+                            repairedKeyCount++;
+                        }
+                        // otherwise save into the new 'non-repaired' table
+                        else
+                        {
+                            unRepairedSSTableWriter.append(row);
+                            unrepairedKeyCount++;
+                        }
                     }
                 }
                 // add repaired table with a non-null timestamp field to be saved in SSTableMetadata#repairedAt
@@ -959,10 +960,6 @@ public class CompactionManager implements CompactionManagerMBean
                 logger.error("Error anticompacting " + sstable, e);
                 repairedSSTableWriter.abort();
                 unRepairedSSTableWriter.abort();
-            }
-            finally
-            {
-                controller.close();
             }
         }
         String format = "Repaired {} keys of {} for {}/{}";
