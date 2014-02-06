@@ -197,20 +197,20 @@ public class RowCacheTest extends SchemaLoader
         assertEquals(++startRowCacheHits, cachedStore.metric.rowCacheHit.count());
         assertEquals(startRowCacheOutOfRange, cachedStore.metric.rowCacheHitOutOfRange.count());
 
-        // get a slice from 95 to 105, 95->99 are in cache, we should get a hit and then row cache is out of range
+        // get a slice from 95 to 105, 95->99 are in cache, we should not get a hit and then row cache is out of range
         cachedStore.getColumnFamily(QueryFilter.getSliceFilter(dk, cf,
                                                                CellNames.simpleDense(ByteBufferUtil.bytes(95)),
                                                                CellNames.simpleDense(ByteBufferUtil.bytes(105)),
                                                                false, 10, System.currentTimeMillis()));
-        assertEquals(++startRowCacheHits, cachedStore.metric.rowCacheHit.count());
+        assertEquals(startRowCacheHits, cachedStore.metric.rowCacheHit.count());
         assertEquals(++startRowCacheOutOfRange, cachedStore.metric.rowCacheHitOutOfRange.count());
 
-        // get a slice with limit > 100, we get a cache hit and then we figure out it is out of range
+        // get a slice with limit > 100, we should get a hit out of range.
         cachedStore.getColumnFamily(QueryFilter.getSliceFilter(dk, cf,
                                                                Composites.EMPTY,
                                                                Composites.EMPTY,
                                                                false, 101, System.currentTimeMillis()));
-        assertEquals(++startRowCacheHits, cachedStore.metric.rowCacheHit.count());
+        assertEquals(startRowCacheHits, cachedStore.metric.rowCacheHit.count());
         assertEquals(++startRowCacheOutOfRange, cachedStore.metric.rowCacheHitOutOfRange.count());
 
 

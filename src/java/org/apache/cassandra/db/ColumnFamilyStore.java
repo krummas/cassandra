@@ -1586,8 +1586,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public boolean isFilterFullyCoveredBy(IDiskAtomFilter filter, ColumnFamily cachedCf, long now)
     {
-        int rowsInCachedCf = cachedCf.liveCQL3RowCount(now);
-
         // We can use the cached value only if we know that no data it doesn't contain could be covered
         // by the query filter, that is if:
         //   1) either the whole partition is cached
