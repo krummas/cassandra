@@ -41,12 +41,12 @@ import static org.apache.cassandra.utils.memory.OffHeapRegion.StateSnapper;
  *    matched by a corresponding free()
  * 2) The memory is then protected by the associated OpOrder(s); an allocation is only available for collection
  *    once all operations started prior to the free() have completed
- * 3) During this time any operation protected by the read/write OpOrder may optionally 'ref' an object, or objects, that
- *    each reference (in the normal java sense) some allocations; once the read operation finishes these will have been
- *    registered with one or more GC roots (one per allocator group referenced).
- * 4) When a GC (or allocator discard) occurs, the extant 'refs' that were created during operations started prior
- *    to the collect phase are walked, and any regions that are reachable by any of these 'refs' are switched to
- *    a refcount phase. When each ref completes it decrements the count of any such regions it reached.
+ * 3) During this time any operation protected by the read/write OpOrder may optionally 'ref' {@link Referrer} an object,
+ *    or objects, that each reference (in the normal java sense) some allocations; once the read operation finishes these
+ *    will have been registered with one or more GC roots {@link Referrers} - one per allocator group referenced.
+ * 4) When a GC (or allocator discard) occurs, any extant {@link Referrer} are walked that were created during
+ *    operations started prior to the collect phase, and any regions that are reachable by any of these 'refs' are
+ *    switched to a refcount phase. When each ref completes it decrements the count of any such regions it reached.
  *    Once this count hits 0, the region is finally eligible for reuse.
  *
  * Garbage collection is composed of the following phases:
