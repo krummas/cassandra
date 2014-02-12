@@ -27,7 +27,7 @@ public class LongOffHeapGCTest
 
     static
     {
-        System.setProperty("cassandra.paranoidgc", "off");
+        System.setProperty("cassandra.paranoidgc", "on");
     }
 
     private static final Logger logger = LoggerFactory.getLogger(LongOffHeapGCTest.class);
@@ -186,10 +186,10 @@ public class LongOffHeapGCTest
         final NonBlockingQueue<ByteBuffer>[] writing = new NonBlockingQueue[writerCount];
         final NonBlockingQueueView<ByteBuffer>[][] lagged = new NonBlockingQueueView[readerCount][writerCount];
 
-        final int regionSize = 1 << 20;
+        final int regionSize = 256;
         final int maxMemory = regionSize * 400;
         final int regions = maxMemory / regionSize;
-        final float referRatio = 0.0f;
+        final float referRatio = 0.1f;
         final float allocRatio = 0.1f;
         final float cleanThreshold = 0.1f;
         final OpOrder reads = new OpOrder();
