@@ -74,7 +74,7 @@ public interface CellName extends Composite
     @Override
     public CellName copy(AbstractAllocator allocator);
 
-    public long excessHeapSizeExcludingData();
+    public long unsharedHeapSizeExcludingData();
 
     // visit any ByteBuffer that would be copied by copy()
     public void visitCopyableBuffers(Function<ByteBuffer, ?> apply);

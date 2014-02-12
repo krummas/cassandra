@@ -32,7 +32,6 @@ import com.google.common.collect.*;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.composites.CellName;
-import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.btree.BTree;
@@ -53,7 +52,7 @@ import static org.apache.cassandra.db.index.SecondaryIndexManager.Updater;
  */
 public class AtomicBTreeColumns extends ColumnFamily
 {
-    static final long HEAP_SIZE = ObjectSizes.measure(new AtomicBTreeColumns(CFMetaData.IndexCf, null))
+    static final long EMPTY_SIZE = ObjectSizes.measure(new AtomicBTreeColumns(CFMetaData.IndexCf, null))
             + ObjectSizes.measure(new Holder(null, null));
 
     private static final Function<Cell, CellName> NAME = new Function<Cell, CellName>()
@@ -396,14 +395,14 @@ public class AtomicBTreeColumns extends ColumnFamily
         protected void swap(Cell old, Cell updated)
         {
             dataSize += updated.dataSize() - old.dataSize();
-            heapSize += updated.excessHeapSizeExcludingData() - old.excessHeapSizeExcludingData();
+            heapSize += updated.unsharedHeapSizeExcludingData() - old.unsharedHeapSizeExcludingData();
             discarded.add(old);
         }
 
         protected void insert(Cell insert)
         {
             this.dataSize += insert.dataSize();
-            this.heapSize += insert.excessHeapSizeExcludingData();
+            this.heapSize += insert.unsharedHeapSizeExcludingData();
         }
 
         protected void discard(Cell discard)
@@ -416,7 +415,7 @@ public class AtomicBTreeColumns extends ColumnFamily
             return dataSize;
         }
 
-        public long excessHeapSize()
+        public long extraHeapSize()
         {
             return heapSize;
         }

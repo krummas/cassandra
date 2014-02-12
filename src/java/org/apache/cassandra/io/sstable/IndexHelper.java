@@ -204,7 +204,7 @@ public class IndexHelper
             }
         }
 
-        public long excessHeapSize()
+        public long unsharedHeapSize()
         {
             return EMPTY_SIZE + firstName.unsharedHeapSize() + lastName.unsharedHeapSize();
         }

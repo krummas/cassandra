@@ -31,7 +31,7 @@ public class CompoundSparseCellName extends CompoundComposite implements CellNam
 {
     private static final ByteBuffer[] EMPTY_PREFIX = new ByteBuffer[0];
 
-    private static final long HEAP_SIZE = ObjectSizes.measure(new CompoundSparseCellName(null));
+    private static final long EMPTY_SIZE = ObjectSizes.measure(new CompoundSparseCellName(null));
 
     protected final ColumnIdentifier columnName;
 
@@ -110,9 +110,23 @@ public class CompoundSparseCellName extends CompoundComposite implements CellNam
             apply.apply(element);
     }
 
+    public long unsharedHeapSize()
+    {
+        return EMPTY_SIZE
+               + columnName.unsharedHeapSize()
+               + ObjectSizes.sizeOnHeapOf(elements);
+    }
+
+    public long unsharedHeapSizeExcludingData()
+    {
+        return EMPTY_SIZE
+               + columnName.unsharedHeapSizeExcludingData()
+               + ObjectSizes.sizeOnHeapExcludingData(elements);
+    }
+
     public static class WithCollection extends CompoundSparseCellName
     {
-        private static final long HEAP_SIZE = ObjectSizes.measure(new WithCollection(null, ByteBufferUtil.EMPTY_BYTE_BUFFER));
+        private static final long EMPTY_SIZE = ObjectSizes.measure(new WithCollection(null, ByteBufferUtil.EMPTY_BYTE_BUFFER));
 
         private final ByteBuffer collectionElement;
 
@@ -168,9 +182,11 @@ public class CompoundSparseCellName extends CompoundComposite implements CellNam
         }
 
         @Override
-        public long excessHeapSizeExcludingData()
+        public long unsharedHeapSizeExcludingData()
         {
-            return super.excessHeapSizeExcludingData() + ObjectSizes.sizeOnHeapExcludingData(collectionElement);
+            return EMPTY_SIZE
+                   + ObjectSizes.sizeOnHeapExcludingData(elements)
+                   + ObjectSizes.sizeOnHeapExcludingData(collectionElement);
         }
 
         @Override
