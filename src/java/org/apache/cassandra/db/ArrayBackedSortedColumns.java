@@ -29,6 +29,7 @@ import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.filter.ColumnSlice;
+import org.apache.cassandra.utils.memory.AbstractAllocator;
 
 /**
  * A ColumnFamily backed by an array.
@@ -57,13 +58,19 @@ public class ArrayBackedSortedColumns extends AbstractThreadUnsafeSortedColumns
         }
     };
 
+    public static ColumnFamily localCopy(ColumnFamily value, ColumnFamilyStore cfs, AbstractAllocator allocator)
+    {
+        // we skip anything
+        final Cell[] cells = new Cell[value.getColumnCount()];
+        int i = 0;
+        for (Cell cell : value)
+            cells[i++] = cell.localCopy(cfs, allocator);
+        return new ArrayBackedSortedColumns(cfs.metadata, value.isInsertReversed(), cells, i, i);
+    }
+
     private ArrayBackedSortedColumns(CFMetaData metadata, boolean reversed)
     {
-        super(metadata);
-        this.reversed = reversed;
-        this.cells = new Cell[INITIAL_CAPACITY];
-        this.size = 0;
-        this.sortedSize = 0;
+        this(metadata, reversed, new Cell[INITIAL_CAPACITY], 0, 0);
     }
 
     private ArrayBackedSortedColumns(ArrayBackedSortedColumns original)
@@ -73,6 +80,15 @@ public class ArrayBackedSortedColumns extends AbstractThreadUnsafeSortedColumns
         this.cells = Arrays.copyOf(original.cells, original.size);
         this.size = original.size;
         this.sortedSize = original.sortedSize;
+    }
+
+    private ArrayBackedSortedColumns(CFMetaData metadata, boolean reversed, Cell[] cells, int size, int sortedSize)
+    {
+        super(metadata);
+        this.reversed = reversed;
+        this.cells = cells;
+        this.size = size;
+        this.sortedSize = sortedSize;
     }
 
     public ColumnFamily.Factory getFactory()
@@ -340,14 +356,6 @@ public class ArrayBackedSortedColumns extends AbstractThreadUnsafeSortedColumns
     {
         maybeSortCells();
         return new SlicesIterator(Arrays.asList(cells).subList(0, size), getComparator(), slices, !reversed);
-    }
-
-    public static ColumnFamily localCopy(ColumnFamily value, ColumnFamilyStore cfs, AbstractAllocator allocator)
-    {
-        final List<Cell> cells = new ArrayList<>();
-        for (Cell cell : value)
-            cells.add(cell.localCopy(cfs, allocator));
-        return new ArrayBackedSortedColumns(cells, cfs.metadata, value.isInsertReversed());
     }
 
     private static class SlicesIterator extends AbstractIterator<Cell>

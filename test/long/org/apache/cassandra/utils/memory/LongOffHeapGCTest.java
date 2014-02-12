@@ -27,7 +27,7 @@ public class LongOffHeapGCTest
 
     static
     {
-        System.setProperty("cassandra.paranoidgc", "on");
+        System.setProperty("cassandra.paranoidgc", "off");
     }
 
     private static final Logger logger = LoggerFactory.getLogger(LongOffHeapGCTest.class);
