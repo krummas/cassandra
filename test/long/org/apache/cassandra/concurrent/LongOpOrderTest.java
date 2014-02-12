@@ -20,10 +20,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class OpOrderTest
+public class LongOpOrderTest
 {
 
-    private static final Logger logger = LoggerFactory.getLogger(OpOrderTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(LongOpOrderTest.class);
 
     static final int CONSUMERS = Runtime.getRuntime().availableProcessors();
     static final int PRODUCERS = CONSUMERS;
