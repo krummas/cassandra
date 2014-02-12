@@ -264,8 +264,9 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
             owns.addAndGet(-size);
         }
 
-        // if this.owns > size, subtract size from this.owns (atomically), otherwise return false
-        boolean transfer(int size)
+        // if this.owns > size, subtract size from this.owns (atomically), otherwise return false.
+        // is used by recycle to take ownership of a portion what we own without returning it to the pool
+        boolean transferAcquired(int size)
         {
             while (true)
             {
@@ -296,7 +297,7 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
             }
         }
 
-        // must be called with exclusive access, but safe to call multiple times
+        // mark everything we currently own as reclaiming, both here and in our parent
         void markAllReclaiming()
         {
             while (true)

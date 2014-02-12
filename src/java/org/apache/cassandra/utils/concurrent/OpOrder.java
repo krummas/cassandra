@@ -279,7 +279,7 @@ public class OpOrder
             // we only modify ourselves in this step, not anybody behind us, so we don't have to worry about races
             // this is equivalent to walking the list, but potentially makes life easier for any unlink operations
             // that proceed us if we aren't yet COMPLETE
-            // note we leave the next chain fully intact at this stage
+            // note we leave the forward (next) chain fully intact at this stage
             Group start = this;
             Group prev = this.prev;
             while (prev != null)

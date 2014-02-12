@@ -10,6 +10,8 @@ import java.security.PrivilegedAction;
 public final class AtomicReferenceArrayUpdater<E>
 {
 
+    // it's quite likely these could all be static. however since the object itself should be static,
+    // we hope the VM will inline the methods and values as constant anyway (though this may be optimistic)
     private final long offset;
     private final int shift;
 

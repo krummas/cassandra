@@ -209,7 +209,7 @@ final class OffHeapRegion
 
     boolean isDiscarded()
     {
-        return state == State.DISCARDED;
+        return state.compareTo(State.DISCARDED) >= 0;
     }
 
     public int size()

@@ -57,10 +57,16 @@ import com.google.common.collect.Multimap;
 public class OffHeapAllocator extends PoolAllocator<OffHeapAllocatorGroup, OffHeapPool>
 {
 
-    /** The Regions we are currently allocating from - we don't immediately move forwards all allocations to a new Region
-     * if any one allocation fails, instead we only advance if there is a small fraction of the total room left, or we
-     * have failed a number of times to allocate to the Region. This should help prevent wasted space.*/
+    /**
+     * The Regions we are currently allocating from - we don't immediately move all allocations to a new Region if
+     * an allocation fails, instead we only advance if there is a small fraction of the total room left, or we
+     * have failed a number of times to allocate to the Region. This should help prevent wasted space.
+     */
     final NonBlockingQueue<OffHeapRegion> allocatingFrom = new NonBlockingQueue<>();
+    /**
+     * All the regions we own. It is a view on allocatingFrom that is never advanced, but on which
+     * removes are performed to clean up. See {@link NonBlockingQueue} for details.
+     */
     final NonBlockingQueueView<OffHeapRegion> allocated = allocatingFrom.view();
 
     OffHeapAllocator(OffHeapAllocatorGroup group)
@@ -221,16 +227,14 @@ public class OffHeapAllocator extends PoolAllocator<OffHeapAllocatorGroup, OffHe
         }
     }
 
-    /**
-     * Mark this allocator reclaiming; this will allow any outstanding allocations to temporarily
-     * overshoot the maximum memory limit so that flushing can begin immediately
-     */
     public void setDiscarding()
     {
         group.live.remove(this);
         onHeap.markAllReclaiming();
         offHeap.markAllReclaiming();
 
+        // if we aren't already GCing, and GC is enabled, we force a GC of this allocator before
+        // we discard it, in case we can quickly reclaim some of its space
         if (!group.pool.isGcEnabled())
             transition(LifeCycle.DISCARDING);
         else if (transition(Gc.REALLOCATING, LifeCycle.DISCARDING))
@@ -258,7 +262,7 @@ public class OffHeapAllocator extends PoolAllocator<OffHeapAllocatorGroup, OffHe
             if (region.transition(OffHeapRegion.State.LIVE, OffHeapRegion.State.DISCARDING))
             {
                 markLookup.put(region.markKey, new OffHeapDelayedRecycle(group.pool, region));
-                if (!offHeap.transfer(region.size()))
+                if (!offHeap.transferAcquired(region.size()))
                     throw new AssertionError();
                 offHeap.transferReclaiming(region.size());
             }
@@ -274,7 +278,6 @@ public class OffHeapAllocator extends PoolAllocator<OffHeapAllocatorGroup, OffHe
                 marked.unmark();
         }
 
-        // by recycling before releasing the memory accounting, we don't need to worry about waking up explicitly here
         onHeap.releaseAll();
     }
 
@@ -294,7 +297,7 @@ public class OffHeapAllocator extends PoolAllocator<OffHeapAllocatorGroup, OffHe
         if (!group.pool.isGcEnabled())
             return;
         if (!OffHeapRegion.free(buffer))
-            throw new IllegalStateException();
+            throw new AssertionError();
     }
 
 }

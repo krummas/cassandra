@@ -6,7 +6,6 @@ import org.apache.cassandra.utils.concurrent.NonBlockingQueueView;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.OptBlockingQueue;
 import org.apache.cassandra.utils.concurrent.SafeRemoveIterator;
-import org.apache.mina.util.IdentityHashSet;
 
 import org.slf4j.*;
 
@@ -25,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
@@ -138,7 +136,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
         Set<OffHeapAllocator> couldNotStart = new HashSet<>();
         /**
          * loop through all candidates in descending order of amount we expect to reclaim;
-         * as soon as we fail to allocate collection space for an allocator we stop starting
+         * as soon as we fail to allocate compaction space for an allocator we stop starting
          * new collectors and simply attempt to utilise any remaining space available to us
          * in the existing collectors, closing them as they fail to accept more work.
          */
@@ -314,11 +312,11 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
         // mark state
         final NonBlockingQueue<StateSnapper> allocatingFrom = new NonBlockingQueue<>(); // regions we're compacting to with space free
         final NonBlockingQueueView<StateSnapper> allocatedFrom = allocatingFrom.view(); // all regions we've compacted to
-        final CountDownLatch doneMark = new CountDownLatch(1);
 
         final OptBlockingQueue<CompactRegion> compact = new OptBlockingQueue<>();       // compaction work
         final NonBlockingQueue<OffHeapRegion> collect = new NonBlockingQueue<>();       // all regions we're collecting (superset of those in compact.regionIn)
-        private long reclaiming = 0;
+        private long reclaimingSize = 0;
+        private int reclaimingCount = 0;
 
         GarbageCollector(OffHeapAllocator allocator)
         {
@@ -435,7 +433,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
             if (logger.isTraceEnabled())
             {
                 logger.trace("Marked {} allocs, with {} bytes for retention from OffHeapAllocator@{}@{}", compact.moves.size(),
-                             reclaiming, System.identityHashCode(allocator), allocator.group.name);
+                             reclaimingSize, System.identityHashCode(allocator), allocator.group.name);
             }
 
             return true;
@@ -444,9 +442,10 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
         void adjustReclaiming(OffHeapRegion region)
         {
             // transfer ownership of the memory to us
-            if (!allocator.offHeap.transfer(region.size()))
+            if (!allocator.offHeap.transferAcquired(region.size()))
                 throw new AssertionError();
-            reclaiming += region.size();
+            reclaimingSize += region.size();
+            reclaimingCount += 1;
             allocator.offHeap.transferReclaiming(region.size());
         }
 
@@ -456,8 +455,6 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
             allocator.transition(PoolAllocator.Gc.COLLECTING);
             // signal the collector thread there's no more work
             compact.append(null);
-            // signal any threads waiting on the mark phase
-            doneMark.countDown();
         }
 
 
@@ -492,7 +489,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
             // we use a multi-map so that we can set the mark key of any compacted regions to their new region during the
             // compaction pass. (so new markKey maps to all regions it receives data from), the corollary being we might
             // end up marking something as referenced when it isn't really. this should hopefully be rare, though, and
-            // is relatively benign. we attempt to mitigate this issue by only marking those that are
+            // is relatively benign.
             final Multimap<byte[], OffHeapDelayedRecycle> markLookup = ArrayListMultimap.create(16, 2);
 
             final OpOrder.Group gcOperation = gcOperations.start();
@@ -557,7 +554,11 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
                         if (delayedRecycle.region.markKey == entry.getKey())
                             delayedRecycle.unmark();
 
-                int regionCount = removeRegions(collect, allocator.allocated);
+                // tidy up the allocator's collection of regions
+                SafeRemoveIterator<OffHeapRegion> iter = allocator.allocated.iterator();
+                while (iter.hasNext())
+                    if (iter.next().isDiscarded())
+                        iter.safeRemove();
 
                 // have the allocator adopt the regions we've migrated its live data to.
                 // we only insert these into the allocator's owned collection once we are finished, so that there are
@@ -573,7 +574,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
                 if (logger.isDebugEnabled())
                 {
                     logger.debug("Collected {} bytes from {} regions, retaining {} bytes in {} allocs from {}@{}",
-                            reclaiming, regionCount, retaining, allocCount, allocator.group.name, System.identityHashCode(allocator));
+                                 reclaimingSize, reclaimingCount, retaining, allocCount, allocator.group.name, System.identityHashCode(allocator));
                 }
             }
             catch (InterruptedException e)
@@ -594,24 +595,4 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
 
     }
 
-    // just does a little tidying, by removing any no-longer live regions from the allocator
-    private static int removeRegions(Iterable<OffHeapRegion> toRemove, NonBlockingQueueView<OffHeapRegion> from)
-    {
-        IdentityHashSet<OffHeapRegion> lookup = new IdentityHashSet<>();
-        for (OffHeapRegion region : toRemove)
-            lookup.add(region);
-        int count = lookup.size();
-        SafeRemoveIterator<OffHeapRegion> removeIter = from.iterator();
-        while (removeIter.hasNext())
-        {
-            if (lookup.remove(removeIter.next()))
-            {
-                boolean removed = removeIter.safeRemove();
-                assert removed;
-            }
-        }
-        assert lookup.isEmpty();
-        return count;
-    }
-
-}
+ }
