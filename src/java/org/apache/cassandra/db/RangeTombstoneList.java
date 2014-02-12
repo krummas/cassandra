@@ -576,6 +576,7 @@ public class RangeTombstoneList implements Iterable<RangeTombstone>, IMeasurable
         if (i >= size)
             return;
 
+        starts[i] = null;
         System.arraycopy(starts, i, starts, i+1, size - i);
         System.arraycopy(ends, i, ends, i+1, size - i);
         System.arraycopy(markedAts, i, markedAts, i+1, size - i);

@@ -39,6 +39,8 @@ import org.apache.cassandra.db.index.*;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.utils.memory.HeapAllocator;
+import org.apache.cassandra.utils.memory.RefAction;
 
 public class KeysSearcher extends SecondaryIndexSearcher
 {
@@ -50,20 +52,32 @@ public class KeysSearcher extends SecondaryIndexSearcher
     }
 
     @Override
-    public List<Row> search(ExtendedFilter filter)
+    public List<Row> search(RefAction refAction, ExtendedFilter filter)
     {
         assert filter.getClause() != null && !filter.getClause().isEmpty();
-        return baseCfs.filter(getIndexedIterator(filter), filter);
+        final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
+        final SecondaryIndex index = indexManager.getIndexForColumn(primary.column);
+        OpOrder.Group readOps[] = new OpOrder.Group[] { baseCfs.readOrdering.start(), index.getIndexCfs().readOrdering.start() };
+        try
+        {
+            List<Row> result = baseCfs.filter(refAction.subAction(), getIndexedIterator(refAction.subAction(), filter, primary, index), filter);
+            refAction.complete(baseCfs.allocatorGroup, readOps[0], result);
+            refAction.complete(index.getIndexCfs().allocatorGroup, readOps[1], result);
+            return result;
+        }
+        finally
+        {
+            for (OpOrder.Group readOp : readOps)
+                readOp.finishOne();
+        }
     }
 
-    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final ExtendedFilter filter)
+    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final RefAction refAction, final ExtendedFilter filter, final IndexExpression primary, final SecondaryIndex index)
     {
 
         // Start with the most-restrictive indexed clause, then apply remaining clauses
         // to each row matching that clause.
         // TODO: allow merge join instead of just one index + loop
-        final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
-        final SecondaryIndex index = indexManager.getIndexForColumn(primary.column);
         assert index != null;
         assert index.getIndexCfs() != null;
         final DecoratedKey indexKey = index.getIndexKeyFor(primary.value);
@@ -117,7 +131,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                                                                              false,
                                                                              rowsPerQuery,
                                                                              filter.timestamp);
-                        ColumnFamily indexRow = index.getIndexCfs().getColumnFamily(indexFilter);
+                        ColumnFamily indexRow = index.getIndexCfs().getColumnFamily(refAction, indexFilter);
                         logger.trace("fetched {}", indexRow);
                         if (indexRow == null)
                         {
@@ -168,7 +182,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         }
 
                         logger.trace("Returning index hit for {}", dk);
-                        ColumnFamily data = baseCfs.getColumnFamily(new QueryFilter(dk, baseCfs.name, filter.columnFilter(lastSeenKey.toByteBuffer()), filter.timestamp));
+                        ColumnFamily data = baseCfs.getColumnFamily(refAction, new QueryFilter(dk, baseCfs.name, filter.columnFilter(lastSeenKey.toByteBuffer()), filter.timestamp));
                         // While the column family we'll get in the end should contains the primary clause cell, the initialFilter may not have found it and can thus be null
                         if (data == null)
                             data = ArrayBackedSortedColumns.factory.create(baseCfs.metadata);
@@ -178,7 +192,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         IDiskAtomFilter extraFilter = filter.getExtraFilter(dk, data);
                         if (extraFilter != null)
                         {
-                            ColumnFamily cf = baseCfs.getColumnFamily(new QueryFilter(dk, baseCfs.name, extraFilter, filter.timestamp));
+                            ColumnFamily cf = baseCfs.getColumnFamily(refAction, new QueryFilter(dk, baseCfs.name, extraFilter, filter.timestamp));
                             if (cf != null)
                                 data.addAll(cf);
                         }

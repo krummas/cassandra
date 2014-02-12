@@ -26,6 +26,8 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.primitives.Longs;
+import org.apache.cassandra.utils.memory.Pool;
+import org.apache.cassandra.utils.memory.OffHeapPool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -258,11 +260,20 @@ public class DatabaseDescriptor
         if (conf.file_cache_size_in_mb == null)
             conf.file_cache_size_in_mb = Math.min(512, (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576)));
 
-        if (conf.memtable_total_space_in_mb == null)
-            conf.memtable_total_space_in_mb = (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576));
-        if (conf.memtable_total_space_in_mb <= 0)
+        if (conf.memtable_offheap_space_in_mb == null)
+            conf.memtable_offheap_space_in_mb = (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576));
+        if (conf.memtable_offheap_space_in_mb < 0)
+            throw new ConfigurationException("memtable_offheap_space_in_mb must be positive");
+        // for the moment, we default to twice as much on-heap space as off-heap, as heap overhead is very large
+        if (conf.memtable_heap_space_in_mb == null)
+            conf.memtable_heap_space_in_mb = (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576));
+        if (conf.memtable_heap_space_in_mb <= 0)
             throw new ConfigurationException("memtable_heap_space_in_mb must be positive");
-        logger.info("Global memtable heap threshold is enabled at {}MB", conf.memtable_total_space_in_mb);
+        logger.info("Global memtable on-heap threshold is enabled at {}MB", conf.memtable_heap_space_in_mb);
+        if (conf.memtable_offheap_space_in_mb == 0)
+            logger.info("Global memtable off-heap threshold is disabled, HeapAllocator will be used instead");
+        else
+            logger.info("Global memtable off-heap threshold is enabled at {}MB", conf.memtable_offheap_space_in_mb);
 
         /* Memtable flush writer threads */
         if (conf.memtable_flush_writers != null && conf.memtable_flush_writers < 1)
@@ -1240,6 +1251,11 @@ public class DatabaseDescriptor
         return conf.file_cache_size_in_mb;
     }
 
+    public static boolean isOffHeapGCEnabled()
+    {
+        return conf.enable_offheap_memtable_gc;
+    }
+
     public static long getTotalCommitlogSpaceInMB()
     {
         return conf.commitlog_total_space_in_mb;
@@ -1374,14 +1390,23 @@ public class DatabaseDescriptor
     {
         try
         {
-            return memtablePool
-                   .getConstructor(long.class, float.class, Runnable.class)
-                   .newInstance(conf.memtable_total_space_in_mb << 20, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily());
+            Pool pool = memtablePool
+                   .getConstructor(long.class, long.class, float.class, Runnable.class)
+                   .newInstance(conf.memtable_heap_space_in_mb << 20, conf.memtable_offheap_space_in_mb << 20,
+                                conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily());
+            if (isOffHeapGCEnabled() && pool instanceof OffHeapPool)
+                ((OffHeapPool) pool).setGcEnabled(true);
+            return pool;
         }
         catch (Exception e)
         {
             throw new AssertionError(e);
         }
+    }
+
+    public static void setEnableOffheapMemtableGc(boolean enabled)
+    {
+        conf.enable_offheap_memtable_gc = enabled;
     }
 
     public static int getIndexSummaryResizeIntervalInMinutes()

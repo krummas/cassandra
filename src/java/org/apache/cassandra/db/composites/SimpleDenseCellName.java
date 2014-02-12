@@ -18,6 +18,9 @@
 package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
+
+import com.google.common.base.Function;
 
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
@@ -69,6 +72,11 @@ public class SimpleDenseCellName extends SimpleComposite implements CellName
     public long excessHeapSizeExcludingData()
     {
         return EMPTY_SIZE + ObjectSizes.sizeOnHeapExcludingData(element);
+    }
+
+    public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+    {
+        apply.apply(element);
     }
 
     // If cellnames were sharing some prefix components, this will break it, so

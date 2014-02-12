@@ -78,7 +78,9 @@ public class Config
     public Integer concurrent_replicates = null;
 
     public Integer memtable_flush_writers = null; // will get set to the length of data dirs in DatabaseDescriptor
-    public Integer memtable_total_space_in_mb;
+    public Integer memtable_heap_space_in_mb;
+    public Integer memtable_offheap_space_in_mb;
+    public boolean enable_offheap_memtable_gc = false;
     public float memtable_cleanup_threshold = 0.4f;
 
     public Integer storage_port = 7000;

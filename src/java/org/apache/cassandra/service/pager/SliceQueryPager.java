@@ -27,6 +27,7 @@ import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.service.StorageProxy;
+import org.apache.cassandra.utils.memory.RefAction;
 
 /**
  * Pager over a SliceFromReadCommand.
@@ -67,7 +68,7 @@ public class SliceQueryPager extends AbstractQueryPager implements SinglePartiti
              : new PagingState(null, lastReturned.toByteBuffer(), maxRemaining());
     }
 
-    protected List<Row> queryNextPage(int pageSize, ConsistencyLevel consistencyLevel, boolean localQuery)
+    protected List<Row> queryNextPage(RefAction refAction, int pageSize, ConsistencyLevel consistencyLevel, boolean localQuery)
     throws RequestValidationException, RequestExecutionException
     {
         SliceQueryFilter filter = command.filter.withUpdatedCount(pageSize);
@@ -76,8 +77,8 @@ public class SliceQueryPager extends AbstractQueryPager implements SinglePartiti
 
         ReadCommand pageCmd = command.withUpdatedFilter(filter);
         return localQuery
-             ? Collections.singletonList(pageCmd.getRow(Keyspace.open(command.ksName)))
-             : StorageProxy.read(Collections.singletonList(pageCmd), consistencyLevel);
+             ? Collections.singletonList(pageCmd.getRow(refAction, Keyspace.open(command.ksName)))
+             : StorageProxy.read(refAction, Collections.singletonList(pageCmd), consistencyLevel);
     }
 
     protected boolean containsPreviousLast(Row first)

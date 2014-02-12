@@ -25,6 +25,7 @@ import java.util.UUID;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
+import org.apache.cassandra.db.commitlog.CommitState;
 import org.junit.Assert;
 import org.junit.Test;
 

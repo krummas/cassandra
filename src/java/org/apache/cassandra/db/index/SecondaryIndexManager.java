@@ -37,6 +37,8 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.ReducingKeyIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.memory.HeapAllocator;
+import org.apache.cassandra.utils.memory.RefAction;
 
 /**
  * Manages all the indexes associated with a given CFS
@@ -409,11 +411,19 @@ public class SecondaryIndexManager
     {
         // Update entire row only once per row level index
         Set<Class<? extends SecondaryIndex>> appliedRowLevelIndexes = null;
+        boolean copied = false;
 
         for (SecondaryIndex index : indexesByColumn.values())
         {
             if (index instanceof PerRowSecondaryIndex)
             {
+                if (!copied)
+                {
+                    // need to move the BB on heap in case the custom 2i retains a pointer to it
+                    // TODO: should only copy if there is off-heap data
+                    copied = true;
+                    cf = ArrayBackedSortedColumns.localCopy(cf, baseCfs, HeapAllocator.instance);
+                }
                 if (appliedRowLevelIndexes == null)
                     appliedRowLevelIndexes = new HashSet<>();
 
@@ -536,18 +546,18 @@ public class SecondaryIndexManager
      * @param filter the column range to restrict to
      * @return found indexed rows
      */
-    public List<Row> search(ExtendedFilter filter)
+    public List<Row> search(RefAction refAction, ExtendedFilter filter)
     {
         List<SecondaryIndexSearcher> indexSearchers = getIndexSearchersForQuery(filter.getClause());
 
         if (indexSearchers.isEmpty())
-            return Collections.emptyList();
+            return Collections.<Row>emptyList();
 
         //We currently don't support searching across multiple index types
         if (indexSearchers.size() > 1)
             throw new RuntimeException("Unable to search across multiple secondary index types");
 
-        return indexSearchers.get(0).search(filter);
+        return indexSearchers.get(0).search(refAction, filter);
     }
 
     public Collection<SecondaryIndex> getIndexesByNames(Set<String> idxNames)

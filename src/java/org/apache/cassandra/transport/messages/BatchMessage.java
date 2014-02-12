@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.cassandra.utils.memory.RefAction;
 import org.jboss.netty.buffer.ChannelBuffer;
 
 import org.apache.cassandra.cql3.Attributes;
@@ -144,7 +145,7 @@ public class BatchMessage extends Message.Request
         this.consistency = consistency;
     }
 
-    public Message.Response execute(QueryState state)
+    public Message.Response execute(RefAction refAction, QueryState state)
     {
         try
         {

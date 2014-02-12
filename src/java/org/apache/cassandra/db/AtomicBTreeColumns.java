@@ -158,16 +158,14 @@ public class AtomicBTreeColumns extends ColumnFamily
         final AtomicBTreeColumns updating;
         final Holder ref;
         final AbstractAllocator allocator;
-        final Function<Cell, Cell> transform;
         final Updater indexer;
         final Delta delta;
 
-        private ColumnUpdater(AtomicBTreeColumns updating, Holder ref, AbstractAllocator allocator, Function<Cell, Cell> transform, Updater indexer, Delta delta)
+        private ColumnUpdater(AtomicBTreeColumns updating, Holder ref, AbstractAllocator allocator, Updater indexer, Delta delta)
         {
             this.updating = updating;
             this.ref = ref;
             this.allocator = allocator;
-            this.transform = transform;
             this.indexer = indexer;
             this.delta = delta;
         }
@@ -176,7 +174,7 @@ public class AtomicBTreeColumns extends ColumnFamily
         {
             indexer.insert(inserted);
             delta.insert(inserted);
-            return transform.apply(inserted);
+            return inserted;
         }
 
         public Cell apply(Cell existing, Cell update)
@@ -186,8 +184,8 @@ public class AtomicBTreeColumns extends ColumnFamily
             if (existing != reconciled)
                 delta.swap(existing, reconciled);
             else
-                delta.abort(update);
-            return transform.apply(reconciled);
+                delta.discard(update);
+            return reconciled;
         }
 
         public boolean abortEarly()
@@ -222,48 +220,36 @@ public class AtomicBTreeColumns extends ColumnFamily
      */
     public Delta addAllWithSizeDelta(final ColumnFamily cm, AbstractAllocator allocator, Function<Cell, Cell> transformation, Updater indexer, Delta delta)
     {
-        boolean transformed = false;
-        Collection<Cell> insert = cm.getSortedColumns();
+        Collection<Cell> insert = transform(metadata.comparator.columnComparator(), cm, transformation, true);
 
         while (true)
         {
             Holder current = ref;
 
-            delta.reset();
             DeletionInfo deletionInfo = cm.deletionInfo();
-            if (deletionInfo.mayModify(current.deletionInfo))
+            if (deletionInfo.hasRanges())
             {
-                if (deletionInfo.hasRanges())
+                for (Iterator<Cell> iter : new Iterator[] { insert.iterator(), BTree.<Cell>slice(current.tree, true) })
                 {
-                    for (Iterator<Cell> iter : new Iterator[] { insert.iterator(), BTree.<Cell>slice(current.tree, true) })
+                    while (iter.hasNext())
                     {
-                        while (iter.hasNext())
-                        {
-                            Cell col = iter.next();
-                            if (deletionInfo.isDeleted(col))
-                                indexer.remove(col);
-                        }
+                        Cell col = iter.next();
+                        if (deletionInfo.isDeleted(col))
+                            indexer.remove(col);
                     }
                 }
-
-                deletionInfo = current.deletionInfo.copy().add(deletionInfo);
-                delta.addHeapSize(deletionInfo.unsharedHeapSize() - current.deletionInfo.unsharedHeapSize());
             }
 
-            ColumnUpdater updater = new ColumnUpdater(this, current, allocator, transformation, indexer, delta);
+            delta.reset();
+            deletionInfo = current.deletionInfo.copy().add(deletionInfo);
+            delta.addHeapSize(deletionInfo.unsharedHeapSize() - current.deletionInfo.unsharedHeapSize());
+            ColumnUpdater updater = new ColumnUpdater(this, current, allocator, indexer, delta);
             Object[] tree = BTree.update(current.tree, metadata.comparator.columnComparator(), insert, true, updater);
 
             if (tree != null && refUpdater.compareAndSet(this, current, new Holder(tree, deletionInfo)))
             {
                 indexer.updateRowLevelIndexes();
                 return updater.delta;
-            }
-
-            if (!transformed)
-            {
-                // After failing once, transform Columns into a new collection to avoid repeatedly allocating Slab space
-                insert = transform(metadata.comparator.columnComparator(), cm, transformation, false);
-                transformed = true;
             }
         }
 
@@ -340,6 +326,11 @@ public class AtomicBTreeColumns extends ColumnFamily
         return BTree.slice(ref.tree, true).count();
     }
 
+    public boolean hasColumns()
+    {
+        return !BTree.isEmpty(ref.tree);
+    }
+
     public Iterator<Cell> iterator(ColumnSlice[] slices)
     {
         return new ColumnSlice.NavigableSetIterator(new BTreeSet<>(ref.tree, getComparator().columnComparator()), slices);
@@ -389,7 +380,6 @@ public class AtomicBTreeColumns extends ColumnFamily
         // separately from aborted ones (were part of an update but older than existing cells)
         // since we need to reset the former when we race on the btree update, but not the latter
         private List<Cell> discarded = new ArrayList<>();
-        private List<Cell> aborted;
 
         protected void reset()
         {
@@ -416,11 +406,9 @@ public class AtomicBTreeColumns extends ColumnFamily
             this.heapSize += insert.excessHeapSizeExcludingData();
         }
 
-        private void abort(Cell neverUsed)
+        protected void discard(Cell discard)
         {
-            if (aborted == null)
-                aborted = new ArrayList<>();
-            aborted.add(neverUsed);
+            discarded.add(discard);
         }
 
         public long dataSize()
@@ -435,9 +423,8 @@ public class AtomicBTreeColumns extends ColumnFamily
 
         public Iterable<Cell> reclaimed()
         {
-            if (aborted == null)
-                return discarded;
-            return Iterables.concat(discarded, aborted);
+            return discarded;
         }
+
     }
 }

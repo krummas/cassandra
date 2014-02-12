@@ -53,6 +53,7 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CounterId;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.junit.Assert.assertTrue;
 
@@ -179,7 +180,7 @@ public class Util
                                : new SliceQueryFilter(SuperColumns.startOf(superColumn), SuperColumns.endOf(superColumn), false, Integer.MAX_VALUE);
 
         Token min = StorageService.getPartitioner().getMinimumToken();
-        return cfs.getRangeSlice(new Bounds<Token>(min, min).toRowBounds(), null, filter, 10000);
+        return cfs.getRangeSlice(RefAction.allocateOnHeap(), new Bounds<Token>(min, min).toRowBounds(), null, filter, 10000);
     }
 
     /**
@@ -206,7 +207,7 @@ public class Util
     {
         ColumnFamilyStore cfStore = keyspace.getColumnFamilyStore(cfName);
         assert cfStore != null : "Column family " + cfName + " has not been defined";
-        return cfStore.getColumnFamily(QueryFilter.getIdentityFilter(key, cfName, System.currentTimeMillis()));
+        return cfStore.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(key, cfName, System.currentTimeMillis()));
     }
 
     public static byte[] concatByteArrays(byte[] first, byte[]... remaining)

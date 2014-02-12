@@ -341,6 +341,11 @@ public class BTree
         return (node.length & 1) == 0;
     }
 
+    public static boolean isEmpty(Object[] tree)
+    {
+        return tree.length == 0;
+    }
+
     // Special class for making certain operations easier, so we can define a +/- Inf
     private static interface Special extends Comparable<Object> { }
     static final Special POSITIVE_INFINITY = new Special()

@@ -44,6 +44,7 @@ import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.apache.cassandra.Util.cellname;
 import static org.apache.cassandra.Util.column;
@@ -70,13 +71,13 @@ public class ScrubTest extends SchemaLoader
 
         // insert data and verify we get it back w/ range query
         fillCF(cfs, 1);
-        rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assertEquals(1, rows.size());
 
         CompactionManager.instance.performScrub(cfs, false);
 
         // check data is still there
-        rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assertEquals(1, rows.size());
     }
 
@@ -90,7 +91,7 @@ public class ScrubTest extends SchemaLoader
 
         fillCounterCF(cfs, 2);
 
-        List<Row> rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        List<Row> rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assertEquals(2, rows.size());
 
         SSTableReader sstable = cfs.getSSTables().iterator().next();
@@ -123,7 +124,7 @@ public class ScrubTest extends SchemaLoader
         assertEquals(1, cfs.getSSTables().size());
 
         // verify that we can read all of the rows, and there is now one less row
-        rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assertEquals(1, rows.size());
     }
 
@@ -157,13 +158,13 @@ public class ScrubTest extends SchemaLoader
 
         // insert data and verify we get it back w/ range query
         fillCF(cfs, 10);
-        rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assertEquals(10, rows.size());
 
         CompactionManager.instance.performScrub(cfs, false);
 
         // check data is still there
-        rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assertEquals(10, rows.size());
     }
 
@@ -226,7 +227,7 @@ public class ScrubTest extends SchemaLoader
         scrubber.scrub();
 
         cfs.loadNewSSTables();
-        List<Row> rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
+        List<Row> rows = cfs.getRangeSlice(RefAction.allocateOnHeap(), Util.range("", ""), null, new IdentityQueryFilter(), 1000);
         assert isRowOrdered(rows) : "Scrub failed: " + rows;
         assert rows.size() == 6 : "Got " + rows.size();
     }

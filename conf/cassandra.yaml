@@ -275,10 +275,33 @@ concurrent_counter_writes: 32
 # the smaller of 1/4 of heap or 512MB.
 # file_cache_size_in_mb: 512
 
+<<<<<<< HEAD
 # Total memory to use for memtables.  Cassandra will flush the largest
 # memtable when this much memory is used.
 # If omitted, Cassandra will set it to 1/4 of the heap.
 # memtable_total_space_in_mb: 2048
+=======
+# Total on/off-heap memory to use for memtables.  
+# Once this bound is reached only writes that flushes are blocking on
+# will be permitted to proceed. As this limit is approached, memtables
+# will be flushed in descending size order.
+# If omitted, Cassandra will set each to 1/4 of the max heap size.
+# memtable_heap_space_in_mb: 2048
+# memtable_offheap_space_in_mb: 2048
+
+# Ratio of occupied non-flushing memtable size to total permitted size
+# that will trigger a flush of the largest memtable. Applied to on/off 
+# heap constraints independently.
+memtable_cleanup_threshold: 0.4
+
+# Enable Cassandra's GC of unused off-heap memtable memory
+# This is currently experimental, and unsafe on non-x86 platforms
+# memtable_offheap_gc: true
+>>>>>>> offheap.bk
+
+# Ratio of occupied non-flushing memtable size to total permitted size
+# that will trigger a flush of the largest memtable.
+memtable_cleanup_threshold: 0.4
 
 # Ratio of occupied non-flushing memtable size to total permitted size
 # that will trigger a flush of the largest memtable.

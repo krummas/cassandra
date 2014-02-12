@@ -30,6 +30,7 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.junit.Test;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.RefAction;
 
 /**
  * Test for the truncate operation.
@@ -71,7 +72,7 @@ public class RecoveryManagerTruncateTest extends SchemaLoader
 		{
 			return null;
 		}
-		cf = cfStore.getColumnFamily(Util.namesQueryFilter(cfStore, Util.dk(keyName), columnName));
+		cf = cfStore.getColumnFamily(RefAction.allocateOnHeap(), Util.namesQueryFilter(cfStore, Util.dk(keyName), columnName));
 		if (cf == null)
 		{
 			return null;

@@ -27,6 +27,8 @@ import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 
 public class ReadVerbHandler implements IVerbHandler<ReadCommand>
 {
@@ -41,25 +43,37 @@ public class ReadVerbHandler implements IVerbHandler<ReadCommand>
 
         ReadCommand command = message.payload;
         Keyspace keyspace = Keyspace.open(command.ksName);
-        Row row;
+        Referrer referrer = RefAction.refer();
         try
         {
-            row = command.getRow(keyspace);
-        }
-        catch (TombstoneOverwhelmingException e)
-        {
-            // error already logged.  Drop the request
-            return;
-        }
+            Row row;
+            try
+            {
+                row = command.getRow(referrer, keyspace);
+            }
+            catch (TombstoneOverwhelmingException e)
+            {
+                // error already logged.  Drop the request
+                return;
+            }
 
-        MessageOut<ReadResponse> reply = new MessageOut<ReadResponse>(MessagingService.Verb.REQUEST_RESPONSE,
-                                                                      getResponse(command, row),
-                                                                      ReadResponse.serializer);
-        Tracing.trace("Enqueuing response to {}", message.from);
-        MessagingService.instance().sendReply(reply, id, message.from);
+            MessageOut<ReadResponse> reply = new MessageOut<>(MessagingService.Verb.REQUEST_RESPONSE,
+                                                                          getResponse(referrer, command, row),
+                                                                          ReadResponse.serializer);
+            Tracing.trace("Enqueuing response to {}", message.from);
+            MessagingService.instance().sendReply(reply, id, message.from);
+
+            // set referrer to null to indicate we handed off ownership successfully
+            referrer = null;
+        }
+        finally
+        {
+            if (referrer != null)
+                referrer.setDone();
+        }
     }
 
-    public static ReadResponse getResponse(ReadCommand command, Row row)
+    public static ReadResponse getResponse(RefAction refAction, ReadCommand command, Row row)
     {
         if (command.isDigestQuery())
         {
@@ -67,7 +81,7 @@ public class ReadVerbHandler implements IVerbHandler<ReadCommand>
         }
         else
         {
-            return new ReadResponse(row);
+            return new ReadResponse(refAction, row);
         }
     }
 }

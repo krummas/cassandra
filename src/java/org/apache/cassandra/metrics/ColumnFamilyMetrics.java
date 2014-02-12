@@ -35,10 +35,14 @@ public class ColumnFamilyMetrics
 {
     /** Total amount of data stored in the memtable that resides on-heap, including column related overhead and overwritten rows. */
     public final Gauge<Long> memtableHeapSize;
+    /** Total amount of data stored in the memtable that resides off-heap, including overwritten rows */
+    public final Gauge<Long> memtableOffHeapSize;
     /** Total amount of live data stored in the memtable, excluding any data structure overhead */
     public final Gauge<Long> memtableLiveDataSize;
     /** Total amount of data stored in the memtables (2i and pending flush memtables included) that resides on-heap. */
     public final Gauge<Long> allMemtablesHeapSize;
+    /** Total amount of data stored in the memtables (2i and pending flush memtables included) that resides off-heap. */
+    public final Gauge<Long> allMemtablesOffHeapSize;
     /** Total amount of live data stored in the memtables (2i and pending flush memtables included) that resides off-heap, excluding any data structure overhead */
     public final Gauge<Long> allMemtablesLiveDataSize;
     /** Total number of columns present in the memtable. */
@@ -131,7 +135,14 @@ public class ColumnFamilyMetrics
         {
             public Long value()
             {
-                return cfs.getDataTracker().getView().getCurrentMemtable().getAllocator().owns();
+                return cfs.getDataTracker().getView().getCurrentMemtable().getAllocator().onHeap.owns();
+            }
+        });
+        memtableOffHeapSize = Metrics.newGauge(factory.createMetricName("MemtableOffHeapSize"), new Gauge<Long>()
+        {
+            public Long value()
+            {
+                return cfs.getDataTracker().getView().getCurrentMemtable().getAllocator().offHeap.owns();
             }
         });
         memtableLiveDataSize = Metrics.newGauge(factory.createMetricName("MemtableLiveDataSize"), new Gauge<Long>()
@@ -147,7 +158,17 @@ public class ColumnFamilyMetrics
             {
                 long size = 0;
                 for (ColumnFamilyStore cfs2 : cfs.concatWithIndexes())
-                    size += cfs2.getDataTracker().getView().getCurrentMemtable().getAllocator().owns();
+                    size += cfs2.getDataTracker().getView().getCurrentMemtable().getAllocator().onHeap.owns();
+                return size;
+            }
+        });
+        allMemtablesOffHeapSize = Metrics.newGauge(factory.createMetricName("AllMemtablesOffHeapSize"), new Gauge<Long>()
+        {
+            public Long value()
+            {
+                long size = 0;
+                for (ColumnFamilyStore cfs2 : cfs.concatWithIndexes())
+                    size += cfs2.getDataTracker().getView().getCurrentMemtable().getAllocator().offHeap.owns();
                 return size;
             }
         });

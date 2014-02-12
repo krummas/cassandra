@@ -84,7 +84,7 @@ public class ByteBufferUtil
         if (o1 == o2)
             return 0;
 
-        if (o1.hasArray() && o2.hasArray())
+        if (!o1.isDirect() && !o2.isDirect())
         {
             return FBUtilities.compareUnsigned(o1.array(), o2.array(), o1.position() + o1.arrayOffset(),
                     o2.position() + o2.arrayOffset(), o1.remaining(), o2.remaining());
@@ -174,7 +174,7 @@ public class ByteBufferUtil
     {
         int length = buffer.remaining();
 
-        if (buffer.hasArray())
+        if (!buffer.isDirect())
         {
             int boff = buffer.arrayOffset() + buffer.position();
             if (boff == 0 && length == buffer.array().length)
@@ -257,7 +257,7 @@ public class ByteBufferUtil
 
         ByteBuffer clone = ByteBuffer.allocate(buffer.remaining());
 
-        if (buffer.hasArray())
+        if (!buffer.isDirect())
         {
             System.arraycopy(buffer.array(), buffer.arrayOffset() + buffer.position(), clone.array(), 0, buffer.remaining());
         }
@@ -272,7 +272,7 @@ public class ByteBufferUtil
 
     public static void arrayCopy(ByteBuffer buffer, int position, byte[] bytes, int offset, int length)
     {
-        if (buffer.hasArray())
+        if (!buffer.isDirect())
             System.arraycopy(buffer.array(), buffer.arrayOffset() + position, bytes, offset, length);
         else
             ((ByteBuffer) buffer.duplicate().position(position)).get(bytes, offset, length);
@@ -290,7 +290,7 @@ public class ByteBufferUtil
      */
     public static void arrayCopy(ByteBuffer src, int srcPos, ByteBuffer dst, int dstPos, int length)
     {
-        if (src.hasArray() && dst.hasArray())
+        if (!src.isDirect() && !dst.isDirect())
         {
             System.arraycopy(src.array(),
                              src.arrayOffset() + srcPos,
@@ -323,7 +323,7 @@ public class ByteBufferUtil
 
     public static void write(ByteBuffer buffer, DataOutput out) throws IOException
     {
-        if (buffer.hasArray())
+        if (!buffer.isDirect())
         {
             out.write(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
         }
@@ -554,8 +554,8 @@ public class ByteBufferUtil
     }
 
     /** trims size of bytebuffer to exactly number of bytes in it, to do not hold too much memory */
-    public static ByteBuffer minimalBufferFor(ByteBuffer buf)
+    public static ByteBuffer minimalHeapBufferFor(ByteBuffer buf)
     {
-        return buf.capacity() > buf.remaining() ? ByteBuffer.wrap(getArray(buf)) : buf;
+        return buf.isDirect() || buf.capacity() > buf.remaining() ? ByteBuffer.wrap(getArray(buf)) : buf;
     }
 }

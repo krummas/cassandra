@@ -45,6 +45,7 @@ import org.apache.cassandra.io.sstable.SSTableScanner;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.junit.Assert.*;
 
@@ -316,14 +317,14 @@ public class CompactionsTest extends SchemaLoader
         Collection<SSTableReader> sstablesBefore = cfs.getSSTables();
 
         QueryFilter filter = QueryFilter.getIdentityFilter(key, cfname, System.currentTimeMillis());
-        assert !(cfs.getColumnFamily(filter).getColumnCount() == 0);
+        assert !(cfs.getColumnFamily(RefAction.allocateOnHeap(), filter).getColumnCount() == 0);
 
         // Remove key
         rm = new Mutation(KEYSPACE1, key.key);
         rm.delete(cfname, 2);
         rm.apply();
 
-        ColumnFamily cf = cfs.getColumnFamily(filter);
+        ColumnFamily cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), filter);
         assert cf == null || cf.getColumnCount() == 0 : "should be empty: " + cf;
 
         // Sleep one second so that the removal is indeed purgeable even with gcgrace == 0
@@ -339,7 +340,7 @@ public class CompactionsTest extends SchemaLoader
 
         Util.compact(cfs, toCompact);
 
-        cf = cfs.getColumnFamily(filter);
+        cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), filter);
         assert cf == null || cf.getColumnCount() == 0 : "should be empty: " + cf;
     }
 

@@ -95,7 +95,7 @@ public class BoundedComposite extends AbstractComposite
     }
 
     @Override
-    public void free(PoolAllocator<?> allocator)
+    public void free(PoolAllocator allocator)
     {
         wrapped.free(allocator);
     }

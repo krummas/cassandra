@@ -28,11 +28,13 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivilegedAction;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.zip.Checksum;
 
 import com.google.common.base.Joiner;
@@ -250,7 +252,7 @@ public class FBUtilities
         MessageDigest messageDigest = localMD5Digest.get();
         for (ByteBuffer block : data)
         {
-            if (block.hasArray())
+            if (!block.isDirect())
                 messageDigest.update(block.array(), block.arrayOffset() + block.position(), block.remaining());
             else
                 messageDigest.update(block.duplicate());
@@ -693,4 +695,5 @@ public class FBUtilities
     {
         return OPERATING_SYSTEM.contains("nix") || OPERATING_SYSTEM.contains("nux") || OPERATING_SYSTEM.contains("aix");
     }
+
 }

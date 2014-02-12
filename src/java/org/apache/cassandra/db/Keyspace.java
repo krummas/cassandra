@@ -45,6 +45,7 @@ import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.pager.QueryPagers;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.memory.RefAction;
 
 /**
  * It represents a Keyspace.
@@ -316,11 +317,11 @@ public class Keyspace
         }
     }
 
-    public Row getRow(QueryFilter filter)
+    public Row getRow(RefAction refAction, QueryFilter filter)
     {
         ColumnFamilyStore cfStore = getColumnFamilyStore(filter.getColumnFamilyName());
-        ColumnFamily columnFamily = cfStore.getColumnFamily(filter);
-        return new Row(filter.key, columnFamily);
+        ColumnFamily cf = cfStore.getColumnFamily(refAction, filter);
+        return new Row(filter.key, cf);
     }
 
     public void apply(Mutation mutation, boolean writeCommitLog)
@@ -369,6 +370,7 @@ public class Keyspace
                 SecondaryIndexManager.Updater updater = updateIndexes ? cfs.indexManager.updaterFor(key, opGroup) : SecondaryIndexManager.nullUpdater;
                 cfs.apply(key, cf, updater, opGroup, replayPosition);
             }
+
         }
         finally
         {
@@ -396,7 +398,8 @@ public class Keyspace
         {
             Collection<SecondaryIndex> indexes = cfs.indexManager.getIndexesByNames(idxNames);
 
-            Iterator<ColumnFamily> pager = QueryPagers.pageRowLocally(cfs, key.key, DEFAULT_PAGE_SIZE);
+            // can use unsafe RefAction as we're protected by the writeOrdering
+            Iterator<ColumnFamily> pager = QueryPagers.pageRowLocally(RefAction.unsafe(), cfs, key.key, DEFAULT_PAGE_SIZE);
             while (pager.hasNext())
             {
                 ColumnFamily cf = pager.next();

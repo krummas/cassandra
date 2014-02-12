@@ -29,6 +29,8 @@ import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 
 /**
  * Static utility methods to create query pagers.
@@ -128,7 +130,7 @@ public class QueryPagers
      * Convenience method to (locally) page an internal row.
      * Used to 2ndary index a wide row without dying.
      */
-    public static Iterator<ColumnFamily> pageRowLocally(final ColumnFamilyStore cfs, ByteBuffer key, final int pageSize)
+    public static Iterator<ColumnFamily> pageRowLocally(final RefAction refAction, final ColumnFamilyStore cfs, ByteBuffer key, final int pageSize)
     {
         SliceFromReadCommand command = new SliceFromReadCommand(cfs.metadata.ksName, key, cfs.name, System.currentTimeMillis(), new IdentityQueryFilter());
         final SliceQueryPager pager = new SliceQueryPager(command, null, true);
@@ -145,7 +147,7 @@ public class QueryPagers
             {
                 try
                 {
-                    List<Row> rows = pager.fetchPage(pageSize);
+                    List<Row> rows = pager.fetchPage(refAction, pageSize);
                     ColumnFamily cf = rows.isEmpty() ? null : rows.get(0).cf;
                     return cf == null ? EmptyColumns.factory.create(cfs.metadata) : cf;
                 }
@@ -177,11 +179,20 @@ public class QueryPagers
         final SliceQueryPager pager = new SliceQueryPager(command, consistencyLevel, false);
 
         ColumnCounter counter = filter.columnCounter(Schema.instance.getCFMetaData(keyspace, columnFamily).comparator, now);
-        while (!pager.isExhausted())
+        Referrer referrer = RefAction.refer();
+        try
         {
-            List<Row> next = pager.fetchPage(pageSize);
-            if (!next.isEmpty())
-                counter.countAll(next.get(0).cf);
+            while (!pager.isExhausted())
+            {
+                List<Row> next = pager.fetchPage(referrer, pageSize);
+                if (!next.isEmpty())
+                    counter.countAll(next.get(0).cf);
+                referrer.reset();
+            }
+        }
+        finally
+        {
+            referrer.setDone();
         }
         return counter.live();
     }

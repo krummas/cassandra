@@ -74,5 +74,5 @@ public interface Composite extends IMeasurableMemory
 
     public int dataSize();
     public Composite copy(AbstractAllocator allocator);
-    public void free(PoolAllocator<?> allocator);
+    public void free(PoolAllocator allocator);
 }

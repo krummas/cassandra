@@ -20,6 +20,8 @@ package org.apache.cassandra.cql3.statements;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 import org.github.jamm.MemoryMeter;
 
 import org.apache.cassandra.auth.Permission;
@@ -299,7 +301,7 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
         return null;
     }
 
-    protected Map<ByteBuffer, CQL3Row> readRequiredRows(List<ByteBuffer> partitionKeys, Composite clusteringPrefix, boolean local, ConsistencyLevel cl)
+    protected Map<ByteBuffer, CQL3Row> readRequiredRows(RefAction refAction, List<ByteBuffer> partitionKeys, Composite clusteringPrefix, boolean local, ConsistencyLevel cl)
     throws RequestExecutionException, RequestValidationException
     {
         // Lists SET operation incurs a read.
@@ -309,15 +311,15 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
             if (op.requiresRead())
             {
                 if (toRead == null)
-                    toRead = new TreeSet<ColumnIdentifier>();
+                    toRead = new TreeSet<>();
                 toRead.add(op.column.name);
             }
         }
 
-        return toRead == null ? null : readRows(partitionKeys, clusteringPrefix, toRead, cfm, local, cl);
+        return toRead == null ? null : readRows(refAction, partitionKeys, clusteringPrefix, toRead, cfm, local, cl);
     }
 
-    protected Map<ByteBuffer, CQL3Row> readRows(List<ByteBuffer> partitionKeys, Composite rowPrefix, Set<ColumnIdentifier> toRead, CFMetaData cfm, boolean local, ConsistencyLevel cl)
+    protected Map<ByteBuffer, CQL3Row> readRows(RefAction refAction, List<ByteBuffer> partitionKeys, Composite rowPrefix, Set<ColumnIdentifier> toRead, CFMetaData cfm, boolean local, ConsistencyLevel cl)
     throws RequestExecutionException, RequestValidationException
     {
         try
@@ -344,8 +346,8 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
                                                   new SliceQueryFilter(slices, false, Integer.MAX_VALUE)));
 
         List<Row> rows = local
-                       ? SelectStatement.readLocally(keyspace(), commands)
-                       : StorageProxy.read(commands, cl);
+                       ? SelectStatement.readLocally(refAction, keyspace(), commands)
+                       : StorageProxy.read(refAction, commands, cl);
 
         Map<ByteBuffer, CQL3Row> map = new HashMap<ByteBuffer, CQL3Row>();
         for (Row row : rows)
@@ -369,7 +371,7 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
         return ifNotExists || (columnConditions != null && !columnConditions.isEmpty());
     }
 
-    public ResultMessage execute(QueryState queryState, QueryOptions options)
+    public ResultMessage execute(RefAction refAction, QueryState queryState, QueryOptions options)
     throws RequestExecutionException, RequestValidationException
     {
         if (options.getConsistency() == null)
@@ -379,7 +381,7 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
             throw new InvalidRequestException("Conditional updates are not supported by the protocol version in use. You need to upgrade to a driver using the native protocol v2.");
 
         return hasConditions()
-             ? executeWithCondition(queryState, options)
+             ? executeWithCondition(refAction, queryState, options)
              : executeWithoutCondition(queryState, options);
     }
 
@@ -392,14 +394,24 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
         else
             cl.validateForWrite(cfm.ksName);
 
-        Collection<? extends IMutation> mutations = getMutations(options.getValues(), false, cl, queryState.getTimestamp(), false);
-        if (!mutations.isEmpty())
-            StorageProxy.mutateWithTriggers(mutations, cl, false);
+        Referrer referrer = RefAction.refer();
+        try
+        {
+            Collection<? extends IMutation> mutations = getMutations(referrer, options.getValues(), false, cl, queryState.getTimestamp(), false);
 
+            // we rely on the fact that StorageProxy.mutateWithTriggers is synchronous, so we can invalidate our references
+            // as soon as it returns
+            if (!mutations.isEmpty())
+                StorageProxy.mutateWithTriggers(mutations, cl, false);
+        }
+        finally
+        {
+            referrer.setDone();
+        }
         return null;
     }
 
-    public ResultMessage executeWithCondition(QueryState queryState, QueryOptions options)
+    public ResultMessage executeWithCondition(RefAction refAction, QueryState queryState, QueryOptions options)
     throws RequestExecutionException, RequestValidationException
     {
         List<ByteBuffer> variables = options.getValues();
@@ -423,14 +435,15 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
                                  ? new NotExistCondition(clusteringPrefix, now)
                                  : new ColumnsConditions(clusteringPrefix, cfm, key, columnConditions, variables, now);
 
-        ColumnFamily result = StorageProxy.cas(keyspace(),
+        ColumnFamily result = StorageProxy.cas(refAction,
+                                               keyspace(),
                                                columnFamily(),
                                                key,
                                                conditions,
                                                updates,
                                                options.getSerialConsistency(),
                                                options.getConsistency());
-        return new ResultMessage.Rows(buildCasResultSet(key, result));
+        return new ResultMessage.Rows(refAction, buildCasResultSet(key, result));
     }
 
     private ResultSet buildCasResultSet(ByteBuffer key, ColumnFamily cf) throws InvalidRequestException
@@ -490,11 +503,19 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
         if (hasConditions())
             throw new UnsupportedOperationException();
 
-        for (IMutation mutation : getMutations(Collections.<ByteBuffer>emptyList(), true, null, queryState.getTimestamp(), false))
+        Referrer referrer = RefAction.refer();
+        try
         {
-            // We don't use counters internally.
-            assert mutation instanceof Mutation;
-            ((Mutation) mutation).apply();
+            for (IMutation mutation : getMutations(referrer, Collections.<ByteBuffer>emptyList(), true, null, queryState.getTimestamp(), false))
+            {
+                // We don't use counters internally.
+                assert mutation instanceof Mutation;
+                ((Mutation) mutation).apply();
+            }
+        }
+        finally
+        {
+            referrer.setDone();
         }
         return null;
     }
@@ -510,14 +531,14 @@ public abstract class ModificationStatement implements CQLStatement, MeasurableF
      * @return list of the mutations
      * @throws InvalidRequestException on invalid requests
      */
-    public Collection<? extends IMutation> getMutations(List<ByteBuffer> variables, boolean local, ConsistencyLevel cl, long now, boolean isBatch)
+    public Collection<? extends IMutation> getMutations(RefAction refAction, List<ByteBuffer> variables, boolean local, ConsistencyLevel cl, long now, boolean isBatch)
     throws RequestExecutionException, RequestValidationException
     {
         List<ByteBuffer> keys = buildPartitionKeyNames(variables);
         Composite clusteringPrefix = createClusteringPrefix(variables);
 
         // Some lists operation requires reading
-        Map<ByteBuffer, CQL3Row> rows = readRequiredRows(keys, clusteringPrefix, local, cl);
+        Map<ByteBuffer, CQL3Row> rows = readRequiredRows(refAction, keys, clusteringPrefix, local, cl);
         UpdateParameters params = new UpdateParameters(cfm, variables, getTimestamp(now, variables), getTimeToLive(variables), rows);
 
         Collection<IMutation> mutations = new ArrayList<IMutation>();

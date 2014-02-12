@@ -33,6 +33,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
+import org.apache.cassandra.concurrent.NamedThreadFactory;
+import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.concurrent.StageManager;
+import org.apache.cassandra.db.filter.ColumnSlice;
+import org.apache.cassandra.db.filter.SliceQueryFilter;
+import org.apache.cassandra.utils.concurrent.WaitQueue;
+import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.memory.AllocatorGroup;
+import org.apache.cassandra.utils.memory.HeapAllocator;
+
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Striped;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -76,6 +86,7 @@ import org.apache.cassandra.streaming.StreamLockfile;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.apache.cassandra.config.CFMetaData.Caching;
 
@@ -96,6 +107,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                                              new LinkedBlockingQueue<Runnable>(),
                                                                                              new NamedThreadFactory("MemtablePostFlush"),
                                                                                              "internal");
+    public static final ExecutorService reclaimExecutor = new JMXEnabledThreadPoolExecutor(1, StageManager.KEEPALIVE,
+                                                                                           TimeUnit.SECONDS,
+                                                                                           new LinkedBlockingQueue<Runnable>(),
+                                                                                           new NamedThreadFactory("MemtableReclaimMemory"),
+                                                                                           "internal");
 
     public final Keyspace keyspace;
     public final String name;
@@ -113,6 +129,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      * so anyone else who wants to make sure flush doesn't interfere should as well.
      */
     private final DataTracker data;
+
+    /* The read order, used to track accesses to off-heap memtable storage */
+    public final OpOrder readOrdering = new OpOrder();
+    public final AllocatorGroup allocatorGroup;
 
     /* This is used to generate the next index for a SSTable */
     private final AtomicInteger fileIndexGenerator = new AtomicInteger(0);
@@ -273,6 +293,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         this.directories = directories;
         this.indexManager = new SecondaryIndexManager(this);
         this.metric = new ColumnFamilyMetrics(this);
+        this.allocatorGroup = Memtable.memoryPool.newAllocatorGroup(name, readOrdering, keyspace.writeOrder);
+
         fileIndexGenerator.set(generation);
         sampleLatencyNanos = DatabaseDescriptor.getReadRpcTimeout() / 2;
 
@@ -988,6 +1010,26 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         public void run()
         {
+
+            // we issue a gc barrier in order to avoid marking the writes as blocking until we're sure no more
+            // space can be made available for them, to minimise the amount of memory overspend we incur
+            OpOrder.Barrier gcBarrier = Memtable.memoryPool.getGCBarrier();
+            if (gcBarrier != null)
+            {
+                gcBarrier.issue();
+                while (!writeBarrier.allPriorOpsAreFinished() && !gcBarrier.allPriorOpsAreFinished())
+                {
+                    WaitQueue.Signal signal = WaitQueue.any(writeBarrier.register(), gcBarrier.register());
+                    if (writeBarrier.allPriorOpsAreFinished() || gcBarrier.allPriorOpsAreFinished())
+                    {
+                        signal.cancel();
+                        break;
+                    }
+                    else
+                        signal.awaitUninterruptibly();
+                }
+            }
+
             // mark writes older than the barrier as blocking progress, permitting them to exceed our memory limit
             // if they are stuck waiting on it, then wait for them all to complete
             writeBarrier.markBlocking();
@@ -1020,7 +1062,18 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             {
                 // flush the memtable
                 MoreExecutors.sameThreadExecutor().execute(memtable.flushRunnable());
-                memtable.setDiscarded();
+
+                // issue a read barrier for reclaiming the memory, and offload the wait to another thread
+                final OpOrder.Barrier readBarrier = readOrdering.newBarrier();
+                readBarrier.issue();
+                reclaimExecutor.execute(new WrappedRunnable()
+                {
+                    public void runMayThrow() throws InterruptedException, ExecutionException
+                    {
+                        readBarrier.await();
+                        memtable.setDiscarded();
+                    }
+                });
             }
 
             // signal the post-flush we've done our work
@@ -1048,26 +1101,33 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
                 // find the total ownership ratio for the memtable and all SecondaryIndexes owned by this CF,
                 // both on- and off-heap, and select the largest of the two ratios to weight this CF
-                float onHeap = 0f;
-                onHeap += current.getAllocator().ownershipRatio();
+                float onHeap = 0f, offHeap = 0f;
+                onHeap += current.getAllocator().onHeap.ownershipRatio();
+                offHeap += current.getAllocator().offHeap.ownershipRatio();
 
                 for (SecondaryIndex index : cfs.indexManager.getIndexes())
                 {
-                    if (index.getOnHeapAllocator() != null)
-                        onHeap += index.getOnHeapAllocator().ownershipRatio();
+                    if (index.getAllocator() != null)
+                    {
+                        onHeap += index.getAllocator().onHeap.ownershipRatio();
+                        offHeap += index.getAllocator().offHeap.ownershipRatio();
+                    }
                 }
 
-                if (onHeap > largestRatio)
+                float ratio = Math.max(onHeap, offHeap);
+
+                if (ratio > largestRatio)
                 {
                     largest = current;
-                    largestRatio = onHeap;
+                    largestRatio = ratio;
                 }
             }
 
             if (largest != null)
             {
                 largest.cfs.switchMemtableIfCurrent(largest);
-                logger.info("Reclaiming {} of {} retained memtable bytes", largest.getAllocator().reclaiming(), Memtable.memoryPool.used());
+                // reclaiming includes that which we are GC-ing;
+                logger.info("Reclaiming {} of {} retained memtable bytes", largest.getAllocator().onHeap.owns(), Memtable.memoryPool.onHeap.used());
             }
         }
     }
@@ -1432,14 +1492,15 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return metric.writeLatency.recentLatencyHistogram.getBuckets(true);
     }
 
-    public ColumnFamily getColumnFamily(DecoratedKey key,
+    public ColumnFamily getColumnFamily(RefAction refAction,
+                                        DecoratedKey key,
                                         Composite start,
                                         Composite finish,
                                         boolean reversed,
                                         int limit,
                                         long timestamp)
     {
-        return getColumnFamily(QueryFilter.getSliceFilter(key, name, start, finish, reversed, limit, timestamp));
+        return getColumnFamily(refAction, QueryFilter.getSliceFilter(key, name, start, finish, reversed, limit, timestamp));
     }
 
     /**
@@ -1454,7 +1515,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      * @param filter the columns being queried.
      * @return the requested data for the filter provided
      */
-    private ColumnFamily getThroughCache(UUID cfId, QueryFilter filter)
+    private ColumnFamily getThroughCache(RefAction refAction, UUID cfId, QueryFilter filter)
     {
         assert isRowCacheEnabled()
                : String.format("Row cache is not enabled on column family [" + name + "]");
@@ -1472,7 +1533,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 // Some other read is trying to cache the value, just do a normal non-caching read
                 Tracing.trace("Row cache miss (race)");
                 metric.rowCacheMiss.inc();
-                return getTopLevelColumns(filter, Integer.MIN_VALUE);
+                return getTopLevelColumns(refAction, filter, Integer.MIN_VALUE);
             }
 
             ColumnFamily cachedCf = (ColumnFamily)cached;
@@ -1485,7 +1546,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
             metric.rowCacheHitOutOfRange.inc();
             Tracing.trace("Ignoring row cache as cached value could not satisfy query");
-            return getTopLevelColumns(filter, Integer.MIN_VALUE);
+            return getTopLevelColumns(refAction, filter, Integer.MIN_VALUE);
         }
 
         metric.rowCacheMiss.inc();
@@ -1499,7 +1560,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             // If we are explicitely asked to fill the cache with full partitions, we go ahead and query the whole thing
             if (metadata.getRowsPerPartitionToCache().cacheFullPartitions())
             {
-                data = getTopLevelColumns(QueryFilter.getIdentityFilter(filter.key, name, filter.timestamp), Integer.MIN_VALUE);
+                data = getTopLevelColumns(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(filter.key, name, filter.timestamp), Integer.MIN_VALUE);
                 toCache = data;
                 Tracing.trace("Populating row cache with the whole partition");
                 if (sentinelSuccess && toCache != null)
@@ -1530,7 +1591,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 // needs to be cached afterwards.
                 if (sliceFilter.count < rowsToCache)
                 {
-                    toCache = getTopLevelColumns(cacheFilter, Integer.MIN_VALUE);
+                    toCache = getTopLevelColumns(refAction, cacheFilter, Integer.MIN_VALUE);
                     if (toCache != null)
                     {
                         Tracing.trace("Populating row cache ({} rows cached)", cacheSlice.lastCounted());
@@ -1539,7 +1600,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 }
                 else
                 {
-                    data = getTopLevelColumns(filter, Integer.MIN_VALUE);
+                    data = getTopLevelColumns(refAction, filter, Integer.MIN_VALUE);
                     if (data != null)
                     {
                         // The filter limit was greater than the number of rows to cache. But, if the filter had a non-empty
@@ -1564,7 +1625,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             else
             {
                 Tracing.trace("Fetching data but not populating cache as query does not query from the start of the partition");
-                return getTopLevelColumns(filter, Integer.MIN_VALUE);
+                return getTopLevelColumns(refAction, filter, Integer.MIN_VALUE);
             }
         }
         finally
@@ -1610,7 +1671,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      * only the latest version of a column is returned.
      * @return null if there is no data and no tombstones; otherwise a ColumnFamily
      */
-    public ColumnFamily getColumnFamily(QueryFilter filter)
+    public ColumnFamily getColumnFamily(RefAction refAction, QueryFilter filter)
     {
         assert name.equals(filter.getColumnFamilyName()) : filter.getColumnFamilyName();
 
@@ -1625,7 +1686,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 assert !isIndex(); // CASSANDRA-5732
                 UUID cfId = metadata.cfId;
 
-                ColumnFamily cached = getThroughCache(cfId, filter);
+                ColumnFamily cached = getThroughCache(refAction, cfId, filter);
                 if (cached == null)
                 {
                     logger.trace("cached row is empty");
@@ -1636,12 +1697,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             }
             else
             {
-                ColumnFamily cf = getTopLevelColumns(filter, gcBefore);
+                result = getTopLevelColumns(refAction, filter, gcBefore);
 
-                if (cf == null)
+                if (result == null)
                     return null;
 
-                result = removeDeletedCF(cf, gcBefore);
+                result = removeDeletedCF(result, gcBefore);
             }
 
             removeDroppedColumns(result);
@@ -1839,11 +1900,21 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         }
     }
 
-    public ColumnFamily getTopLevelColumns(QueryFilter filter, int gcBefore)
+    public ColumnFamily getTopLevelColumns(RefAction action, QueryFilter filter, int gcBefore)
     {
         Tracing.trace("Executing single-partition query on {}", name);
         CollationController controller = new CollationController(this, filter, gcBefore);
-        ColumnFamily columns = controller.getTopLevelColumns();
+        ColumnFamily columns;
+        OpOrder.Group op = readOrdering.start();
+        try
+        {
+            columns = controller.getTopLevelColumns(action.allocator());
+            action.complete(allocatorGroup, op, columns);
+        }
+        finally
+        {
+            op.finishOne();
+        }
         metric.updateSSTableIterated(controller.getSstablesIterated());
         return columns;
     }
@@ -1883,7 +1954,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
       *
       * @param range The range of keys and columns within those keys to fetch
      */
-    private AbstractScanIterator getSequentialIterator(final DataRange range, long now)
+    private AbstractScanIterator getSequentialIterator(AbstractAllocator allocator, final DataRange range, long now)
     {
         assert !(range.keyRange() instanceof Range) || !((Range)range.keyRange()).isWrapAround() || range.keyRange().right.isMinimum() : range.keyRange();
 
@@ -1892,7 +1963,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         try
         {
-            final CloseableIterator<Row> iterator = RowIteratorFactory.getIterator(view.memtables, view.sstables, range, this, now);
+            final CloseableIterator<Row> iterator = RowIteratorFactory.getIterator(allocator, view.memtables, view.sstables, range, this, now);
 
             // todo this could be pushed into SSTableScanner
             return new AbstractScanIterator()
@@ -1935,21 +2006,23 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     }
 
     @VisibleForTesting
-    public List<Row> getRangeSlice(final AbstractBounds<RowPosition> range,
+    public List<Row> getRangeSlice(RefAction refAction,
+                                   final AbstractBounds<RowPosition> range,
                                    List<IndexExpression> rowFilter,
                                    IDiskAtomFilter columnFilter,
                                    int maxResults)
     {
-        return getRangeSlice(range, rowFilter, columnFilter, maxResults, System.currentTimeMillis());
+        return getRangeSlice(refAction, range, rowFilter, columnFilter, maxResults, System.currentTimeMillis());
     }
 
-    public List<Row> getRangeSlice(final AbstractBounds<RowPosition> range,
+    public List<Row> getRangeSlice(RefAction refAction,
+                                   final AbstractBounds<RowPosition> range,
                                    List<IndexExpression> rowFilter,
                                    IDiskAtomFilter columnFilter,
                                    int maxResults,
                                    long now)
     {
-        return getRangeSlice(makeExtendedFilter(range, columnFilter, rowFilter, maxResults, false, false, now));
+        return getRangeSlice(refAction, makeExtendedFilter(range, columnFilter, rowFilter, maxResults, false, false, now));
     }
 
     /**
@@ -1974,7 +2047,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return ExtendedFilter.create(this, dataRange, rowFilter, maxResults, true, now);
     }
 
-    public List<Row> getRangeSlice(AbstractBounds<RowPosition> range,
+    public List<Row> getRangeSlice(RefAction refAction,
+                                   AbstractBounds<RowPosition> range,
                                    List<IndexExpression> rowFilter,
                                    IDiskAtomFilter columnFilter,
                                    int maxResults,
@@ -1982,7 +2056,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                    boolean countCQL3Rows,
                                    boolean isPaging)
     {
-        return getRangeSlice(makeExtendedFilter(range, columnFilter, rowFilter, maxResults, countCQL3Rows, isPaging, now));
+        return getRangeSlice(refAction, makeExtendedFilter(range, columnFilter, rowFilter, maxResults, countCQL3Rows, isPaging, now));
     }
 
     public ExtendedFilter makeExtendedFilter(AbstractBounds<RowPosition> range,
@@ -2009,39 +2083,51 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return ExtendedFilter.create(this, dataRange, rowFilter, maxResults, countCQL3Rows, timestamp);
     }
 
-    public List<Row> getRangeSlice(ExtendedFilter filter)
+    public List<Row> getRangeSlice(RefAction refAction, ExtendedFilter filter)
     {
-        return filter(getSequentialIterator(filter.dataRange, filter.timestamp), filter);
+        final OpOrder.Group readOp = readOrdering.start();
+        try
+        {
+            List<Row> result = filter(refAction.subAction(), getSequentialIterator(refAction.allocator(), filter.dataRange, filter.timestamp), filter);
+            refAction.complete(allocatorGroup, readOp, result);
+            return result;
+        }
+        finally
+        {
+            readOp.finishOne();
+        }
     }
 
     @VisibleForTesting
-    public List<Row> search(AbstractBounds<RowPosition> range,
+    public List<Row> search(RefAction refAction,
+                            AbstractBounds<RowPosition> range,
                             List<IndexExpression> clause,
                             IDiskAtomFilter dataFilter,
                             int maxResults)
     {
-        return search(range, clause, dataFilter, maxResults, System.currentTimeMillis());
+        return search(refAction, range, clause, dataFilter, maxResults, System.currentTimeMillis());
     }
 
-    public List<Row> search(AbstractBounds<RowPosition> range,
+    public List<Row> search(RefAction refAction,
+                            AbstractBounds<RowPosition> range,
                             List<IndexExpression> clause,
                             IDiskAtomFilter dataFilter,
                             int maxResults,
                             long now)
     {
-        return search(makeExtendedFilter(range, dataFilter, clause, maxResults, false, false, now));
+        return search(refAction, makeExtendedFilter(range, dataFilter, clause, maxResults, false, false, now));
     }
 
-    public List<Row> search(ExtendedFilter filter)
+    public List<Row> search(RefAction refAction, ExtendedFilter filter)
     {
         Tracing.trace("Executing indexed scan for {}", filter.dataRange.keyRange().getString(metadata.getKeyValidator()));
-        return indexManager.search(filter);
+        return indexManager.search(refAction, filter);
     }
 
-    public List<Row> filter(AbstractScanIterator rowIterator, ExtendedFilter filter)
+    public List<Row> filter(RefAction refAction, AbstractScanIterator rowIterator, ExtendedFilter filter)
     {
         logger.trace("Filtering {} for rows matching {}", rowIterator, filter);
-        List<Row> rows = new ArrayList<Row>();
+        List<Row> rows = new ArrayList<>();
         int columnsCount = 0;
         int total = 0, matched = 0;
 
@@ -2059,7 +2145,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                     IDiskAtomFilter extraFilter = filter.getExtraFilter(rawRow.key, data);
                     if (extraFilter != null)
                     {
-                        ColumnFamily cf = filter.cfs.getColumnFamily(new QueryFilter(rawRow.key, name, extraFilter, filter.timestamp));
+                        ColumnFamily cf = filter.cfs.getColumnFamily(refAction, new QueryFilter(rawRow.key, name, extraFilter, filter.timestamp));
                         if (cf != null)
                             data.addAll(cf);
                     }

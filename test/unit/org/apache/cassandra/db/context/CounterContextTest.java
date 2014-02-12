@@ -49,12 +49,12 @@ public class CounterContextTest
     private static final int countLength = 8;
     private static final int stepLength = idLength + clockLength + countLength;
 
-    private static final Pool POOL = new HeapPool(Integer.MAX_VALUE, 1f, null);
+    private static final Pool POOL = new HeapPool(Integer.MAX_VALUE, Integer.MAX_VALUE, 1f, null);
 
     /** Allocates 1 byte from a new SlabAllocator and returns it. */
     private AbstractAllocator bumpedSlab()
     {
-        AbstractAllocator allocator = POOL.newAllocator(new OpOrder());
+        AbstractAllocator allocator = POOL.newAllocatorGroup("test", new OpOrder(), new OpOrder()).newAllocator();
         allocator.allocate(1);
         return allocator;
     }

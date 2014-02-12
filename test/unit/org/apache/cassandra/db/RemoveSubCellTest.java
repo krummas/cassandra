@@ -31,6 +31,7 @@ import static org.apache.cassandra.Util.getBytes;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import com.google.common.util.concurrent.Uninterruptibles;
 
@@ -57,7 +58,7 @@ public class RemoveSubCellTest extends SchemaLoader
         rm.delete("Super1", cname, 1);
         rm.apply();
 
-        ColumnFamily retrieved = store.getColumnFamily(QueryFilter.getIdentityFilter(dk, "Super1", System.currentTimeMillis()));
+        ColumnFamily retrieved = store.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(dk, "Super1", System.currentTimeMillis()));
         assert retrieved.getColumn(cname).isMarkedForDelete(System.currentTimeMillis());
         assertNull(Util.cloneAndRemoveDeleted(retrieved, Integer.MAX_VALUE));
     }
@@ -93,7 +94,7 @@ public class RemoveSubCellTest extends SchemaLoader
         rm.delete("Super1", cname, 2);
         rm.apply();
 
-        ColumnFamily retrieved = store.getColumnFamily(filter);
+        ColumnFamily retrieved = store.getColumnFamily(RefAction.allocateOnHeap(), filter);
         assert retrieved.getColumn(cname).isMarkedForDelete(System.currentTimeMillis());
         assertNull(Util.cloneAndRemoveDeleted(retrieved, Integer.MAX_VALUE));
     }

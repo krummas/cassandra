@@ -35,6 +35,7 @@ import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.service.pager.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.junit.Assert.*;
 import static org.apache.cassandra.Util.range;
@@ -166,7 +167,7 @@ public class QueryPagerTest extends SchemaLoader
         QueryPager pager = QueryPagers.localPager(namesQuery("k0", "c1", "c5", "c7", "c8"));
 
         assertFalse(pager.isExhausted());
-        List<Row> page = pager.fetchPage(3);
+        List<Row> page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c1", "c5", "c7", "c8");
 
@@ -181,17 +182,17 @@ public class QueryPagerTest extends SchemaLoader
         List<Row> page;
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c1", "c2", "c3");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c4", "c5", "c6");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c7", "c8");
 
@@ -206,17 +207,17 @@ public class QueryPagerTest extends SchemaLoader
         List<Row> page;
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c6", "c7", "c8");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c3", "c4", "c5");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k0", "c1", "c2");
 
@@ -234,18 +235,18 @@ public class QueryPagerTest extends SchemaLoader
         List<Row> page;
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k1", "c2", "c3", "c4");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(4);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 4);
         assertEquals(toString(page), 2, page.size());
         assertRow(page.get(0), "k1", "c5", "c6");
         assertRow(page.get(1), "k4", "c3", "c4");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k4", "c5");
 
@@ -260,13 +261,13 @@ public class QueryPagerTest extends SchemaLoader
         List<Row> page;
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 3, page.size());
         for (int i = 1; i <= 3; i++)
             assertRow(page.get(i-1), "k" + i, "c1", "c4", "c8");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(3);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 3);
         assertEquals(toString(page), 2, page.size());
         for (int i = 4; i <= 5; i++)
             assertRow(page.get(i-4), "k" + i, "c1", "c4", "c8");
@@ -282,35 +283,35 @@ public class QueryPagerTest extends SchemaLoader
         List<Row> page;
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(5);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 5);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k2", "c1", "c2", "c3", "c4", "c5");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(4);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 4);
         assertEquals(toString(page), 2, page.size());
         assertRow(page.get(0), "k2", "c6", "c7");
         assertRow(page.get(1), "k3", "c1", "c2");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(6);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 6);
         assertEquals(toString(page), 2, page.size());
         assertRow(page.get(0), "k3", "c3", "c4", "c5", "c6", "c7");
         assertRow(page.get(1), "k4", "c1");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(5);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 5);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k4", "c2", "c3", "c4", "c5", "c6");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(5);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 5);
         assertEquals(toString(page), 2, page.size());
         assertRow(page.get(0), "k4", "c7");
         assertRow(page.get(1), "k5", "c1", "c2", "c3", "c4");
 
         assertFalse(pager.isExhausted());
-        page = pager.fetchPage(5);
+        page = pager.fetchPage(RefAction.allocateOnHeap(), 5);
         assertEquals(toString(page), 1, page.size());
         assertRow(page.get(0), "k5", "c5", "c6", "c7");
 

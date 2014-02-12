@@ -19,10 +19,9 @@
 package org.apache.cassandra.db;
 
 import java.nio.ByteBuffer;
+
 import java.util.*;
 
-import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
@@ -31,21 +30,27 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.IndexType;
-import org.apache.cassandra.db.composites.*;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy;
-import org.apache.cassandra.db.filter.*;
-import org.apache.cassandra.db.index.*;
+import org.apache.cassandra.db.composites.CellName;
+import org.apache.cassandra.db.composites.CellNames;
+import org.apache.cassandra.db.composites.Composites;
+import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.index.PerColumnSecondaryIndex;
+import org.apache.cassandra.db.index.SecondaryIndex;
+import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.utils.memory.PoolAllocator;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.apache.cassandra.Util.dk;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class RangeTombstoneTest extends SchemaLoader
 {
@@ -95,7 +100,7 @@ public class RangeTombstoneTest extends SchemaLoader
             columns.add(b(i));
         for (int i : dead)
             columns.add(b(i));
-        cf = cfs.getColumnFamily(QueryFilter.getNamesFilter(dk(key), CFNAME, columns, System.currentTimeMillis()));
+        cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getNamesFilter(dk(key), CFNAME, columns, System.currentTimeMillis()));
 
         for (int i : live)
             assert isLive(cf, cf.getColumn(b(i))) : "Cell " + i + " should be live";
@@ -103,7 +108,7 @@ public class RangeTombstoneTest extends SchemaLoader
             assert !isLive(cf, cf.getColumn(b(i))) : "Cell " + i + " shouldn't be live";
 
         // Queries by slices
-        cf = cfs.getColumnFamily(QueryFilter.getSliceFilter(dk(key), CFNAME, b(7), b(30), false, Integer.MAX_VALUE, System.currentTimeMillis()));
+        cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getSliceFilter(dk(key), CFNAME, b(7), b(30), false, Integer.MAX_VALUE, System.currentTimeMillis()));
 
         for (int i : new int[]{ 7, 8, 9, 11, 13, 15, 17, 28, 29, 30 })
             assert isLive(cf, cf.getColumn(b(i))) : "Cell " + i + " should be live";
@@ -147,7 +152,7 @@ public class RangeTombstoneTest extends SchemaLoader
         rm.apply();
         cfs.forceBlockingFlush();
 
-        cf = cfs.getColumnFamily(QueryFilter.getIdentityFilter(dk(key), CFNAME, System.currentTimeMillis()));
+        cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(dk(key), CFNAME, System.currentTimeMillis()));
 
         for (int i = 0; i < 5; i++)
             assert isLive(cf, cf.getColumn(b(i))) : "Cell " + i + " should be live";
@@ -158,7 +163,7 @@ public class RangeTombstoneTest extends SchemaLoader
 
         // Compact everything and re-test
         CompactionManager.instance.performMaximal(cfs);
-        cf = cfs.getColumnFamily(QueryFilter.getIdentityFilter(dk(key), CFNAME, System.currentTimeMillis()));
+        cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(dk(key), CFNAME, System.currentTimeMillis()));
 
         for (int i = 0; i < 5; i++)
             assert isLive(cf, cf.getColumn(b(i))) : "Cell " + i + " should be live";
@@ -192,7 +197,7 @@ public class RangeTombstoneTest extends SchemaLoader
         cfs.forceBlockingFlush();
 
         // Get the last value of the row
-        cf = cfs.getColumnFamily(QueryFilter.getSliceFilter(dk(key), CFNAME, Composites.EMPTY, Composites.EMPTY, true, 1, System.currentTimeMillis()));
+        cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getSliceFilter(dk(key), CFNAME, Composites.EMPTY, Composites.EMPTY, true, 1, System.currentTimeMillis()));
 
         assert !cf.isEmpty();
         int last = i(cf.getSortedColumns().iterator().next().name());
@@ -467,11 +472,10 @@ public class RangeTombstoneTest extends SchemaLoader
         public void forceBlockingFlush(){}
 
         @Override
-        public AbstractAllocator getOnHeapAllocator()
+        public PoolAllocator getAllocator()
         {
             return null;
         }
-
 
         public ColumnFamilyStore getIndexCfs(){ return null; }
 

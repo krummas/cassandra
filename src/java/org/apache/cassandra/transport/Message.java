@@ -20,6 +20,8 @@ package org.apache.cassandra.transport;
 import java.util.EnumSet;
 import java.util.UUID;
 
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.*;
@@ -158,7 +160,7 @@ public abstract class Message
                 throw new IllegalArgumentException();
         }
 
-        public abstract Response execute(QueryState queryState);
+        public abstract Response execute(RefAction refAction, QueryState queryState);
 
         public void setTracingRequested()
         {
@@ -301,14 +303,25 @@ public abstract class Message
 
                 logger.debug("Received: {}, v={}", request, connection.getVersion());
 
-                Response response = request.execute(qstate);
-                response.setStreamId(request.getStreamId());
-                response.attach(connection);
-                connection.applyStateTransition(request.type, response.type);
+                Referrer referrer = RefAction.refer();
+                try
+                {
+                    Response response = request.execute(referrer, qstate);
+                    response.setStreamId(request.getStreamId());
+                    response.attach(connection);
+                    connection.applyStateTransition(request.type, response.type);
 
-                logger.debug("Responding: {}, v={}", response, connection.getVersion());
+                    logger.debug("Responding: {}, v={}", response, connection.getVersion());
 
-                ctx.getChannel().write(response);
+                    ctx.getChannel().write(response);
+                    referrer = null;
+                }
+                finally
+                {
+                    if (referrer != null)
+                        referrer.setDone();
+                }
+
             }
             catch (Exception ex)
             {

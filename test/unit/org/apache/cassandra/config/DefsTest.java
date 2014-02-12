@@ -40,6 +40,8 @@ import org.apache.cassandra.locator.OldNetworkTopologyStrategy;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.RefAction;
+
 import static org.apache.cassandra.Util.cellname;
 
 import org.junit.Test;
@@ -177,7 +179,7 @@ public class DefsTest extends SchemaLoader
         assert store != null;
         store.forceBlockingFlush();
 
-        ColumnFamily cfam = store.getColumnFamily(Util.namesQueryFilter(store, dk, col0));
+        ColumnFamily cfam = store.getColumnFamily(RefAction.allocateOnHeap(), Util.namesQueryFilter(store, dk, col0));
         assert cfam.getColumn(col0) != null;
         Cell col = cfam.getColumn(col0);
         assert ByteBufferUtil.bytes("value0").equals(col.value());
@@ -251,7 +253,7 @@ public class DefsTest extends SchemaLoader
         assert store != null;
         store.forceBlockingFlush();
 
-        ColumnFamily cfam = store.getColumnFamily(Util.namesQueryFilter(store, dk, col0));
+        ColumnFamily cfam = store.getColumnFamily(RefAction.allocateOnHeap(), Util.namesQueryFilter(store, dk, col0));
         assert cfam.getColumn(col0) != null;
         Cell col = cfam.getColumn(col0);
         assert ByteBufferUtil.bytes("value0").equals(col.value());
@@ -360,7 +362,7 @@ public class DefsTest extends SchemaLoader
         assert store != null;
         store.forceBlockingFlush();
 
-        ColumnFamily cfam = store.getColumnFamily(Util.namesQueryFilter(store, dk, col0));
+        ColumnFamily cfam = store.getColumnFamily(RefAction.allocateOnHeap(), Util.namesQueryFilter(store, dk, col0));
         assert cfam.getColumn(col0) != null;
         Cell col = cfam.getColumn(col0);
         assert ByteBufferUtil.bytes("value0").equals(col.value());

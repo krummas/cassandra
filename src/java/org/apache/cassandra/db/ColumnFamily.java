@@ -491,6 +491,11 @@ public abstract class ColumnFamily implements Iterable<Cell>, IRowCacheEntry
         return ByteBuffer.wrap(out.getData(), 0, out.getLength());
     }
 
+    public boolean hasColumns()
+    {
+        return getColumnCount() > 0;
+    }
+
     public abstract static class Factory <T extends ColumnFamily>
     {
         /**

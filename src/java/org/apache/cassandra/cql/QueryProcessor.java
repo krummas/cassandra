@@ -63,6 +63,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.SemanticVersion;
 import org.antlr.runtime.*;
+import org.apache.cassandra.utils.memory.RefAction;
 
 
 import static org.apache.cassandra.thrift.ThriftValidation.validateColumnFamily;
@@ -98,7 +99,7 @@ public class QueryProcessor
         postPreparationHooks.remove(hook);
     }
 
-    private static List<org.apache.cassandra.db.Row> getSlice(CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables, long now)
+    private static List<org.apache.cassandra.db.Row> getSlice(RefAction refAction, CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables, long now)
     throws InvalidRequestException, ReadTimeoutException, UnavailableException, IsBootstrappingException
     {
         List<ReadCommand> commands = new ArrayList<ReadCommand>();
@@ -138,7 +139,7 @@ public class QueryProcessor
             }
         }
 
-        return StorageProxy.read(commands, select.getConsistencyLevel());
+        return StorageProxy.read(refAction, commands, select.getConsistencyLevel());
     }
 
     private static SortedSet<CellName> getColumnNames(SelectStatement select, CFMetaData metadata, List<ByteBuffer> variables)
@@ -156,7 +157,7 @@ public class QueryProcessor
         return columnNames;
     }
 
-    private static List<org.apache.cassandra.db.Row> multiRangeSlice(CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables, long now)
+    private static List<org.apache.cassandra.db.Row> multiRangeSlice(RefAction refAction, CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables, long now)
     throws ReadTimeoutException, UnavailableException, InvalidRequestException
     {
         IPartitioner<?> p = StorageService.getPartitioner();
@@ -201,7 +202,7 @@ public class QueryProcessor
                   ? select.getNumRecords() + 1
                   : select.getNumRecords();
 
-        List<org.apache.cassandra.db.Row> rows = StorageProxy.getRangeSlice(new RangeSliceCommand(metadata.ksName,
+        List<org.apache.cassandra.db.Row> rows = StorageProxy.getRangeSlice(refAction, new RangeSliceCommand(metadata.ksName,
                                                                                                   select.getColumnFamily(),
                                                                                                   now,
                                                                                                   columnFilter,
@@ -368,7 +369,7 @@ public class QueryProcessor
             throw new InvalidRequestException("range finish must come after start in traversal order");
     }
 
-    public static CqlResult processStatement(CQLStatement statement, ExecutionContext context)
+    public static CqlResult processStatement(RefAction refAction, CQLStatement statement, ExecutionContext context)
     throws RequestExecutionException, RequestValidationException
     {
         String keyspace = null;
@@ -421,11 +422,11 @@ public class QueryProcessor
                 // By-key
                 if (!select.isKeyRange() && (select.getKeys().size() > 0))
                 {
-                    rows = getSlice(metadata, select, variables, now);
+                    rows = getSlice(refAction, metadata, select, variables, now);
                 }
                 else
                 {
-                    rows = multiRangeSlice(metadata, select, variables, now);
+                    rows = multiRangeSlice(refAction, metadata, select, variables, now);
                 }
 
                 // count resultset is a single column named "count"
@@ -795,11 +796,11 @@ public class QueryProcessor
         return null;    // We should never get here.
     }
 
-    public static CqlResult process(String queryString, ThriftClientState clientState)
+    public static CqlResult process(RefAction refAction, String queryString, ThriftClientState clientState)
     throws RequestValidationException, RequestExecutionException
     {
         logger.trace("CQL QUERY: {}", queryString);
-        return processStatement(getStatement(queryString),
+        return processStatement(refAction, getStatement(queryString),
                                 new ExecutionContext(clientState, queryString, Collections.<ByteBuffer>emptyList()));
     }
 
@@ -827,7 +828,7 @@ public class QueryProcessor
         return new CqlPreparedResult(statementId, statement.boundTerms);
     }
 
-    public static CqlResult processPrepared(CQLStatement statement, ThriftClientState clientState, List<ByteBuffer> variables)
+    public static CqlResult processPrepared(RefAction refAction, CQLStatement statement, ThriftClientState clientState, List<ByteBuffer> variables)
     throws RequestValidationException, RequestExecutionException
     {
         // Check to see if there are any bound variables to verify
@@ -845,7 +846,7 @@ public class QueryProcessor
                     logger.trace("[{}] '{}'", i+1, variables.get(i));
         }
 
-        return processStatement(statement, new ExecutionContext(clientState, null, variables));
+        return processStatement(refAction, statement, new ExecutionContext(clientState, null, variables));
     }
 
     private static final int makeStatementId(String cql)

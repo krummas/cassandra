@@ -19,6 +19,8 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import com.google.common.base.Function;
+
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.ObjectSizes;
@@ -97,13 +99,19 @@ public class SimpleSparseCellName extends AbstractComposite implements CellName
         return EMPTY_SIZE + columnName.unsharedHeapSize();
     }
 
+    public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+    {
+        apply.apply(columnName.bytes);
+    }
+
     public CellName copy(AbstractAllocator allocator)
     {
         return new SimpleSparseCellName(columnName.clone(allocator));
     }
 
-    public void free(PoolAllocator<?> allocator)
+    public void free(PoolAllocator allocator)
     {
         allocator.free(columnName.bytes);
     }
+
 }

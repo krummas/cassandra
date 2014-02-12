@@ -45,6 +45,7 @@ import org.apache.cassandra.io.sstable.ReducingKeyIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.memory.PoolAllocator;
 
 /**
  * Abstract base class for different types of secondary indexes.
@@ -145,7 +146,7 @@ public abstract class SecondaryIndex
     /**
      * Get current amount of memory this index is consuming (in bytes)
      */
-    public abstract AbstractAllocator getOnHeapAllocator();
+    public abstract PoolAllocator getAllocator();
 
     /**
      * Allow access to the underlying column family store if there is one

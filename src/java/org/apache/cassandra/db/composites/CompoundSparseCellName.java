@@ -19,6 +19,8 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import com.google.common.base.Function;
+
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
@@ -102,6 +104,12 @@ public class CompoundSparseCellName extends CompoundComposite implements CellNam
         return new CompoundSparseCellName(elementsCopy(allocator), columnName);
     }
 
+    public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+    {
+        for (ByteBuffer element : elements)
+            apply.apply(element);
+    }
+
     public static class WithCollection extends CompoundSparseCellName
     {
         private static final long HEAP_SIZE = ObjectSizes.measure(new WithCollection(null, ByteBufferUtil.EMPTY_BYTE_BUFFER));
@@ -166,10 +174,17 @@ public class CompoundSparseCellName extends CompoundComposite implements CellNam
         }
 
         @Override
-        public void free(PoolAllocator<?> allocator)
+        public void free(PoolAllocator allocator)
         {
             super.free(allocator);
             allocator.free(collectionElement);
         }
+
+        public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+        {
+            super.visitCopyableBuffers(apply);
+            apply.apply(collectionElement);
+        }
+
     }
 }

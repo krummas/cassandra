@@ -30,7 +30,6 @@ import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.utils.btree.BTree;
 import org.apache.cassandra.utils.btree.BTreeSet;
 
-// TODO : should probably lower fan-factor for tests to make them more intensive
 public class LongBTreeTest
 {
 

@@ -25,6 +25,9 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
+
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 import org.github.jamm.MemoryMeter;
 
 import org.apache.cassandra.auth.Permission;
@@ -139,7 +142,7 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
         // Nothing to do, all validation has been done by RawStatement.prepare()
     }
 
-    public ResultMessage.Rows execute(QueryState state, QueryOptions options) throws RequestExecutionException, RequestValidationException
+    public ResultMessage.Rows execute(RefAction refAction, QueryState state, QueryOptions options) throws RequestExecutionException, RequestValidationException
     {
         ConsistencyLevel cl = options.getConsistency();
         List<ByteBuffer> variables = options.getValues();
@@ -169,7 +172,7 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
 
         if (pageSize <= 0 || command == null || !QueryPagers.mayNeedPaging(command, pageSize))
         {
-            return execute(command, cl, variables, limit, now);
+            return execute(refAction, command, cl, variables, limit, now);
         }
         else
         {
@@ -177,59 +180,69 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
             if (parameters.isCount)
                 return pageCountQuery(pager, variables, pageSize, now);
 
-            List<Row> page = pager.fetchPage(pageSize);
-            ResultMessage.Rows msg = processResults(page, variables, limit, now);
+            List<Row> page = pager.fetchPage(refAction, pageSize);
+            ResultMessage.Rows msg = processResults(refAction, page, variables, limit, now);
             if (!pager.isExhausted())
                 msg.result.metadata.setHasMorePages(pager.state());
             return msg;
         }
     }
 
-    private ResultMessage.Rows execute(Pageable command, ConsistencyLevel cl, List<ByteBuffer> variables, int limit, long now) throws RequestValidationException, RequestExecutionException
+    private ResultMessage.Rows execute(RefAction refAction, Pageable command, ConsistencyLevel cl, List<ByteBuffer> variables, int limit, long now) throws RequestValidationException, RequestExecutionException
     {
         List<Row> rows;
         if (command == null)
         {
-            rows = Collections.<Row>emptyList();
+            rows = Collections.emptyList();
         }
         else
         {
             rows = command instanceof Pageable.ReadCommands
-                 ? StorageProxy.read(((Pageable.ReadCommands)command).commands, cl)
-                 : StorageProxy.getRangeSlice((RangeSliceCommand)command, cl);
+                 ? StorageProxy.read(refAction, ((Pageable.ReadCommands)command).commands, cl)
+                 : StorageProxy.getRangeSlice(refAction, (RangeSliceCommand)command, cl);
         }
 
-        return processResults(rows, variables, limit, now);
+        return processResults(refAction, rows, variables, limit, now);
     }
 
     private ResultMessage.Rows pageCountQuery(QueryPager pager, List<ByteBuffer> variables, int pageSize, long now) throws RequestValidationException, RequestExecutionException
     {
         int count = 0;
-        while (!pager.isExhausted())
+        Referrer referrer = RefAction.refer();
+        try
         {
-            int maxLimit = pager.maxRemaining();
-            ResultSet rset = process(pager.fetchPage(pageSize), variables, maxLimit, now);
-            count += rset.rows.size();
+            while (!pager.isExhausted())
+            {
+                int maxLimit = pager.maxRemaining();
+                // only need count, so unsafe referencing is fine
+                ResultSet rset = process(pager.fetchPage(referrer, pageSize), variables, maxLimit, now);
+                count += rset.rows.size();
+                referrer.reset();
+            }
+        }
+        finally
+        {
+            referrer.setDone();
         }
 
         ResultSet result = ResultSet.makeCountResult(keyspace(), columnFamily(), count, parameters.countAlias);
-        return new ResultMessage.Rows(result);
+        return new ResultMessage.Rows(null, result);
     }
 
-    public ResultMessage.Rows processResults(List<Row> rows, List<ByteBuffer> variables, int limit, long now) throws RequestValidationException
+    public ResultMessage.Rows processResults(RefAction refAction, List<Row> rows, List<ByteBuffer> variables, int limit, long now) throws RequestValidationException
     {
         // Even for count, we need to process the result as it'll group some column together in sparse column families
         ResultSet rset = process(rows, variables, limit, now);
         rset = parameters.isCount ? rset.makeCountResult(parameters.countAlias) : rset;
-        return new ResultMessage.Rows(rset);
+        return new ResultMessage.Rows(refAction, rset);
     }
 
-    static List<Row> readLocally(String keyspaceName, List<ReadCommand> cmds)
+    static List<Row> readLocally(RefAction refAction, String keyspaceName, List<ReadCommand> cmds)
     {
         Keyspace keyspace = Keyspace.open(keyspaceName);
-        List<Row> rows = new ArrayList<Row>(cmds.size());
+        List<Row> rows = new ArrayList<>(cmds.size());
         for (ReadCommand cmd : cmds)
-            rows.add(cmd.getRow(keyspace));
+            rows.add(cmd.getRow(refAction, keyspace));
         return rows;
     }
 
@@ -242,15 +255,15 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
         if (isKeyRange || usesSecondaryIndexing)
         {
             RangeSliceCommand command = getRangeCommand(variables, limit, now);
-            rows = command == null ? Collections.<Row>emptyList() : command.executeLocally();
+            rows = command == null ? Collections.<Row>emptyList() : command.executeLocally(RefAction.allocateOnHeap());
         }
         else
         {
             List<ReadCommand> commands = getSliceCommands(variables, limit, now);
-            rows = commands == null ? Collections.<Row>emptyList() : readLocally(keyspace(), commands);
+            rows = commands == null ? Collections.<Row>emptyList() : readLocally(RefAction.allocateOnHeap(), keyspace(), commands);
         }
 
-        return processResults(rows, variables, limit, now);
+        return processResults(null, rows, variables, limit, now);
     }
 
     public ResultSet process(List<Row> rows) throws InvalidRequestException

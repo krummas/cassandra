@@ -125,7 +125,7 @@ public abstract class SSTable
      */
     public static DecoratedKey getMinimalKey(DecoratedKey key)
     {
-        return key.key.position() > 0 || key.key.hasRemaining() || !key.key.hasArray()
+        return key.key.position() > 0 || key.key.hasRemaining() || key.key.isDirect()
                                        ? new DecoratedKey(key.token, HeapAllocator.instance.clone(key.key))
                                        : key;
     }

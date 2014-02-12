@@ -36,6 +36,8 @@ import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.utils.memory.RefAction;
 
 public class CompositesSearcher extends SecondaryIndexSearcher
 {
@@ -47,10 +49,24 @@ public class CompositesSearcher extends SecondaryIndexSearcher
     }
 
     @Override
-    public List<Row> search(ExtendedFilter filter)
+    public List<Row> search(RefAction refAction, ExtendedFilter filter)
     {
         assert filter.getClause() != null && !filter.getClause().isEmpty();
-        return baseCfs.filter(getIndexedIterator(filter), filter);
+        final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
+        final CompositesIndex index = (CompositesIndex)indexManager.getIndexForColumn(primary.column);
+        OpOrder.Group readOps[] = new OpOrder.Group[] { baseCfs.readOrdering.start(), index.getIndexCfs().readOrdering.start() };
+        try
+        {
+            List<Row> result = baseCfs.filter(refAction.subAction(), getIndexedIterator(refAction.subAction(), filter), filter);
+            refAction.complete(baseCfs.allocatorGroup, readOps[0], result);
+            refAction.complete(index.getIndexCfs().allocatorGroup, readOps[1], result);
+            return result;
+        }
+        finally
+        {
+            for (OpOrder.Group readOp : readOps)
+                readOp.finishOne();
+        }
     }
 
     private Composite makePrefix(CompositesIndex index, ByteBuffer key, ExtendedFilter filter, boolean isStart)
@@ -72,7 +88,7 @@ public class CompositesSearcher extends SecondaryIndexSearcher
         return isStart ? prefix.start() : prefix.end();
     }
 
-    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final ExtendedFilter filter)
+    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final RefAction refAction, final ExtendedFilter filter)
     {
         // Start with the most-restrictive indexed clause, then apply remaining clauses
         // to each row matching that clause.
@@ -165,8 +181,8 @@ public class CompositesSearcher extends SecondaryIndexSearcher
                                                                              false,
                                                                              rowsPerQuery,
                                                                              filter.timestamp);
-                        ColumnFamily indexRow = index.getIndexCfs().getColumnFamily(indexFilter);
-                        if (indexRow == null || indexRow.getColumnCount() == 0)
+                        ColumnFamily indexRow = index.getIndexCfs().getColumnFamily(refAction, indexFilter);
+                        if (indexRow == null || !indexRow.hasColumns())
                             return makeReturn(currentKey, data);
 
                         Collection<Cell> sortedCells = indexRow.getSortedColumns();
@@ -254,7 +270,7 @@ public class CompositesSearcher extends SecondaryIndexSearcher
                                                                            false,
                                                                            Integer.MAX_VALUE,
                                                                            baseCfs.metadata.clusteringColumns().size());
-                        ColumnFamily newData = baseCfs.getColumnFamily(new QueryFilter(dk, baseCfs.name, dataFilter, filter.timestamp));
+                        ColumnFamily newData = baseCfs.getColumnFamily(refAction, new QueryFilter(dk, baseCfs.name, dataFilter, filter.timestamp));
                         if (newData == null || index.isStale(entry, newData, filter.timestamp))
                         {
                             index.delete(entry);

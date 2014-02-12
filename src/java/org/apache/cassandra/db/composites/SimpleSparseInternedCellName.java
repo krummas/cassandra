@@ -21,6 +21,10 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.memory.PoolAllocator;
 
+import java.nio.ByteBuffer;
+
+import com.google.common.base.Function;
+
 public class SimpleSparseInternedCellName extends SimpleSparseCellName
 {
 
@@ -50,9 +54,12 @@ public class SimpleSparseInternedCellName extends SimpleSparseCellName
     }
 
     @Override
-    public void free(PoolAllocator<?> allocator)
+    public void free(PoolAllocator allocator)
     {
         // no-op, never copied
     }
 
+    public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+    {
+    }
 }

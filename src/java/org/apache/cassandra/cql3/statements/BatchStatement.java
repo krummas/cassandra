@@ -20,6 +20,8 @@ package org.apache.cassandra.cql3.statements;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 import org.github.jamm.MemoryMeter;
 
 import org.apache.cassandra.cql3.*;
@@ -104,17 +106,17 @@ public class BatchStatement implements CQLStatement, MeasurableForPreparedCache
         return statements;
     }
 
-    private Collection<? extends IMutation> getMutations(List<ByteBuffer> variables, boolean local, ConsistencyLevel cl, long now)
+    private Collection<? extends IMutation> getMutations(RefAction refAction, List<ByteBuffer> variables, boolean local, ConsistencyLevel cl, long now)
     throws RequestExecutionException, RequestValidationException
     {
         Map<Pair<String, ByteBuffer>, IMutation> mutations = new HashMap<Pair<String, ByteBuffer>, IMutation>();
         for (ModificationStatement statement : statements)
-            addStatementMutations(statement, variables, local, cl, now, mutations);
+            addStatementMutations(refAction, statement, variables, local, cl, now, mutations);
 
         return mutations.values();
     }
 
-    private Collection<? extends IMutation> getMutations(List<List<ByteBuffer>> variables, ConsistencyLevel cl, long now)
+    private Collection<? extends IMutation> getMutations(RefAction refAction, List<List<ByteBuffer>> variables, ConsistencyLevel cl, long now)
     throws RequestExecutionException, RequestValidationException
     {
         Map<Pair<String, ByteBuffer>, IMutation> mutations = new HashMap<Pair<String, ByteBuffer>, IMutation>();
@@ -122,12 +124,13 @@ public class BatchStatement implements CQLStatement, MeasurableForPreparedCache
         {
             ModificationStatement statement = statements.get(i);
             List<ByteBuffer> statementVariables = variables.get(i);
-            addStatementMutations(statement, statementVariables, false, cl, now, mutations);
+            addStatementMutations(refAction, statement, statementVariables, false, cl, now, mutations);
         }
         return mutations.values();
     }
 
-    private void addStatementMutations(ModificationStatement statement,
+    private void addStatementMutations(RefAction refAction,
+                                       ModificationStatement statement,
                                        List<ByteBuffer> variables,
                                        boolean local,
                                        ConsistencyLevel cl,
@@ -136,7 +139,7 @@ public class BatchStatement implements CQLStatement, MeasurableForPreparedCache
     throws RequestExecutionException, RequestValidationException
     {
         // Group mutation together, otherwise they won't get applied atomically
-        for (IMutation m : statement.getMutations(variables, local, cl, attrs.getTimestamp(now, variables), true))
+        for (IMutation m : statement.getMutations(refAction, variables, local, cl, attrs.getTimestamp(now, variables), true))
         {
             Pair<String, ByteBuffer> key = Pair.create(m.getKeyspaceName(), m.key());
             IMutation existing = mutations.get(key);
@@ -152,12 +155,12 @@ public class BatchStatement implements CQLStatement, MeasurableForPreparedCache
         }
     }
 
-    public ResultMessage execute(QueryState queryState, QueryOptions options) throws RequestExecutionException, RequestValidationException
+    public ResultMessage execute(RefAction refAction, QueryState queryState, QueryOptions options) throws RequestExecutionException, RequestValidationException
     {
         if (options.getConsistency() == null)
             throw new InvalidRequestException("Invalid empty consistency level");
 
-        execute(getMutations(options.getValues(), false, options.getConsistency(), queryState.getTimestamp()), options.getConsistency());
+        execute(getMutations(refAction, options.getValues(), false, options.getConsistency(), queryState.getTimestamp()), options.getConsistency());
         return null;
     }
 
@@ -166,7 +169,15 @@ public class BatchStatement implements CQLStatement, MeasurableForPreparedCache
         if (cl == null)
             throw new InvalidRequestException("Invalid empty consistency level");
 
-        execute(getMutations(variables, cl, queryState.getTimestamp()), cl);
+        Referrer referrer = RefAction.refer();
+        try
+        {
+            execute(getMutations(referrer, variables, cl, queryState.getTimestamp()), cl);
+        }
+        finally
+        {
+            referrer.setDone();
+        }
     }
 
     private void execute(Collection<? extends IMutation> mutations, ConsistencyLevel cl) throws RequestExecutionException, RequestValidationException
@@ -177,13 +188,24 @@ public class BatchStatement implements CQLStatement, MeasurableForPreparedCache
 
     public ResultMessage executeInternal(QueryState queryState) throws RequestValidationException, RequestExecutionException
     {
-        for (IMutation mutation : getMutations(Collections.<ByteBuffer>emptyList(), true, null, queryState.getTimestamp()))
+        // we reference any of the data retrieved for performing the mutation so that it is not GC'd underneath us
+        // and we don't have to run the application of the mutation within the same transaction as the read
+        Referrer referrer = RefAction.refer();
+        try
         {
-            // We don't use counters internally.
-            assert mutation instanceof Mutation;
-            ((Mutation) mutation).apply();
+            for (IMutation mutation : getMutations(referrer, Collections.<ByteBuffer>emptyList(), true, null, queryState.getTimestamp()))
+            {
+                // We don't use counters internally.
+                assert mutation instanceof Mutation;
+                ((Mutation) mutation).apply();
+
+            }
+            return null;
         }
-        return null;
+        finally
+        {
+            referrer.setDone();
+        }
     }
 
     public String toString()

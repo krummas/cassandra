@@ -19,6 +19,8 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import com.google.common.base.Function;
+
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.ObjectSizes;
@@ -70,6 +72,12 @@ public class CompoundDenseCellName extends CompoundComposite implements CellName
     public long excessHeapSizeExcludingData()
     {
         return HEAP_SIZE + ObjectSizes.sizeOnHeapExcludingData(elements);
+    }
+
+    public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+    {
+        for (ByteBuffer element : elements)
+            apply.apply(element);
     }
 
     public CellName copy(AbstractAllocator allocator)

@@ -23,9 +23,9 @@ import java.nio.ByteBuffer;
 
 public final class HeapPoolAllocator extends PoolAllocator
 {
-    HeapPoolAllocator(HeapPool pool)
+    HeapPoolAllocator(AllocatorGroup<HeapPool> group)
     {
-        super(pool);
+        super(group);
     }
 
     public ByteBuffer allocate(int size)
@@ -35,13 +35,13 @@ public final class HeapPoolAllocator extends PoolAllocator
 
     public ByteBuffer allocate(int size, OpOrder.Group opGroup)
     {
-        markAllocated(size, opGroup);
+        onHeap.allocate(size, opGroup);
         // must loop trying to acquire
         return ByteBuffer.allocate(size);
     }
 
     public void free(ByteBuffer name)
     {
-        release(name.remaining());
+        onHeap.release(name.remaining());
     }
 }

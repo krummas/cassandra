@@ -205,7 +205,7 @@ public class SSTableWriter extends SSTable
 
     public static RowIndexEntry rawAppend(ColumnFamily cf, long startPosition, DecoratedKey key, DataOutput out) throws IOException
     {
-        assert cf.getColumnCount() > 0 || cf.isMarkedForDelete();
+        assert cf.hasColumns() || cf.isMarkedForDelete();
 
         ColumnIndex.Builder builder = new ColumnIndex.Builder(cf, key.key, out);
         ColumnIndex index = builder.build(cf);
@@ -321,6 +321,16 @@ public class SSTableWriter extends SSTable
             logger.error(String.format("Failed deleting temp components for %s", descriptor), e);
             throw e;
         }
+    }
+
+    // we use this method to ensure any managed data we may have retained references to during the write are no
+    // longer referenced, so that we do not need to enclose the expensive call to closeAndOpenReader() in a transaction
+    public void isolateReferences()
+    {
+        // currently we only maintain references to first/last/lastWrittenKey from the data provided; all other
+        // data retention is done through copying
+        first = getMinimalKey(first);
+        last = lastWrittenKey = getMinimalKey(last);
     }
 
     public SSTableReader closeAndOpenReader()

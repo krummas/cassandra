@@ -36,6 +36,7 @@ import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.memory.HeapAllocator;
+import org.apache.cassandra.utils.memory.RefAction;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.*;
@@ -219,19 +220,27 @@ public class CounterMutation implements IMutation
                 names.add(counterUpdateCells.get(i).name);
 
         ReadCommand cmd = new SliceByNamesReadCommand(getKeyspaceName(), key(), cfs.metadata.cfName, Long.MIN_VALUE, new NamesQueryFilter(names));
-        Row row = cmd.getRow(cfs.keyspace);
-        ColumnFamily cf = row == null ? null : row.cf;
-
-        for (int i = 0; i < currentValues.length; i++)
+        RefAction refAction = RefAction.refer();
+        try
         {
-            if (currentValues[i] != null)
-                continue;
+            Row row = cmd.getRow(refAction, cfs.keyspace);
+            ColumnFamily cf = row == null ? null : row.cf;
 
-            Cell cell = cf == null ? null : cf.getColumn(counterUpdateCells.get(i).name());
-            if (cell == null || cell.isMarkedForDelete(Long.MIN_VALUE)) // absent or a tombstone.
-                currentValues[i] = ClockAndCount.BLANK;
-            else
-                currentValues[i] = CounterContext.instance().getLocalClockAndCount(cell.value());
+            for (int i = 0; i < currentValues.length; i++)
+            {
+                if (currentValues[i] != null)
+                    continue;
+
+                Cell cell = cf == null ? null : cf.getColumn(counterUpdateCells.get(i).name());
+                if (cell == null || cell.isMarkedForDelete(Long.MIN_VALUE)) // absent or a tombstone.
+                    currentValues[i] = ClockAndCount.BLANK;
+                else
+                    currentValues[i] = CounterContext.instance().getLocalClockAndCount(cell.value());
+            }
+        }
+        finally
+        {
+            refAction.setDone();
         }
     }
 

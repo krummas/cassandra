@@ -59,6 +59,8 @@ import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.thrift.cassandraConstants;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.*;
+import org.apache.cassandra.utils.memory.HeapAllocator;
+import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.apache.cassandra.cql3.QueryProcessor.processInternal;
 
@@ -604,7 +606,7 @@ public class SystemKeyspace
                                                         INDEX_CF,
                                                         FBUtilities.singleton(cfs.getComparator().makeCellName(indexName), cfs.getComparator()),
                                                         System.currentTimeMillis());
-        return ColumnFamilyStore.removeDeleted(cfs.getColumnFamily(filter), Integer.MAX_VALUE) != null;
+        return ColumnFamilyStore.removeDeleted(cfs.getColumnFamily(RefAction.allocateOnHeap(), filter), Integer.MAX_VALUE) != null;
     }
 
     public static void setIndexBuilt(String keyspaceName, String indexName)
@@ -670,7 +672,7 @@ public class SystemKeyspace
                                                         true,
                                                         1,
                                                         System.currentTimeMillis());
-        ColumnFamily cf = keyspace.getColumnFamilyStore(COUNTER_ID_CF).getColumnFamily(filter);
+        ColumnFamily cf = keyspace.getColumnFamilyStore(COUNTER_ID_CF).getColumnFamily(RefAction.allocateOnHeap(), filter);
         if (cf != null && cf.getColumnCount() != 0)
             return CounterId.wrap(cf.iterator().next().name().toByteBuffer());
         else
@@ -720,7 +722,8 @@ public class SystemKeyspace
     {
         Token minToken = StorageService.getPartitioner().getMinimumToken();
 
-        return schemaCFS(schemaCfName).getRangeSlice(new Range<RowPosition>(minToken.minKeyBound(), minToken.maxKeyBound()),
+        return schemaCFS(schemaCfName).getRangeSlice(RefAction.allocateOnHeap(),
+                                                     new Range<RowPosition>(minToken.minKeyBound(), minToken.maxKeyBound()),
                                                      null,
                                                      new IdentityQueryFilter(),
                                                      Integer.MAX_VALUE,
@@ -775,7 +778,7 @@ public class SystemKeyspace
         DecoratedKey key = StorageService.getPartitioner().decorateKey(getSchemaKSKey(ksName));
 
         ColumnFamilyStore schemaCFS = SystemKeyspace.schemaCFS(SCHEMA_KEYSPACES_CF);
-        ColumnFamily result = schemaCFS.getColumnFamily(QueryFilter.getIdentityFilter(key, SCHEMA_KEYSPACES_CF, System.currentTimeMillis()));
+        ColumnFamily result = schemaCFS.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(key, SCHEMA_KEYSPACES_CF, System.currentTimeMillis()));
 
         return new Row(key, result);
     }
@@ -793,7 +796,8 @@ public class SystemKeyspace
         DecoratedKey key = StorageService.getPartitioner().decorateKey(getSchemaKSKey(ksName));
         ColumnFamilyStore schemaCFS = SystemKeyspace.schemaCFS(schemaCfName);
         Composite prefix = schemaCFS.getComparator().make(cfName);
-        ColumnFamily cf = schemaCFS.getColumnFamily(key,
+        ColumnFamily cf = schemaCFS.getColumnFamily(RefAction.allocateOnHeap(),
+                                                    key,
                                                     prefix,
                                                     prefix.end(),
                                                     false,

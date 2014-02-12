@@ -37,6 +37,7 @@ import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.memory.RefAction;
 
 
 public class ReadMessageTest extends SchemaLoader
@@ -92,7 +93,7 @@ public class ReadMessageTest extends SchemaLoader
         rm.apply();
 
         ReadCommand command = new SliceByNamesReadCommand("Keyspace1", dk.key, "Standard1", System.currentTimeMillis(), new NamesQueryFilter(FBUtilities.singleton(Util.cellname("Column1"), type)));
-        Row row = command.getRow(keyspace);
+        Row row = command.getRow(RefAction.allocateOnHeap(), keyspace);
         Cell col = row.cf.getColumn(Util.cellname("Column1"));
         assertEquals(col.value(), ByteBuffer.wrap("abcd".getBytes()));
     }

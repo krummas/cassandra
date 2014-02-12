@@ -26,6 +26,7 @@ import com.google.common.primitives.Ints;
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap;
 import com.googlecode.concurrentlinkedhashmap.EntryWeigher;
 import org.antlr.runtime.*;
+import org.apache.cassandra.utils.memory.RefAction;
 import org.github.jamm.MemoryMeter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -166,7 +167,8 @@ public class QueryProcessor
                                                             Cell.MAX_NAME_LENGTH));
     }
 
-    private static ResultMessage processStatement(CQLStatement statement,
+    private static ResultMessage processStatement(RefAction refAction,
+                                                  CQLStatement statement,
                                                   QueryState queryState,
                                                   QueryOptions options,
                                                   String queryString)
@@ -178,19 +180,19 @@ public class QueryProcessor
         statement.validate(clientState);
 
         ResultMessage result = preExecutionHooks.isEmpty() && postExecutionHooks.isEmpty()
-                             ? statement.execute(queryState, options)
-                             : executeWithHooks(statement, new ExecutionContext(queryState, queryString, options));
+                             ? statement.execute(refAction, queryState, options)
+                             : executeWithHooks(refAction, statement, new ExecutionContext(queryState, queryString, options));
 
         return result == null ? new ResultMessage.Void() : result;
     }
 
-    private static ResultMessage executeWithHooks(CQLStatement statement, ExecutionContext context)
+    private static ResultMessage executeWithHooks(RefAction refAction, CQLStatement statement, ExecutionContext context)
     throws RequestExecutionException, RequestValidationException
     {
         for (PreExecutionHook hook : preExecutionHooks)
            statement = hook.processStatement(statement, context);
 
-        ResultMessage result = statement.execute(context.queryState, context.queryOptions);
+        ResultMessage result = statement.execute(refAction, context.queryState, context.queryOptions);
 
         for (PostExecutionHook hook : postExecutionHooks)
             hook.processStatement(statement, context);
@@ -198,20 +200,20 @@ public class QueryProcessor
         return result;
     }
 
-    public static ResultMessage process(String queryString, ConsistencyLevel cl, QueryState queryState)
+    public static ResultMessage process(RefAction refAction, String queryString, ConsistencyLevel cl, QueryState queryState)
     throws RequestExecutionException, RequestValidationException
     {
-        return process(queryString, queryState, new QueryOptions(cl, Collections.<ByteBuffer>emptyList()));
+        return process(refAction, queryString, queryState, new QueryOptions(cl, Collections.<ByteBuffer>emptyList()));
     }
 
-    public static ResultMessage process(String queryString, QueryState queryState, QueryOptions options)
+    public static ResultMessage process(RefAction refAction, String queryString, QueryState queryState, QueryOptions options)
     throws RequestExecutionException, RequestValidationException
     {
         CQLStatement prepared = getStatement(queryString, queryState.getClientState()).statement;
         if (prepared.getBoundTerms() != options.getValues().size())
             throw new InvalidRequestException("Invalid amount of bind variables");
 
-        return processStatement(prepared, queryState, options, queryString);
+        return processStatement(refAction, prepared, queryState, options, queryString);
     }
 
     public static CQLStatement parseStatement(String queryStr, QueryState queryState) throws RequestValidationException
@@ -219,11 +221,11 @@ public class QueryProcessor
         return getStatement(queryStr, queryState.getClientState()).statement;
     }
 
-    public static UntypedResultSet process(String query, ConsistencyLevel cl) throws RequestExecutionException
+    public static UntypedResultSet process(RefAction refAction, String query, ConsistencyLevel cl) throws RequestExecutionException
     {
         try
         {
-            ResultMessage result = process(query, QueryState.forInternalCalls(), new QueryOptions(cl, Collections.<ByteBuffer>emptyList()));
+            ResultMessage result = process(refAction, query, QueryState.forInternalCalls(), new QueryOptions(cl, Collections.<ByteBuffer>emptyList()));
             if (result instanceof ResultMessage.Rows)
                 return UntypedResultSet.create(((ResultMessage.Rows)result).result);
             else
@@ -333,7 +335,7 @@ public class QueryProcessor
         }
     }
 
-    public static ResultMessage processPrepared(CQLStatement statement, QueryState queryState, QueryOptions options)
+    public static ResultMessage processPrepared(RefAction refAction, CQLStatement statement, QueryState queryState, QueryOptions options)
     throws RequestExecutionException, RequestValidationException
     {
         List<ByteBuffer> variables = options.getValues();
@@ -352,7 +354,7 @@ public class QueryProcessor
                     logger.trace("[{}] '{}'", i+1, variables.get(i));
         }
 
-        return processStatement(statement, queryState, options, null);
+        return processStatement(refAction, statement, queryState, options, null);
     }
 
     public static ResultMessage processBatch(BatchStatement batch,

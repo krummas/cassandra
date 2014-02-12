@@ -29,6 +29,7 @@ import org.apache.cassandra.utils.FBUtilities;
  */
 public abstract class PerColumnSecondaryIndex extends SecondaryIndex
 {
+
     /**
      * Delete a column from the index.
      *

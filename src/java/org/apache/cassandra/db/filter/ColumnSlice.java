@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 
+import com.google.common.base.Function;
 import com.google.common.collect.AbstractIterator;
 
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -310,8 +311,13 @@ public class ColumnSlice
             throw new UnsupportedOperationException();
         }
 
+        public void visitCopyableBuffers(Function<ByteBuffer, ?> apply)
+        {
+            throw new UnsupportedOperationException();
+        }
+
         @Override
-        public void free(PoolAllocator<?> allocator)
+        public void free(PoolAllocator allocator)
         {
             throw new UnsupportedOperationException();
         }

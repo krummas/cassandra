@@ -30,7 +30,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.memory.PoolAllocator;
 
 /**
  * Implements a secondary index for a column family using a second column family
@@ -84,21 +84,6 @@ public abstract class AbstractSimplePerColumnSecondaryIndex extends PerColumnSec
                              getExpressionComparator().getString(expr.column),
                              expr.operator,
                              baseCfs.metadata.getColumnDefinition(expr.column).type.getString(expr.value));
-    }
-
-    public void delete(ByteBuffer rowKey, Cell cell)
-    {
-        throw new IllegalStateException();
-    }
-
-    public void insert(ByteBuffer rowKey, Cell cell)
-    {
-        throw new IllegalStateException();
-    }
-
-    public void update(ByteBuffer rowKey, Cell cell)
-    {
-        throw new IllegalStateException();
     }
 
     public void delete(ByteBuffer rowKey, Cell cell, OpOrder.Group opGroup)
@@ -179,7 +164,7 @@ public abstract class AbstractSimplePerColumnSecondaryIndex extends PerColumnSec
         return indexCfs.name;
     }
 
-    public AbstractAllocator getOnHeapAllocator()
+    public PoolAllocator getAllocator()
     {
         return indexCfs.getDataTracker().getView().getCurrentMemtable().getAllocator();
     }

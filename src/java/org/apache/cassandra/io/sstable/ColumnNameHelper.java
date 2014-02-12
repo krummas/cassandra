@@ -26,7 +26,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.marshal.AbstractType;
 
-import static org.apache.cassandra.utils.ByteBufferUtil.minimalBufferFor;
+import static org.apache.cassandra.utils.ByteBufferUtil.minimalHeapBufferFor;
 
 public class ColumnNameHelper
 {
@@ -175,7 +175,7 @@ public class ColumnNameHelper
                                  : maybeGrow(smallest, biggest.size());
 
         for (int i = 0; i < biggest.size(); i++)
-            retList.set(i, minimalBufferFor(min(retList.get(i), biggest.get(i), comparator.subtype(i))));
+            retList.set(i, minimalHeapBufferFor(min(retList.get(i), biggest.get(i), comparator.subtype(i))));
 
         return retList;
     }
@@ -184,7 +184,7 @@ public class ColumnNameHelper
     {
         List<ByteBuffer> minimalBuffers = new ArrayList<ByteBuffer>(candidates.size());
         for (ByteBuffer byteBuffer : candidates)
-            minimalBuffers.add(minimalBufferFor(byteBuffer));
+            minimalBuffers.add(minimalHeapBufferFor(byteBuffer));
         return minimalBuffers;
     }
 
@@ -213,7 +213,7 @@ public class ColumnNameHelper
                                  : maybeGrow(smallest, biggest.size());
 
         for (int i = 0; i < biggest.size(); i++)
-            retList.set(i, minimalBufferFor(max(retList.get(i), biggest.get(i), comparator.subtype(i))));
+            retList.set(i, minimalHeapBufferFor(max(retList.get(i), biggest.get(i), comparator.subtype(i))));
 
         return retList;
     }

@@ -342,6 +342,14 @@ public class ArrayBackedSortedColumns extends AbstractThreadUnsafeSortedColumns
         return new SlicesIterator(Arrays.asList(cells).subList(0, size), getComparator(), slices, !reversed);
     }
 
+    public static ColumnFamily localCopy(ColumnFamily value, ColumnFamilyStore cfs, AbstractAllocator allocator)
+    {
+        final List<Cell> cells = new ArrayList<>();
+        for (Cell cell : value)
+            cells.add(cell.localCopy(cfs, allocator));
+        return new ArrayBackedSortedColumns(cells, cfs.metadata, value.isInsertReversed());
+    }
+
     private static class SlicesIterator extends AbstractIterator<Cell>
     {
         private final List<Cell> cells;
@@ -488,4 +496,5 @@ public class ArrayBackedSortedColumns extends AbstractThreadUnsafeSortedColumns
             };
         }
     }
+
 }

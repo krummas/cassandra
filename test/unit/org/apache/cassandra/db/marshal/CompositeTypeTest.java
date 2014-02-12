@@ -37,6 +37,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.CellNames;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.utils.*;
+import org.apache.cassandra.utils.memory.RefAction;
 
 public class CompositeTypeTest extends SchemaLoader
 {
@@ -182,7 +183,7 @@ public class CompositeTypeTest extends SchemaLoader
         addColumn(rm, cname3);
         rm.apply();
 
-        ColumnFamily cf = cfs.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("k"), cfName, System.currentTimeMillis()));
+        ColumnFamily cf = cfs.getColumnFamily(RefAction.allocateOnHeap(), QueryFilter.getIdentityFilter(Util.dk("k"), cfName, System.currentTimeMillis()));
 
         Iterator<Cell> iter = cf.getSortedColumns().iterator();
 

@@ -67,6 +67,9 @@ import org.apache.cassandra.service.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
+import org.apache.cassandra.utils.memory.HeapAllocator;
+import org.apache.cassandra.utils.memory.RefAction;
+
 import org.cliffc.high_scale_lib.NonBlockingHashSet;
 
 /**
@@ -372,7 +375,7 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                                                             pageSize,
                                                             now);
 
-            ColumnFamily hintsPage = ColumnFamilyStore.removeDeleted(hintStore.getColumnFamily(filter), (int) (now / 1000));
+            ColumnFamily hintsPage = ColumnFamilyStore.removeDeleted(hintStore.getColumnFamily(RefAction.allocateOnHeap(), filter), (int) (now / 1000));
 
             if (pagingFinished(hintsPage, startColumn))
             {
@@ -522,7 +525,7 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
         RowPosition minPos = p.getMinimumToken().minKeyBound();
         Range<RowPosition> range = new Range<RowPosition>(minPos, minPos, p);
         IDiskAtomFilter filter = new NamesQueryFilter(ImmutableSortedSet.<CellName>of());
-        List<Row> rows = hintStore.getRangeSlice(range, null, filter, Integer.MAX_VALUE, System.currentTimeMillis());
+        List<Row> rows = hintStore.getRangeSlice(RefAction.allocateOnHeap(), range, null, filter, Integer.MAX_VALUE, System.currentTimeMillis());
         for (Row row : rows)
         {
             UUID hostId = UUIDGen.getUUID(row.key.key);
@@ -610,7 +613,7 @@ public class HintedHandOffManager implements HintedHandOffManagerMBean
                                                           range,
                                                           null,
                                                           LARGE_NUMBER);
-            return StorageProxy.getRangeSlice(cmd, ConsistencyLevel.ONE);
+            return StorageProxy.getRangeSlice(RefAction.allocateOnHeap(), cmd, ConsistencyLevel.ONE);
         }
         catch (Exception e)
         {

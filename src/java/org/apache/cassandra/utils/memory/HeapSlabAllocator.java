@@ -57,9 +57,9 @@ public class HeapSlabAllocator extends PoolAllocator
     private final AtomicInteger regionCount = new AtomicInteger(0);
     private AtomicLong unslabbed = new AtomicLong(0);
 
-    HeapSlabAllocator(Pool pool)
+    HeapSlabAllocator(AllocatorGroup<HeapSlabPool> group)
     {
-        super(pool);
+        super(group);
     }
 
     public ByteBuffer allocate(int size)
@@ -73,7 +73,7 @@ public class HeapSlabAllocator extends PoolAllocator
         if (size == 0)
             return ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
-        markAllocated(size, opGroup);
+        onHeap.allocate(size, opGroup);
         // satisfy large allocations directly from JVM since they don't cause fragmentation
         // as badly, and fill up our regions quickly
         if (size > MAX_CLONED_SIZE)

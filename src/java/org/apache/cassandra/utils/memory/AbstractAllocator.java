@@ -40,23 +40,4 @@ public abstract class AbstractAllocator
     }
 
     public abstract ByteBuffer allocate(int size);
-
-    //
-    // only really applicable to Pooled subclasses, but we provide default implementations here
-    //
-
-    public long owns()
-    {
-        return 0;
-    }
-
-    public float ownershipRatio()
-    {
-        return 0;
-    }
-
-    public long reclaiming()
-    {
-        return 0;
-    }
 }

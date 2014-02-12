@@ -24,6 +24,8 @@ import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.memory.RefAction;
+import org.apache.cassandra.utils.memory.Referrer;
 
 public class RangeSliceVerbHandler implements IVerbHandler<AbstractRangeCommand>
 {
@@ -36,9 +38,20 @@ public class RangeSliceVerbHandler implements IVerbHandler<AbstractRangeCommand>
                 /* Don't service reads! */
                 throw new RuntimeException("Cannot service reads while bootstrapping!");
             }
-            RangeSliceReply reply = new RangeSliceReply(message.payload.executeLocally());
-            Tracing.trace("Enqueuing response to {}", message.from);
-            MessagingService.instance().sendReply(reply.createMessage(), id, message.from);
+
+            Referrer referrer = RefAction.refer();
+            try
+            {
+                RangeSliceReply reply = new RangeSliceReply(referrer, message.payload.executeLocally(referrer));
+                Tracing.trace("Enqueuing response to {}", message.from);
+                MessagingService.instance().sendReply(reply.createMessage(), id, message.from);
+                referrer = null;
+            }
+            finally
+            {
+                if (referrer != null)
+                    referrer.setDone();
+            }
         }
         catch (TombstoneOverwhelmingException e)
         {

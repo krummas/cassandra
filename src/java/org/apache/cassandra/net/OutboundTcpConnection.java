@@ -26,12 +26,9 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -48,6 +45,7 @@ import org.apache.cassandra.tracing.TraceState;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
+import org.apache.cassandra.utils.concurrent.OptBlockingQueue;
 import org.xerial.snappy.SnappyOutputStream;
 
 import org.apache.cassandra.config.Config;
@@ -68,7 +66,7 @@ public class OutboundTcpConnection extends Thread
 
     static final int LZ4_HASH_SEED = 0x9747b28c;
 
-    private final BlockingQueue<QueuedMessage> backlog = new LinkedBlockingQueue<>();
+    private final OptBlockingQueue<QueuedMessage> backlog = new OptBlockingQueue<>();
 
     private final OutboundTcpConnectionPool poolReference;
 
@@ -94,16 +92,8 @@ public class OutboundTcpConnection extends Thread
 
     public void enqueue(MessageOut<?> message, int id)
     {
-        if (backlog.size() > 1024)
-            expireMessages();
-        try
-        {
-            backlog.put(new QueuedMessage(message, id));
-        }
-        catch (InterruptedException e)
-        {
-            throw new AssertionError(e);
-        }
+        expireMessages();
+        backlog.append(new QueuedMessage(message, id));
     }
 
     void closeSocket(boolean destroyThread)
@@ -134,7 +124,7 @@ public class OutboundTcpConnection extends Thread
             {
                 try
                 {
-                    drainedMessages.add(backlog.take());
+                    drainedMessages.add(backlog.advanceOrWait());
                 }
                 catch (InterruptedException e)
                 {
@@ -160,16 +150,23 @@ public class OutboundTcpConnection extends Thread
                     if (qm.timestamp < System.currentTimeMillis() - m.getTimeout())
                         dropped.incrementAndGet();
                     else if (socket != null || connect())
-                        writeConnected(qm, count == 1 && backlog.size() == 0);
+                        writeConnected(qm, count == 1 && backlog.isEmpty());
                     else
-                        // clear out the queue, else gossip messages back up.
-                        backlog.clear();
+                    {
+                        QueuedMessage qm2;
+                        while ( null != (qm2 = backlog.advance()) )
+                            qm2.message.close();
+                    }
                 }
                 catch (Exception e)
                 {
                     // really shouldn't get here, as exception handling in writeConnected() is reasonably robust
                     // but we want to catch anything bad we don't drop the messages in the current batch
                     logger.error("error processing a message intended for {}", poolReference.endPoint(), e);
+                }
+                finally
+                {
+                    qm.message.close();
                 }
                 currentMsgBufferCount = --count;
             }
@@ -179,7 +176,7 @@ public class OutboundTcpConnection extends Thread
 
     public int getPendingMessages()
     {
-        return backlog.size() + currentMsgBufferCount;
+        return backlog.approxSize() + currentMsgBufferCount;
     }
 
     public long getCompletedMesssages()
@@ -240,14 +237,7 @@ public class OutboundTcpConnection extends Thread
                 // to retry after re-connecting.  See CASSANDRA-5393
                 if (qm.shouldRetry())
                 {
-                    try
-                    {
-                        backlog.put(new RetriedQueuedMessage(qm));
-                    }
-                    catch (InterruptedException e1)
-                    {
-                        throw new AssertionError(e1);
-                    }
+                    backlog.append(new RetriedQueuedMessage(qm));
                 }
             }
             else
@@ -450,14 +440,16 @@ public class OutboundTcpConnection extends Thread
 
     private void expireMessages()
     {
-        Iterator<QueuedMessage> iter = backlog.iterator();
-        while (iter.hasNext())
+        while (true)
         {
-            QueuedMessage qm = iter.next();
-            if (qm.timestamp >= System.currentTimeMillis() - qm.message.getTimeout())
+            QueuedMessage qm = backlog.peek();
+            if (qm == null || qm.timestamp >= System.currentTimeMillis() - qm.message.getTimeout())
                 return;
-            iter.remove();
-            dropped.incrementAndGet();
+            if (backlog.advanceIfHead(qm))
+            {
+                qm.message.close();
+                dropped.incrementAndGet();
+            }
         }
     }
 

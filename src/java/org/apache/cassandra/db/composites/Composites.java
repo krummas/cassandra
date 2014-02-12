@@ -108,8 +108,7 @@ public abstract class Composites
             return this;
         }
 
-        @Override
-        public void free(PoolAllocator<?> allocator)
+        public void free(PoolAllocator allocator)
         {
         }
 
