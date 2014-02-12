@@ -24,6 +24,7 @@ import org.apache.cassandra.utils.concurrent.WaitQueue;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool> extends AbstractAllocator
@@ -200,10 +201,10 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
         private final Pool.SubPool parent;
 
         // the amount of memory/resource owned by this object
-        private final AtomicLong owns = new AtomicLong();
+        volatile long owns;
         // the amount of memory we are reporting to collect; this may be inaccurate, but is close
         // and is used only to ensure that once we have reclaimed we mark the tracker with the same amount
-        private final AtomicLong reclaiming = new AtomicLong();
+        volatile long reclaiming;
 
         SubAllocator(Pool.SubPool parent)
         {
@@ -214,8 +215,8 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
         // currently no corroboration/enforcement of this is performed.
         void releaseAll()
         {
-            parent.adjustAcquired(-owns.getAndSet(0), false);
-            parent.adjustReclaiming(-reclaiming.getAndSet(0));
+            parent.adjustAcquired(-ownsUpdater.getAndSet(this, 0), false);
+            parent.adjustReclaiming(-reclaimingUpdater.getAndSet(this, 0));
         }
 
         // allocate memory in the tracker, and mark ourselves as owning it
@@ -248,20 +249,20 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
         void allocated(int size)
         {
             parent.adjustAcquired(size, true);
-            owns.addAndGet(size);
+            ownsUpdater.addAndGet(this, size);
         }
 
         // retroactively mark an amount acquired in the tracker, and owned by us
         void acquired(int size)
         {
             parent.adjustAcquired(size, false);
-            owns.addAndGet(size);
+            ownsUpdater.addAndGet(this, size);
         }
 
         void release(int size)
         {
             parent.adjustAcquired(-size, false);
-            owns.addAndGet(-size);
+            ownsUpdater.addAndGet(this, -size);
         }
 
         // if this.owns > size, subtract size from this.owns (atomically), otherwise return false.
@@ -270,11 +271,11 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
         {
             while (true)
             {
-                long cur = owns.get();
+                long cur = owns;
                 long next = cur - size;
                 if (next < 0)
                     return false;
-                if (owns.compareAndSet(cur, next))
+                if (ownsUpdater.compareAndSet(this, cur, next))
                     return true;
             }
         }
@@ -287,9 +288,9 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
         {
             while (true)
             {
-                long cur = reclaiming.get();
+                long cur = reclaiming;
                 long next = Math.max(0, cur - size);
-                if (cur == 0 || reclaiming.compareAndSet(cur, next))
+                if (cur == 0 || reclaimingUpdater.compareAndSet(this, cur, next))
                 {
                     parent.adjustReclaiming(size - (cur - next));
                     return;
@@ -302,9 +303,9 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
         {
             while (true)
             {
-                long cur = owns.get();
-                long prev = reclaiming.get();
-                if (reclaiming.compareAndSet(prev, cur))
+                long cur = owns;
+                long prev = reclaiming;
+                if (reclaimingUpdater.compareAndSet(this, prev, cur))
                 {
                     parent.adjustReclaiming(cur - prev);
                     return;
@@ -314,24 +315,20 @@ public abstract class PoolAllocator<G extends AllocatorGroup<P>, P extends Pool>
 
         public long owns()
         {
-            return owns.get();
-        }
-
-        public long reclaiming()
-        {
-            return reclaiming.get();
+            return owns;
         }
 
         public float ownershipRatio()
         {
-            return owns.get() / (float) parent.limit;
+            return owns / (float) parent.limit;
         }
 
         public WaitQueue.Signal hasRoomSignal()
         {
             return parent.hasRoom().register();
         }
-
     }
 
+    private static final AtomicLongFieldUpdater<SubAllocator> ownsUpdater = AtomicLongFieldUpdater.newUpdater(SubAllocator.class, "owns");
+    private static final AtomicLongFieldUpdater<SubAllocator> reclaimingUpdater = AtomicLongFieldUpdater.newUpdater(SubAllocator.class, "reclaiming");
 }

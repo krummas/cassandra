@@ -149,7 +149,7 @@ public class OffHeapPool extends Pool
     {
 
         /** The amount of memory allocators from this pool are currently using */
-        private final AtomicLong used = new AtomicLong();
+        volatile long used;
 
         public OffHeapSubPool(long limit, float cleanThreshold)
         {
@@ -158,12 +158,12 @@ public class OffHeapPool extends Pool
 
         public long used()
         {
-            return used.get();
+            return used;
         }
 
         void adjustAcquired(long size, boolean alsoAllocated)
         {
-            used.addAndGet(size);
+            usedUpdater.addAndGet(this, size);
             if (size >= 0)
             {
                 if (alsoAllocated)
@@ -175,7 +175,7 @@ public class OffHeapPool extends Pool
                 hasRoom.signalAll();
             }
         }
-
     }
 
+    private static final AtomicLongFieldUpdater<OffHeapSubPool> usedUpdater = AtomicLongFieldUpdater.newUpdater(OffHeapSubPool.class, "used");
 }

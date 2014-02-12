@@ -4,6 +4,7 @@ import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.WaitQueue;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
 
 /**
@@ -64,11 +65,11 @@ public abstract class Pool
         public final float cleanThreshold;
 
         // total bytes allocated and reclaiming
-        private final AtomicLong allocated = new AtomicLong();
-        private final AtomicLong reclaiming = new AtomicLong();
+        volatile long allocated;
+        volatile long reclaiming;
 
         // a cache of the calculation determining at what allocation threshold we should next clean
-        private final AtomicLong nextClean = new AtomicLong();
+        volatile long nextClean;
 
         public SubPool(long limit, float cleanThreshold)
         {
@@ -81,7 +82,7 @@ public abstract class Pool
         boolean needsCleaning()
         {
             // use strictly-greater-than so we don't clean when limit is 0
-            return used() > nextClean.get() && updateNextClean();
+            return used() > nextClean && updateNextClean();
         }
 
         void maybeClean()
@@ -94,10 +95,10 @@ public abstract class Pool
         {
             while (true)
             {
-                long current = nextClean.get();
-                long reclaiming = this.reclaiming.get();
+                long current = nextClean;
+                long reclaiming = this.reclaiming;
                 long next =  reclaiming + (long) (this.limit * cleanThreshold);
-                if (current == next || nextClean.compareAndSet(current, next))
+                if (current == next || nextCleanUpdater.compareAndSet(this, current, next))
                     return used() > next;
             }
         }
@@ -109,9 +110,9 @@ public abstract class Pool
             while (true)
             {
                 long cur;
-                if ((cur = allocated.get()) + size > limit)
+                if ((cur = allocated) + size > limit)
                     return false;
-                if (allocated.compareAndSet(cur, cur + size))
+                if (allocatedUpdater.compareAndSet(this, cur, cur + size))
                     return true;
             }
         }
@@ -126,8 +127,8 @@ public abstract class Pool
                 return;
             while (true)
             {
-                long cur = allocated.get();
-                if (allocated.compareAndSet(cur, cur + size))
+                long cur = allocated;
+                if (allocatedUpdater.compareAndSet(this, cur, cur + size))
                     return;
             }
         }
@@ -156,29 +157,29 @@ public abstract class Pool
         {
             if (reclaiming == 0)
                 return;
-            this.reclaiming.addAndGet(reclaiming);
+            reclaimingUpdater.addAndGet(this, reclaiming);
             if (reclaiming < 0 && updateNextClean() && cleaner != null)
                 cleaner.trigger();
         }
 
         public boolean isExceeded()
         {
-            return allocated.get() > limit;
+            return allocated > limit;
         }
 
         public long allocated()
         {
-            return allocated.get();
+            return allocated;
         }
 
         public long used()
         {
-            return allocated.get();
+            return allocated;
         }
 
         public long reclaiming()
         {
-            return reclaiming.get();
+            return reclaiming;
         }
 
         public PoolAllocator.SubAllocator newAllocator()
@@ -191,5 +192,9 @@ public abstract class Pool
             return hasRoom;
         }
     }
+
+    private static final AtomicLongFieldUpdater<SubPool> reclaimingUpdater = AtomicLongFieldUpdater.newUpdater(SubPool.class, "reclaiming");
+    private static final AtomicLongFieldUpdater<SubPool> allocatedUpdater = AtomicLongFieldUpdater.newUpdater(SubPool.class, "allocated");
+    private static final AtomicLongFieldUpdater<SubPool> nextCleanUpdater = AtomicLongFieldUpdater.newUpdater(SubPool.class, "nextClean");
 
 }

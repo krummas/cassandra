@@ -63,6 +63,7 @@ public class OffHeapAllocator extends PoolAllocator<OffHeapAllocatorGroup, OffHe
      * have failed a number of times to allocate to the Region. This should help prevent wasted space.
      */
     final NonBlockingQueue<OffHeapRegion> allocatingFrom = new NonBlockingQueue<>();
+
     /**
      * All the regions we own. It is a view on allocatingFrom that is never advanced, but on which
      * removes are performed to clean up. See {@link NonBlockingQueue} for details.
