@@ -18,14 +18,12 @@
 */
 package org.apache.cassandra.db;
 
-import java.nio.ByteBuffer;
 import java.util.*;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
 
 import org.apache.cassandra.Util;
-import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
 import org.apache.cassandra.db.marshal.IntegerType;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -195,12 +193,6 @@ public class RangeTombstoneListTest
 
     @Test
     public void addAllTest()
-    {
-        //addAllTest(false);
-        addAllTest(true);
-    }
-
-    private void addAllTest(boolean doMerge)
     {
         RangeTombstoneList l1 = new RangeTombstoneList(cmp, 0);
         l1.add(rt(0, 4, 5));

@@ -82,7 +82,8 @@ public class CqlReader extends CqlOperation<ByteBuffer[][]>
     @Override
     protected CqlRunOp<ByteBuffer[][]> buildRunOp(ClientWrapper client, String query, Object queryId, List<ByteBuffer> params, String keyid, ByteBuffer key)
     {
-        return new CqlRunOpMatchResults(client, query, queryId, params, keyid, key, Arrays.asList(generateColumnValues(key)));
+        List<ByteBuffer> expectRow = state.rowGen.isDeterministic() ? generateColumnValues(key) : null;
+        return new CqlRunOpMatchResults(client, query, queryId, params, keyid, key, Arrays.asList(expectRow));
     }
 
 }

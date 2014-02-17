@@ -275,15 +275,8 @@ public class DatabaseDescriptor
         else
             logger.info("Global memtable off-heap threshold is enabled at {}MB", conf.memtable_offheap_space_in_mb);
 
-        /* Memtable flush writer threads */
-        if (conf.memtable_flush_writers != null && conf.memtable_flush_writers < 1)
-        {
+        if (conf.memtable_flush_writers < 1)
             throw new ConfigurationException("memtable_flush_writers must be at least 1");
-        }
-        else if (conf.memtable_flush_writers == null)
-        {
-            conf.memtable_flush_writers = conf.data_file_directories.length;
-        }
 
         /* Local IP or hostname to bind services to */
         if (conf.listen_address != null)
@@ -415,6 +408,9 @@ public class DatabaseDescriptor
         /* data file and commit log directories. they get created later, when they're needed. */
         if (conf.commitlog_directory != null && conf.data_file_directories != null && conf.saved_caches_directory != null)
         {
+            if (conf.flush_directory == null)
+                conf.flush_directory = conf.data_file_directories[0];
+
             for (String datadir : conf.data_file_directories)
             {
                 if (datadir.equals(conf.commitlog_directory))
@@ -624,6 +620,8 @@ public class DatabaseDescriptor
                 throw new ConfigurationException("saved_caches_directory must be specified");
 
             FileUtils.createDirectory(conf.saved_caches_directory);
+
+            FileUtils.createDirectory(conf.flush_directory);
         }
         catch (ConfigurationException e)
         {
@@ -941,6 +939,16 @@ public class DatabaseDescriptor
     public static void setStreamThroughputOutboundMegabitsPerSec(int value)
     {
         conf.stream_throughput_outbound_megabits_per_sec = value;
+    }
+
+    public static int getInterDCStreamThroughputOutboundMegabitsPerSec()
+    {
+        return conf.inter_dc_stream_throughput_outbound_megabits_per_sec;
+    }
+
+    public static void setInterDCStreamThroughputOutboundMegabitsPerSec(int value)
+    {
+        conf.inter_dc_stream_throughput_outbound_megabits_per_sec = value;
     }
 
     public static String[] getAllDataFileLocations()
@@ -1428,5 +1436,10 @@ public class DatabaseDescriptor
         }
         String arch = System.getProperty("os.arch");
         return arch.contains("64") || arch.contains("sparcv9");
+    }
+
+    public static String getFlushLocation()
+    {
+        return conf.flush_directory;
     }
 }

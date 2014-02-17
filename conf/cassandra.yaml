@@ -109,8 +109,14 @@ partitioner: org.apache.cassandra.dht.Murmur3Partitioner
 data_file_directories:
     - /var/lib/cassandra/data
 
-# commit log
+# commit log.  when running on magnetic HDD, this should be a
+# separate spindle than the data directories.
 commitlog_directory: /var/lib/cassandra/commitlog
+
+# location to write flushing sstables to.  Ideally, this will also be
+# a separate spindle in HDD deployments.  If you only have two spindles,
+# have it share with the data spindle.
+flush_directory: /var/lib/cassandra/flush
 
 # policy for data disk failures:
 # stop: shut down gossip and Thrift, leaving the node effectively dead, but
@@ -312,10 +318,9 @@ memtable_cleanup_threshold: 0.4
 
 # This sets the amount of memtable flush writer threads.  These will
 # be blocked by disk io, and each one will hold a memtable in memory
-# while blocked. If you have a large heap and many data directories,
-# you can increase this value for better flush performance.
-# By default this will be set to the amount of data directories defined.
-#memtable_flush_writers: 1
+# while blocked. If your flush directory is backed by SSD, you may
+# want to increase this; by default it will be set to 2.
+#memtable_flush_writers: 2
 
 # A fixed memory pool size in MB for for SSTable index summaries. If left
 # empty, this will default to 5% of the heap size. If the memory usage of
@@ -528,6 +533,12 @@ compaction_preheat_key_cache: true
 # can lead to saturating the network connection and degrading rpc performance.
 # When unset, the default is 200 Mbps or 25 MB/s.
 # stream_throughput_outbound_megabits_per_sec: 200
+
+# Throttles all streaming file transfer between the datacenters,
+# this setting allows users to throttle inter dc stream throughput in addition
+# to throttling all network stream traffic as configured with
+# stream_throughput_outbound_megabits_per_sec
+# inter_dc_stream_throughput_outbound_megabits_per_sec:
 
 # How long the coordinator should wait for read operations to complete
 read_request_timeout_in_ms: 5000

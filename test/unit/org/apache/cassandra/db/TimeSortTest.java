@@ -19,7 +19,6 @@
 package org.apache.cassandra.db;
 
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
 import java.util.*;
 
 import org.junit.Test;
@@ -39,7 +38,7 @@ import org.apache.cassandra.utils.memory.RefAction;
 public class TimeSortTest extends SchemaLoader
 {
     @Test
-    public void testMixedSources() throws IOException, ExecutionException, InterruptedException
+    public void testMixedSources()
     {
         Keyspace keyspace = Keyspace.open("Keyspace1");
         ColumnFamilyStore cfStore = keyspace.getColumnFamilyStore("StandardLong1");
@@ -61,7 +60,7 @@ public class TimeSortTest extends SchemaLoader
     }
 
     @Test
-    public void testTimeSort() throws IOException, ExecutionException, InterruptedException
+    public void testTimeSort() throws IOException
     {
         Keyspace keyspace = Keyspace.open("Keyspace1");
         ColumnFamilyStore cfStore = keyspace.getColumnFamilyStore("StandardLong1");
@@ -114,7 +113,7 @@ public class TimeSortTest extends SchemaLoader
         assert "c".equals(ByteBufferUtil.string(cf.getColumn(cellname(10)).value()));
     }
 
-    private void validateTimeSort(Keyspace keyspace) throws IOException
+    private void validateTimeSort(Keyspace keyspace)
     {
         for (int i = 900; i < 1000; ++i)
         {

@@ -64,7 +64,7 @@ public class RemoveTest
     }
 
     @BeforeClass
-    public static void setupClass() throws IOException, ConfigurationException
+    public static void setupClass() throws ConfigurationException
     {
         oldPartitioner = StorageService.instance.setPartitionerUnsafe(partitioner);
         SchemaLoader.loadSchema();

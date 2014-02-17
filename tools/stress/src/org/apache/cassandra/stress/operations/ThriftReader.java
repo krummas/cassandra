@@ -52,7 +52,7 @@ public final class ThriftReader extends Operation
             predicate.setColumn_names(state.settings.columns.names);
 
         final ByteBuffer key = getKey();
-        final List<ByteBuffer> expect = generateColumnValues(key);
+        final List<ByteBuffer> expect = state.rowGen.isDeterministic() ? generateColumnValues(key) : null;
         for (final ColumnParent parent : state.columnParents)
         {
             timeWithRetry(new RunOp()
@@ -61,6 +61,8 @@ public final class ThriftReader extends Operation
                 public boolean run() throws Exception
                 {
                     List<ColumnOrSuperColumn> row = client.get_slice(key, parent, predicate, state.settings.command.consistencyLevel);
+                    if (expect == null)
+                        return !row.isEmpty();
                     if (!state.settings.columns.useSuperColumns)
                     {
                         if (row.size() != expect.size())

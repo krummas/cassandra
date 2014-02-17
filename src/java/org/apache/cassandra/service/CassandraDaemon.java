@@ -56,6 +56,7 @@ import org.apache.cassandra.metrics.StorageMetrics;
 import org.apache.cassandra.thrift.ThriftServer;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.CLibrary;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Mx4jTool;
 import org.apache.cassandra.utils.Pair;
 
@@ -140,6 +141,20 @@ public class CassandraDaemon
         for(MemoryPoolMXBean pool: ManagementFactory.getMemoryPoolMXBeans())
             logger.info("{} {}: {}", pool.getName(), pool.getType(), pool.getPeakUsage());
         logger.info("Classpath: {}", System.getProperty("java.class.path"));
+
+        // Fail-fast if JNA is not available or failing to initialize properly
+        // except with -Dcassandra.boot_without_jna=true. See CASSANDRA-6575.
+        if (!CLibrary.jnaAvailable())
+        {
+            boolean jnaRequired = !Boolean.getBoolean("cassandra.boot_without_jna");
+
+            if (jnaRequired)
+            {
+                logger.error("JNA failing to initialize properly. Use -Dcassandra.boot_without_jna=true to bootstrap even so.");
+                System.exit(3);
+            }
+        }
+
         CLibrary.tryMlockall();
 
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler()
@@ -331,7 +346,8 @@ public class CassandraDaemon
             }
         }
 
-        waitForGossipToSettle();
+        if (!FBUtilities.getBroadcastAddress().equals(InetAddress.getLoopbackAddress()))
+            waitForGossipToSettle();
 
         // Thift
         InetAddress rpcAddr = DatabaseDescriptor.getRpcAddress();
@@ -458,7 +474,6 @@ public class CassandraDaemon
         destroy();
     }
 
-
     private void waitForGossipToSettle()
     {
         int forceAfter = Integer.getInteger("cassandra.skip_wait_for_gossip_to_settle", -1);
@@ -502,7 +517,7 @@ public class CassandraDaemon
         if (totalPolls > GOSSIP_SETTLE_POLL_SUCCESSES_REQUIRED)
             logger.info("Gossip settled after {} extra polls; proceeding", totalPolls - GOSSIP_SETTLE_POLL_SUCCESSES_REQUIRED);
         else
-            logger.debug("Gossip settled after {} extra polls; proceeding", totalPolls - GOSSIP_SETTLE_POLL_SUCCESSES_REQUIRED);
+            logger.info("No gossip backlog; proceeding");
     }
 
     public static void stop(String[] args)

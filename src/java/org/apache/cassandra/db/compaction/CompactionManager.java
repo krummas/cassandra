@@ -619,14 +619,14 @@ public class CompactionManager implements CompactionManagerMBean
 
             long totalkeysWritten = 0;
 
-            int expectedBloomFilterSize = Math.max(cfs.metadata.getIndexInterval(),
+            int expectedBloomFilterSize = Math.max(cfs.metadata.getMinIndexInterval(),
                                                    (int) (SSTableReader.getApproximateKeyCount(Arrays.asList(sstable))));
             if (logger.isDebugEnabled())
                 logger.debug("Expected bloom filter size : {}", expectedBloomFilterSize);
 
             logger.info("Cleaning up {}", sstable);
 
-            File compactionFileLocation = cfs.directories.getDirectoryForNewSSTables();
+            File compactionFileLocation = cfs.directories.getDirectoryForCompactedSSTables();
             if (compactionFileLocation == null)
                 throw new IOException("disk full");
 
@@ -905,7 +905,7 @@ public class CompactionManager implements CompactionManagerMBean
         int repairedKeyCount = 0;
         int unrepairedKeyCount = 0;
         // TODO(5351): we can do better here:
-        int expectedBloomFilterSize = Math.max(cfs.metadata.getIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(repairedSSTables)));
+        int expectedBloomFilterSize = Math.max(cfs.metadata.getMinIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(repairedSSTables)));
         logger.info("Performing anticompaction on {} sstables", repairedSSTables.size());
         // iterate over sstables to check if the repaired / unrepaired ranges intersect them.
         for (SSTableReader sstable : repairedSSTables)
@@ -919,7 +919,7 @@ public class CompactionManager implements CompactionManagerMBean
             }
 
             logger.info("Anticompacting {}", sstable);
-            File destination = cfs.directories.getDirectoryForNewSSTables();
+            File destination = cfs.directories.getDirectoryForCompactedSSTables();
             SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
             SSTableWriter unRepairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstable);
 

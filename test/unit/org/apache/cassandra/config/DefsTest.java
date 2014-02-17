@@ -19,10 +19,8 @@
 package org.apache.cassandra.config;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
@@ -44,6 +42,7 @@ import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.apache.cassandra.Util.cellname;
 
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -94,7 +93,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void testInvalidNames() throws IOException
+    public void testInvalidNames()
     {
         String[] valid = {"1", "a", "_1", "b_", "__", "1_a"};
         for (String s : valid)
@@ -105,8 +104,9 @@ public class DefsTest extends SchemaLoader
             assert !CFMetaData.isNameValid(s);
     }
 
+    @Ignore
     @Test
-    public void saveAndRestore() throws IOException
+    public void saveAndRestore()
     {
         /*
         // verify dump and reload.
@@ -125,7 +125,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void addNewCfToBogusKeyspace() throws InterruptedException
+    public void addNewCfToBogusKeyspace()
     {
         CFMetaData newCf = addTestCF("MadeUpKeyspace", "NewCF", "new cf");
         try
@@ -139,7 +139,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void addNewCfWithNullComment() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void addNewCfWithNullComment() throws ConfigurationException
     {
         final String ks = "Keyspace1";
         final String cf = "BrandNewCfWithNull";
@@ -155,7 +155,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void addNewCF() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void addNewCF() throws ConfigurationException
     {
         final String ks = "Keyspace1";
         final String cf = "BrandNewCf";
@@ -186,7 +186,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void dropCf() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void dropCf() throws ConfigurationException
     {
         DecoratedKey dk = Util.dk("dropCf");
         // sanity
@@ -232,7 +232,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void addNewKS() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void addNewKS() throws ConfigurationException
     {
         DecoratedKey dk = Util.dk("key0");
         CFMetaData newCf = addTestCF("NewKeyspace1", "AddedStandard1", "A new cf for a new ks");
@@ -260,7 +260,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void dropKS() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void dropKS() throws ConfigurationException
     {
         DecoratedKey dk = Util.dk("dropKs");
         // sanity
@@ -311,7 +311,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void dropKSUnflushed() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void dropKSUnflushed() throws ConfigurationException
     {
         DecoratedKey dk = Util.dk("dropKs");
         // sanity
@@ -332,7 +332,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void createEmptyKsAddNewCf() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void createEmptyKsAddNewCf() throws ConfigurationException
     {
         assert Schema.instance.getKSMetaData("EmptyKeyspace") == null;
 
@@ -369,7 +369,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void testUpdateKeyspace() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void testUpdateKeyspace() throws ConfigurationException
     {
         // create a keyspace to serve as existing.
         CFMetaData cf = addTestCF("UpdatedKeyspace", "AddedStandard1", "A new cf for a new ks");
@@ -401,7 +401,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void testUpdateColumnFamilyNoIndexes() throws ConfigurationException, IOException, ExecutionException, InterruptedException
+    public void testUpdateColumnFamilyNoIndexes() throws ConfigurationException
     {
         // create a keyspace with a cf to update.
         CFMetaData cf = addTestCF("UpdatedCfKs", "Standard1added", "A new cf that will be updated");
@@ -497,7 +497,7 @@ public class DefsTest extends SchemaLoader
     }
 
     @Test
-    public void testDropIndex() throws IOException, ExecutionException, InterruptedException, ConfigurationException
+    public void testDropIndex() throws ConfigurationException
     {
         // persist keyspace definition in the system keyspace
         Schema.instance.getKSMetaData("Keyspace6").toSchema(System.currentTimeMillis()).apply();

@@ -18,7 +18,6 @@
 */
 package org.apache.cassandra.db.compaction;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -51,7 +50,7 @@ public class CompactionsPurgeTest extends SchemaLoader
     public static final String KEYSPACE2 = "Keyspace2";
 
     @Test
-    public void testMajorCompactionPurge() throws IOException, ExecutionException, InterruptedException
+    public void testMajorCompactionPurge() throws ExecutionException, InterruptedException
     {
         CompactionManager.instance.disableAutoCompaction();
 
@@ -95,7 +94,7 @@ public class CompactionsPurgeTest extends SchemaLoader
     }
 
     @Test
-    public void testMinorCompactionPurge() throws IOException, ExecutionException, InterruptedException
+    public void testMinorCompactionPurge()
     {
         CompactionManager.instance.disableAutoCompaction();
 
@@ -154,7 +153,7 @@ public class CompactionsPurgeTest extends SchemaLoader
      * verify that we don't drop tombstones during a minor compaction that might still be relevant
      */
     @Test
-    public void testMinTimestampPurge() throws IOException, ExecutionException, InterruptedException
+    public void testMinTimestampPurge()
     {
         CompactionManager.instance.disableAutoCompaction();
 
@@ -194,7 +193,7 @@ public class CompactionsPurgeTest extends SchemaLoader
     }
 
     @Test
-    public void testCompactionPurgeOneFile() throws IOException, ExecutionException, InterruptedException
+    public void testCompactionPurgeOneFile() throws ExecutionException, InterruptedException
     {
         CompactionManager.instance.disableAutoCompaction();
 
@@ -231,7 +230,7 @@ public class CompactionsPurgeTest extends SchemaLoader
     }
 
     @Test
-    public void testCompactionPurgeCachedRow() throws IOException, ExecutionException, InterruptedException
+    public void testCompactionPurgeCachedRow() throws ExecutionException, InterruptedException
     {
         CompactionManager.instance.disableAutoCompaction();
 
@@ -279,7 +278,7 @@ public class CompactionsPurgeTest extends SchemaLoader
     }
 
     @Test
-    public void testCompactionPurgeTombstonedRow() throws IOException, ExecutionException, InterruptedException
+    public void testCompactionPurgeTombstonedRow() throws ExecutionException, InterruptedException
     {
         CompactionManager.instance.disableAutoCompaction();
 
@@ -323,7 +322,7 @@ public class CompactionsPurgeTest extends SchemaLoader
     }
 
     @Test
-    public void testRowTombstoneObservedBeforePurging() throws InterruptedException, ExecutionException, IOException
+    public void testRowTombstoneObservedBeforePurging() throws InterruptedException, ExecutionException
     {
         String keyspace = "cql_keyspace";
         String table = "table1";
@@ -348,7 +347,7 @@ public class CompactionsPurgeTest extends SchemaLoader
         assertEquals(0, result.size());
 
         // compact the two sstables with a gcBefore that does *not* allow the row tombstone to be purged
-        Future future = CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) - 10000);
+        Future<?> future = CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) - 10000);
         future.get();
 
         // the data should be gone, but the tombstone should still exist
