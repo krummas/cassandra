@@ -20,7 +20,11 @@ package org.apache.cassandra.db;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
+
+import org.apache.cassandra.db.composites.CellNames;
 import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.memory.HeapAllocator;
 
@@ -36,6 +40,7 @@ import org.apache.cassandra.io.util.DataOutputBuffer;
 public class CounterCell extends Cell
 {
     protected static final CounterContext contextManager = CounterContext.instance();
+    private static final long EMPTY_SIZE = ObjectSizes.measure(new CounterCell(CellNames.simpleDense(ByteBuffer.allocate(1)), ByteBufferUtil.EMPTY_BYTE_BUFFER, 1));
 
     private final long timestampOfLastDelete;
 
@@ -84,6 +89,11 @@ public class CounterCell extends Cell
     {
         // A counter column adds 8 bytes for timestampOfLastDelete to Cell.
         return super.dataSize() + TypeSizes.NATIVE.sizeof(timestampOfLastDelete);
+    }
+
+    public long unsharedHeapSizeExcludingData()
+    {
+        return EMPTY_SIZE + name.unsharedHeapSizeExcludingData() + ObjectSizes.sizeOnHeapExcludingData(value);
     }
 
     @Override

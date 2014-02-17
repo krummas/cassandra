@@ -24,8 +24,11 @@ import java.security.MessageDigest;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
+import org.apache.cassandra.db.composites.CellNames;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.memory.HeapAllocator;
 
@@ -42,6 +45,7 @@ import org.apache.cassandra.utils.memory.HeapAllocator;
 public class ExpiringCell extends Cell
 {
     public static final int MAX_TTL = 20 * 365 * 24 * 60 * 60; // 20 years in seconds
+    private static final long EMPTY_SIZE = ObjectSizes.measure(new ExpiringCell(CellNames.simpleDense(ByteBuffer.allocate(1)), ByteBufferUtil.EMPTY_BYTE_BUFFER, 1, 1));
 
     private final int localExpirationTime;
     private final int timeToLive;
@@ -93,6 +97,11 @@ public class ExpiringCell extends Cell
     public int dataSize()
     {
         return super.dataSize() + TypeSizes.NATIVE.sizeof(localExpirationTime) + TypeSizes.NATIVE.sizeof(timeToLive);
+    }
+
+    public long unsharedHeapSizeExcludingData()
+    {
+        return EMPTY_SIZE + name.unsharedHeapSizeExcludingData() + ObjectSizes.sizeOnHeapExcludingData(value);
     }
 
     @Override
