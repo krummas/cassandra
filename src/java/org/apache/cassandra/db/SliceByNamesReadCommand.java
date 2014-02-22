@@ -29,7 +29,6 @@ import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.memory.RefAction;
-import org.apache.cassandra.utils.memory.Referrer;
 
 public class SliceByNamesReadCommand extends ReadCommand
 {

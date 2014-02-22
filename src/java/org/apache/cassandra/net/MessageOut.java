@@ -87,7 +87,7 @@ public class MessageOut<T>
             }
             catch (IOException e)
             {
-                throw new AssertionError();
+                throw new AssertionError(e);
             }
         }
     }

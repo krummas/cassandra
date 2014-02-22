@@ -59,7 +59,6 @@ import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.thrift.cassandraConstants;
 import org.apache.cassandra.transport.Server;
 import org.apache.cassandra.utils.*;
-import org.apache.cassandra.utils.memory.HeapAllocator;
 import org.apache.cassandra.utils.memory.RefAction;
 
 import static org.apache.cassandra.cql3.QueryProcessor.processInternal;

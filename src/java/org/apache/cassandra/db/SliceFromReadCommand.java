@@ -34,7 +34,6 @@ import org.apache.cassandra.service.RowDataResolver;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.memory.RefAction;
-import org.apache.cassandra.utils.memory.Referrer;
 
 public class SliceFromReadCommand extends ReadCommand
 {

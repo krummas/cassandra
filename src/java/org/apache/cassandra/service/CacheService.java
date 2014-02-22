@@ -56,7 +56,6 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
-import org.apache.cassandra.utils.memory.HeapAllocator;
 import org.apache.cassandra.utils.memory.RefAction;
 
 public class CacheService implements CacheServiceMBean

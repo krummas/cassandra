@@ -63,8 +63,6 @@ public final class WaitQueue
     private static final int SIGNALLED = 1;
     private static final int NOT_SET = 0;
 
-    private static final AtomicIntegerFieldUpdater signalledUpdater = AtomicIntegerFieldUpdater.newUpdater(RegisteredSignal.class, "state");
-
     // the waiting signals
     private final NonBlockingQueue<RegisteredSignal> queue = new NonBlockingQueue<>();
 
@@ -74,7 +72,7 @@ public final class WaitQueue
      */
     public Signal register()
     {
-        RegisteredSignal signal = new RegisteredSignal();
+        RegisteredSignal signal = new RegisteredSignal(this);
         queue.append(signal);
         return signal;
     }
@@ -88,7 +86,7 @@ public final class WaitQueue
     public Signal register(TimerContext context)
     {
         assert context != null;
-        RegisteredSignal signal = new TimedSignal(context);
+        RegisteredSignal signal = new TimedSignal(context, this);
         queue.append(signal);
         return signal;
     }
@@ -309,10 +307,18 @@ public final class WaitQueue
     /**
      * A signal registered with this WaitQueue
      */
-    private class RegisteredSignal extends AbstractSignal
+    private static class RegisteredSignal extends AbstractSignal
     {
+        private static final AtomicIntegerFieldUpdater<RegisteredSignal> signalledUpdater = AtomicIntegerFieldUpdater.newUpdater(RegisteredSignal.class, "state");
+
+        private final WaitQueue queue;
         private volatile Thread thread = Thread.currentThread();
         volatile int state;
+
+        private RegisteredSignal(WaitQueue queue)
+        {
+            this.queue = queue;
+        }
 
         public boolean isSignalled()
         {
@@ -345,7 +351,7 @@ public final class WaitQueue
             if (!isSet() && signalledUpdater.compareAndSet(this, NOT_SET, CANCELLED))
             {
                 thread = null;
-                cleanUpCancelled();
+                queue.cleanUpCancelled();
                 return false;
             }
             // must now be signalled assuming correct API usage
@@ -365,10 +371,10 @@ public final class WaitQueue
                 // must already be signalled - switch to cancelled and
                 state = CANCELLED;
                 // propagate the signal
-                WaitQueue.this.signal();
+                queue.signal();
             }
             thread = null;
-            cleanUpCancelled();
+            queue.cleanUpCancelled();
         }
     }
 
@@ -377,12 +383,13 @@ public final class WaitQueue
      * finished waiting. i.e. if the timer is started when the signal is registered it tracks the
      * time in between registering and invalidating the signal.
      */
-    private final class TimedSignal extends RegisteredSignal
+    private static final class TimedSignal extends RegisteredSignal
     {
         private final TimerContext context;
 
-        private TimedSignal(TimerContext context)
+        private TimedSignal(TimerContext context, WaitQueue queue)
         {
+            super(queue);
             this.context = context;
         }
 

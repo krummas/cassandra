@@ -146,7 +146,7 @@ public class OpOrder
 
     /**
      * Represents a group of identically ordered operations, i.e. all operations started in the interval between
-     * two barrier issuances. For each register() call this is returned, finishOne() must be called exactly once.
+     * two barrier issuances. For each register() call, finishOne() must be called exactly once.
      * It should be treated like taking a lock().
      */
     public static final class Group implements Comparable<Group>
@@ -246,6 +246,8 @@ public class OpOrder
                 int current = running;
                 if (current < 0)
                 {
+                    // after expire() we are in the negatives so we have active
+                    // ops until current + 1 == -1
                     if (runningUpdater.compareAndSet(this, current, current + 1))
                     {
                         maybeSignalSafe();

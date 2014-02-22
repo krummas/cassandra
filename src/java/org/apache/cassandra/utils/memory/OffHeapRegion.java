@@ -188,6 +188,8 @@ final class OffHeapRegion
             Object obj = getParent(buffer);
             if (obj == null)
                 return false;
+            // we set the parent to null, then, in realloc phase during GC, it will not be reallocated to a
+            // new region, instead, the whole region is discarded.
             OffHeapRegion parent = (OffHeapRegion) obj;
             if (!swapParent(buffer, parent, null))
                 continue;
@@ -497,6 +499,7 @@ final class OffHeapRegion
             _unsafe = (sun.misc.Unsafe) field.get(null);
             _bufferAddressOffset = _unsafe.objectFieldOffset(Buffer.class.getDeclaredField("address"));
             _bufferAttOffset = _unsafe.objectFieldOffset(bb.getClass().getDeclaredField("att"));
+            // we use the unused byte[] hb in ByteBuffer for the mark key, making BB.hasArray() != !BB.isDirect()
             _hbOffset = _unsafe.objectFieldOffset(ByteBuffer.class.getDeclaredField("hb"));
             success = true;
         }

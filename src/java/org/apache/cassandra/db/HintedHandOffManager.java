@@ -67,7 +67,6 @@ import org.apache.cassandra.service.*;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
-import org.apache.cassandra.utils.memory.HeapAllocator;
 import org.apache.cassandra.utils.memory.RefAction;
 
 import org.cliffc.high_scale_lib.NonBlockingHashSet;

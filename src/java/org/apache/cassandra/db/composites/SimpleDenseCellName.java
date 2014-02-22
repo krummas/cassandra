@@ -18,7 +18,6 @@
 package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
-import java.util.Collections;
 
 import com.google.common.base.Function;
 

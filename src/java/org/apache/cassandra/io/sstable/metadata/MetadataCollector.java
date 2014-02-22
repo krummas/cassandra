@@ -32,7 +32,6 @@ import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.EstimatedHistogram;
 import org.apache.cassandra.utils.MurmurHash;
 import org.apache.cassandra.utils.StreamingHistogram;
-import org.apache.cassandra.utils.memory.HeapAllocator;
 
 public class MetadataCollector
 {

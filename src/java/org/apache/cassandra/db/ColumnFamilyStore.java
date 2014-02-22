@@ -961,7 +961,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     /**
      * Should only be constructed/used from switchMemtable() or truncate(), with ownership of the DataTracker monitor.
-     * In the constructor the current memtable(s) are swapped, and a barrer on outstanding writes is issued;
+     * In the constructor the current memtable(s) are swapped, and a barrier on outstanding writes is issued;
      * when run by the flushWriter the barrier is waited on to ensure all outstanding writes have completed
      * before all memtables are immediately written, and the CL is either immediately marked clean or, if
      * there are custom secondary indexes, the post flush clean up is left to update those indexes and mark

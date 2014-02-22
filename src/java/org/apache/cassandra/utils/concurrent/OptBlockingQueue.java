@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A NonBlockingBroadcastQueue that supports a blocking take(), i.e. all operations are non-blocking, except take() which
+ * A NonBlockingQueue that supports a blocking take(), i.e. all operations are non-blocking, except take() which
  * blocks until there is something to remove from the queue.
  *
  * This is a very simple extension of NonBlockingQueue, that overrides all appending methods to signal a WaitQueue

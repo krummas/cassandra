@@ -74,7 +74,6 @@ import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.SemanticVersion;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.memory.RefAction;
-import org.apache.cassandra.utils.memory.Referrer;
 import org.apache.thrift.TException;
 
 public class CassandraServer implements Cassandra.Iface

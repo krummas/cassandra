@@ -25,7 +25,6 @@ import java.util.*;
 import java.util.Random;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.Nullable;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
@@ -70,7 +69,6 @@ import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.triggers.TriggerExecutor;
 import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.memory.RefAction;
-import org.apache.cassandra.utils.memory.Referrer;
 
 public class StorageProxy implements StorageProxyMBean
 {

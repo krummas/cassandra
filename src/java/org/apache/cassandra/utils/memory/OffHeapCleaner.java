@@ -100,6 +100,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
 
     void clean()
     {
+        // metrics? would be fun to see how much time we spend in gc
         if (pool.isGcEnabled())
             gc(pool, false);
         if (!pool.isGcEnabled() || needsCleaning())
@@ -412,7 +413,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
                     if (region.transition(OffHeapRegion.State.LIVE, OffHeapRegion.State.DISCARDING))
                     {
                         adjustReclaiming(region);
-                        collect.append(region);
+                        this.collect.append(region);
                     }
                 }
                 // reset the regions so we can reuse the memory
@@ -427,7 +428,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
                     allocatingFrom.advanceIfHead(newRegion);
 
             adjustReclaiming(region);
-            collect.append(region);
+            this.collect.append(region);
             this.compact.append(compact);
 
             if (logger.isTraceEnabled())
@@ -462,7 +463,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
 
         /**
          * This method does the bulk of the actual collection. Once passed the allocations we're compacting
-         * and their target locationsm it deals with copying the data and synchronising the release of the
+         * and their target locations it deals with copying the data and synchronising the release of the
          * resources that we've freed up.
          */
         @Override
@@ -509,7 +510,6 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
 
                         // write the data to the new location
                         move.out.duplicate().put(move.in.duplicate());
-                        // assign ourselves to the new region by atomically swapping our parent
                         if (!OffHeapRegion.swapParent(move.in, regionIn, move.regionOut))
                         {
                             // if we fail, we've raced with somebody who freed the memory, so
@@ -548,7 +548,7 @@ class OffHeapCleaner extends PoolCleanerThread<OffHeapPool>
                 // we only awaitSafe() on the write barrier, as we just need ordering guarantees (that they're using the latest addresses).
                 writeBarrier.awaitSafe();
 
-                // unmark each OFDR, so that only those marked by a Referrer are left; we want to unmark only once, so check equality with the markKey
+                // unmark each OHDR, so that only those marked by a Referrer are left; we want to unmark only once, so check equality with the markKey
                 for (Map.Entry<byte[], Collection<OffHeapDelayedRecycle>> entry : markLookup.asMap().entrySet())
                     for (OffHeapDelayedRecycle delayedRecycle : entry.getValue())
                         if (delayedRecycle.region.markKey == entry.getKey())
