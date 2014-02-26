@@ -19,6 +19,7 @@ package org.apache.cassandra.cql3.statements;
 
 import java.util.*;
 
+import org.apache.cassandra.cache.CachingOptions;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.CFMetaData.SpeculativeRetry;
 import org.apache.cassandra.db.compaction.AbstractCompactionStrategy;
@@ -149,6 +150,13 @@ public class CFPropDefs extends PropertyDefinitions
             return new HashMap<>();
         return compressionOptions;
     }
+    public Map<String, String> getCachingOptions() throws SyntaxException
+    {
+        Map<String, String> cachingOptions = getMap(KW_CACHING);
+        if (cachingOptions == null)
+            return new HashMap<>();
+        return cachingOptions;
+    }
 
     public void applyToCFMetadata(CFMetaData cfm) throws ConfigurationException, SyntaxException
     {
@@ -164,12 +172,6 @@ public class CFPropDefs extends PropertyDefinitions
             throw new ConfigurationException("Disabling compaction by setting compaction thresholds to 0 has been deprecated, set the compaction option 'enabled' to false instead.");
         cfm.minCompactionThreshold(minCompactionThreshold);
         cfm.maxCompactionThreshold(maxCompactionThreshold);
-        cfm.caching(CFMetaData.Caching.fromString(getString(KW_CACHING, cfm.getCaching().toString())));
-        CFMetaData.RowsPerPartitionToCache newRppc = CFMetaData.RowsPerPartitionToCache.fromString(getString(KW_ROWS_PER_PARTITION_TO_CACHE, cfm.getRowsPerPartitionToCache().toString()));
-        // we need to invalidate row cache if the amount of rows cached changes, otherwise we might serve out bad data.
-        if (!cfm.getRowsPerPartitionToCache().equals(newRppc))
-            CacheService.instance.invalidateRowCacheForCf(cfm.cfId);
-        cfm.rowsPerPartitionToCache(newRppc);
         cfm.defaultTimeToLive(getInt(KW_DEFAULT_TIME_TO_LIVE, cfm.getDefaultTimeToLive()));
         cfm.speculativeRetry(CFMetaData.SpeculativeRetry.fromString(getString(KW_SPECULATIVE_RETRY, cfm.getSpeculativeRetry().toString())));
         cfm.memtableFlushPeriod(getInt(KW_MEMTABLE_FLUSH_PERIOD, cfm.getMemtableFlushPeriod()));
@@ -187,6 +189,9 @@ public class CFPropDefs extends PropertyDefinitions
 
         if (!getCompressionOptions().isEmpty())
             cfm.compressionParameters(CompressionParameters.create(getCompressionOptions()));
+
+        if (!getCachingOptions().isEmpty())
+            cfm.caching(CachingOptions.fromMap(getCachingOptions()));
     }
 
     @Override
