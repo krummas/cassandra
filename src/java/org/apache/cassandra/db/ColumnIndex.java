@@ -27,6 +27,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.io.sstable.IndexHelper;
+import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class ColumnIndex
@@ -62,7 +63,7 @@ public class ColumnIndex
         private OnDiskAtom firstColumn;
         private OnDiskAtom lastColumn;
         private OnDiskAtom lastBlockClosing;
-        private final DataOutput output;
+        private final DataOutputPlus output;
         private final RangeTombstone.Tracker tombstoneTracker;
         private int atomCount;
         private final ByteBuffer key;
@@ -72,7 +73,7 @@ public class ColumnIndex
 
         public Builder(ColumnFamily cf,
                        ByteBuffer key,
-                       DataOutput output)
+                       DataOutputPlus output)
         {
             assert cf != null;
             assert key != null;

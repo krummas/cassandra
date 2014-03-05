@@ -54,6 +54,7 @@ import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.FastByteArrayOutputStream;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.StorageProxy;
@@ -144,21 +145,20 @@ public class BatchlogManager implements BatchlogManagerMBean
 
     private static ByteBuffer serializeMutations(Collection<Mutation> mutations)
     {
-        FastByteArrayOutputStream bos = new FastByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(bos);
+        DataOutputBuffer buf = new DataOutputBuffer();
 
         try
         {
-            out.writeInt(mutations.size());
+            buf.writeInt(mutations.size());
             for (Mutation mutation : mutations)
-                Mutation.serializer.serialize(mutation, out, VERSION);
+                Mutation.serializer.serialize(mutation, buf, VERSION);
         }
         catch (IOException e)
         {
             throw new AssertionError(); // cannot happen.
         }
 
-        return ByteBuffer.wrap(bos.toByteArray());
+        return buf.asByteBuffer();
     }
 
     @VisibleForTesting

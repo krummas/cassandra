@@ -15,34 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.io;
+package org.apache.cassandra.io.util;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
-import org.apache.cassandra.db.TypeSizes;
-import org.apache.cassandra.io.util.DataOutputPlus;
-
-public interface ISerializer<T>
+public interface DataOutputPlus extends DataOutput
 {
-    /**
-     * Serialize the specified type into the specified DataOutput instance.
-     *
-     *
-     * @param t type that needs to be serialized
-     * @param out DataOutput into which serialization needs to happen.
-     * @throws java.io.IOException
-     */
-    public void serialize(T t, DataOutputPlus out) throws IOException;
 
-    /**
-     * Deserialize from the specified DataInput instance.
-     * @param in DataInput from which deserialization needs to happen.
-     * @throws IOException
-     * @return the type that was deserialized
-     */
-    public T deserialize(DataInput in) throws IOException;
+    // write the buffer without modifying its position
+    void write(ByteBuffer buffer) throws IOException;
 
-    public long serializedSize(T t, TypeSizes type);
+    void write(Memory memory) throws IOException;
+
 }

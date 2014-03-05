@@ -29,6 +29,7 @@ import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.utils.UUIDSerializer;
 
@@ -45,7 +46,7 @@ public class AnticompactionRequest extends RepairMessage
 
     public static class AnticompactionRequestSerializer implements MessageSerializer<AnticompactionRequest>
     {
-        public void serialize(AnticompactionRequest message, DataOutput out, int version) throws IOException
+        public void serialize(AnticompactionRequest message, DataOutputPlus out, int version) throws IOException
         {
             UUIDSerializer.serializer.serialize(message.parentRepairSession, out, version);
         }

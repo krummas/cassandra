@@ -32,6 +32,7 @@ import com.google.common.base.Objects;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.UUIDSerializer;
@@ -128,7 +129,7 @@ public class Commit
 
     public static class CommitSerializer implements IVersionedSerializer<Commit>
     {
-        public void serialize(Commit commit, DataOutput out, int version) throws IOException
+        public void serialize(Commit commit, DataOutputPlus out, int version) throws IOException
         {
             ByteBufferUtil.writeWithShortLength(commit.key, out);
             UUIDSerializer.serializer.serialize(commit.ballot, out, version);
