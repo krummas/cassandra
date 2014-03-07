@@ -28,6 +28,8 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.compaction.ICompactionScanner;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.BytesToken;
 import org.apache.cassandra.dht.Range;
@@ -71,7 +73,7 @@ public class SSTableScannerTest extends SchemaLoader
     {
         long timestamp = System.currentTimeMillis();
         DecoratedKey decoratedKey = Util.dk(toKey(key));
-        Mutation rm = new Mutation(KEYSPACE, decoratedKey.key);
+        Mutation rm = new Mutation(KEYSPACE, decoratedKey.key());
         rm.add(TABLE, Util.cellname("col"), ByteBufferUtil.EMPTY_BYTE_BUFFER, timestamp, 1000);
         rm.apply();
     }
@@ -80,7 +82,7 @@ public class SSTableScannerTest extends SchemaLoader
     {
         SSTableScanner scanner = sstable.getScanner(new DataRange(boundsFor(scanStart, scanEnd), new IdentityQueryFilter()));
         for (int i = expectedStart; i <= expectedEnd; i++)
-            assertEquals(toKey(i), new String(scanner.next().getKey().key.array()));
+            assertEquals(toKey(i), new String(scanner.next().getKey().key().array()));
         assertFalse(scanner.hasNext());
     }
 
@@ -110,7 +112,7 @@ public class SSTableScannerTest extends SchemaLoader
         // full range scan
         SSTableScanner scanner = sstable.getScanner();
         for (int i = 2; i < 10; i++)
-            assertEquals(toKey(i), new String(scanner.next().getKey().key.array()));
+            assertEquals(toKey(i), new String(scanner.next().getKey().key().array()));
 
         // a simple read of a chunk in the middle
         assertScanMatches(sstable, 3, 6, 3, 6);
@@ -147,7 +149,7 @@ public class SSTableScannerTest extends SchemaLoader
             for (int expected = rangeStart; expected <= rangeEnd; expected++)
             {
                 assertTrue(String.format("Expected to see key %03d", expected), scanner.hasNext());
-                assertEquals(toKey(expected), new String(scanner.next().getKey().key.array()));
+                assertEquals(toKey(expected), new String(scanner.next().getKey().key().array()));
             }
         }
         assertFalse(scanner.hasNext());

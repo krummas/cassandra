@@ -22,7 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.security.MessageDigest;
 
-import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.io.sstable.ColumnStats;
 

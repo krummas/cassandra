@@ -19,9 +19,10 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.ObjectSizes;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 
 public class SimpleDenseCellName extends SimpleComposite implements CellName
 {
@@ -38,7 +39,7 @@ public class SimpleDenseCellName extends SimpleComposite implements CellName
         return 1;
     }
 
-    public ColumnIdentifier cql3ColumnName()
+    public ColumnIdentifier cql3ColumnName(CFMetaData metadata)
     {
         return null;
     }
@@ -66,15 +67,20 @@ public class SimpleDenseCellName extends SimpleComposite implements CellName
     }
 
     @Override
-    public long excessHeapSizeExcludingData()
+    public long unsharedHeapSizeExcludingData()
     {
         return EMPTY_SIZE + ObjectSizes.sizeOnHeapExcludingData(element);
+    }
+
+    public boolean equals(CellName that)
+    {
+        return super.equals(that);
     }
 
     // If cellnames were sharing some prefix components, this will break it, so
     // we might want to try to do better.
     @Override
-    public CellName copy(AbstractAllocator allocator)
+    public CellName copy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
     {
         return new SimpleDenseCellName(allocator.clone(element));
     }

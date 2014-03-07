@@ -25,6 +25,9 @@ import java.util.*;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
@@ -164,7 +167,7 @@ public class SSTableUtils
             for (String key : keys)
             {
                 ColumnFamily cf = ArrayBackedSortedColumns.factory.create(ksname, cfname);
-                cf.addColumn(new Cell(Util.cellname(key), ByteBufferUtil.bytes(key), 0));
+                cf.addColumn(new BufferCell(Util.cellname(key), ByteBufferUtil.bytes(key), 0));
                 map.put(key, cf);
             }
             return write(map);

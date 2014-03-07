@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 import org.apache.commons.lang3.StringUtils;
@@ -458,7 +460,7 @@ public class SecondaryIndexManager
             }
             else
             {
-                ((PerColumnSecondaryIndex) index).delete(key.key, cell, opGroup);
+                ((PerColumnSecondaryIndex) index).delete(key.key(), cell, opGroup);
             }
         }
     }
@@ -628,7 +630,7 @@ public class SecondaryIndexManager
                     OpOrder.Group opGroup = baseCfs.keyspace.writeOrder.start();
                     try
                     {
-                        ((PerColumnSecondaryIndex) index).delete(key.key, cell, opGroup);
+                        ((PerColumnSecondaryIndex) index).delete(key.key(), cell, opGroup);
                     }
                     finally
                     {
@@ -641,7 +643,7 @@ public class SecondaryIndexManager
         public void updateRowLevelIndexes()
         {
             for (SecondaryIndex index : rowLevelIndexMap.values())
-                ((PerRowSecondaryIndex) index).index(key.key, null);
+                ((PerRowSecondaryIndex) index).index(key.key(), null);
         }
     }
 
@@ -665,7 +667,7 @@ public class SecondaryIndexManager
 
             for (SecondaryIndex index : indexFor(cell.name()))
                 if (index instanceof PerColumnSecondaryIndex)
-                    ((PerColumnSecondaryIndex) index).insert(key.key, cell, opGroup);
+                    ((PerColumnSecondaryIndex) index).insert(key.key(), cell, opGroup);
         }
 
         public void update(Cell oldCell, Cell cell)
@@ -678,9 +680,9 @@ public class SecondaryIndexManager
                 if (index instanceof PerColumnSecondaryIndex)
                 {
                     if (!cell.isMarkedForDelete(System.currentTimeMillis()))
-                        ((PerColumnSecondaryIndex) index).update(key.key, oldCell, cell, opGroup);
+                        ((PerColumnSecondaryIndex) index).update(key.key(), oldCell, cell, opGroup);
                     else
-                        ((PerColumnSecondaryIndex) index).delete(key.key, oldCell, opGroup);
+                        ((PerColumnSecondaryIndex) index).delete(key.key(), oldCell, opGroup);
                 }
             }
         }
@@ -692,13 +694,13 @@ public class SecondaryIndexManager
 
             for (SecondaryIndex index : indexFor(cell.name()))
                 if (index instanceof PerColumnSecondaryIndex)
-                   ((PerColumnSecondaryIndex) index).delete(key.key, cell, opGroup);
+                   ((PerColumnSecondaryIndex) index).delete(key.key(), cell, opGroup);
         }
 
         public void updateRowLevelIndexes()
         {
             for (SecondaryIndex index : rowLevelIndexMap.values())
-                ((PerRowSecondaryIndex) index).index(key.key, cf);
+                ((PerRowSecondaryIndex) index).index(key.key(), cf);
         }
     }
 }

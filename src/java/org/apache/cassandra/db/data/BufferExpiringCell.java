@@ -15,18 +15,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.db;
+package org.apache.cassandra.db.data;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.db.ColumnSerializer;
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
-import org.apache.cassandra.io.util.DataOutputBuffer;
+import org.apache.cassandra.db.composites.CellNames;
 import org.apache.cassandra.serializers.MarshalException;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.ObjectSizes;
+import org.apache.cassandra.utils.concurrent.OpOrder;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 
 /**
  * Alternative to Cell that have an expiring time.
@@ -38,19 +42,20 @@ import org.apache.cassandra.utils.memory.AbstractAllocator;
  * we can't mix it with the timestamp field, which is client-supplied and whose resolution we
  * can't assume anything about.)
  */
-public class ExpiringCell extends Cell
+public class BufferExpiringCell extends BufferCell implements ExpiringCell
 {
     public static final int MAX_TTL = 20 * 365 * 24 * 60 * 60; // 20 years in seconds
+    private static final long EMPTY_SIZE = ObjectSizes.measure(new BufferExpiringCell(CellNames.simpleDense(ByteBuffer.allocate(1)), ByteBufferUtil.EMPTY_BYTE_BUFFER, 1, 1));
 
     private final int localExpirationTime;
     private final int timeToLive;
 
-    public ExpiringCell(CellName name, ByteBuffer value, long timestamp, int timeToLive)
+    public BufferExpiringCell(CellName name, ByteBuffer value, long timestamp, int timeToLive)
     {
       this(name, value, timestamp, timeToLive, (int) (System.currentTimeMillis() / 1000) + timeToLive);
     }
 
-    public ExpiringCell(CellName name, ByteBuffer value, long timestamp, int timeToLive, int localExpirationTime)
+    public BufferExpiringCell(CellName name, ByteBuffer value, long timestamp, int timeToLive, int localExpirationTime)
     {
         super(name, value, timestamp);
         assert timeToLive > 0 : timeToLive;
@@ -63,66 +68,17 @@ public class ExpiringCell extends Cell
     public static Cell create(CellName name, ByteBuffer value, long timestamp, int timeToLive, int localExpirationTime, int expireBefore, ColumnSerializer.Flag flag)
     {
         if (localExpirationTime >= expireBefore || flag == ColumnSerializer.Flag.PRESERVE_SIZE)
-            return new ExpiringCell(name, value, timestamp, timeToLive, localExpirationTime);
+            return new BufferExpiringCell(name, value, timestamp, timeToLive, localExpirationTime);
         // The column is now expired, we can safely return a simple tombstone. Note that
         // as long as the expiring column and the tombstone put together live longer than GC grace seconds,
         // we'll fulfil our responsibility to repair.  See discussion at
         // http://cassandra-user-incubator-apache-org.3065146.n2.nabble.com/repair-compaction-and-tombstone-rows-td7583481.html
-        return new DeletedCell(name, localExpirationTime - timeToLive, timestamp);
+        return new BufferDeletedCell(name, localExpirationTime - timeToLive, timestamp);
     }
 
     public int getTimeToLive()
     {
         return timeToLive;
-    }
-
-    @Override
-    public Cell withUpdatedName(CellName newName)
-    {
-        return new ExpiringCell(newName, value, timestamp, timeToLive, localExpirationTime);
-    }
-
-    @Override
-    public Cell withUpdatedTimestamp(long newTimestamp)
-    {
-        return new ExpiringCell(name, value, newTimestamp, timeToLive, localExpirationTime);
-    }
-
-    @Override
-    public int dataSize()
-    {
-        return super.dataSize() + TypeSizes.NATIVE.sizeof(localExpirationTime) + TypeSizes.NATIVE.sizeof(timeToLive);
-    }
-
-    @Override
-    public int serializedSize(CellNameType type, TypeSizes typeSizes)
-    {
-        /*
-         * An expired column adds to a Cell :
-         *    4 bytes for the localExpirationTime
-         *  + 4 bytes for the timeToLive
-        */
-        return super.serializedSize(type, typeSizes) + typeSizes.sizeof(localExpirationTime) + typeSizes.sizeof(timeToLive);
-    }
-
-    @Override
-    public void updateDigest(MessageDigest digest)
-    {
-        digest.update(name.toByteBuffer().duplicate());
-        digest.update(value.duplicate());
-
-        DataOutputBuffer buffer = new DataOutputBuffer();
-        try
-        {
-            buffer.writeLong(timestamp);
-            buffer.writeByte(serializationFlags());
-            buffer.writeInt(timeToLive);
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
-        digest.update(buffer.getData(), 0, buffer.getLength());
     }
 
     @Override
@@ -132,60 +88,78 @@ public class ExpiringCell extends Cell
     }
 
     @Override
-    public Cell localCopy(ColumnFamilyStore cfs, AbstractAllocator allocator)
+    public Cell withUpdatedName(CellName newName)
     {
-        return new ExpiringCell(name.copy(allocator), allocator.clone(value), timestamp, timeToLive, localExpirationTime);
+        return new BufferExpiringCell(newName, value(), timestamp(), timeToLive, localExpirationTime);
+    }
+    @Override
+    public Cell withUpdatedTimestamp(long newTimestamp)
+    {
+        return new BufferExpiringCell(name(), value(), newTimestamp, timeToLive, localExpirationTime);
+    }
+    public long unsharedHeapSizeExcludingData()
+    {
+        return EMPTY_SIZE + name().unsharedHeapSizeExcludingData() + ObjectSizes.sizeOnHeapExcludingData(value());
     }
 
+    @Override
+    public int cellDataSize()
+    {
+        return ExpiringCell.Impl.cellDataSize(this);
+    }
+    @Override
+    public int serializedSize(CellNameType type, TypeSizes typeSizes)
+    {
+        return ExpiringCell.Impl.serializedSize(this, type, typeSizes);
+    }
+    @Override
+    public void updateDigest(MessageDigest digest)
+    {
+        ExpiringCell.Impl.updateDigest(this, digest);
+    }
+    @Override
+    public ExpiringCell localCopy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
+    {
+        return ExpiringCell.Impl.localCopy(this, cfMetaData, allocator);
+    }
+    @Override
+    public ExpiringCell localCopy(CFMetaData cfMetaData, DataAllocator allocator, OpOrder.Group writeOp)
+    {
+        return allocator.clone(this, cfMetaData, writeOp);
+    }
     @Override
     public String getString(CellNameType comparator)
     {
-        return String.format("%s!%d", super.getString(comparator), timeToLive);
+        return ExpiringCell.Impl.getString(this, comparator);
     }
-
     @Override
     public boolean isMarkedForDelete(long now)
     {
-        return (int) (now / 1000) >= getLocalDeletionTime();
+        return ExpiringCell.Impl.isMarkedForDelete(this, now);
     }
-
     @Override
     public long getMarkedForDeleteAt()
     {
-        return timestamp;
+        return ExpiringCell.Impl.getMarkedForDeleteAt(this);
     }
-
     @Override
     public int serializationFlags()
     {
-        return ColumnSerializer.EXPIRATION_MASK;
+        return ExpiringCell.Impl.serializationFlags();
     }
-
     @Override
     public void validateFields(CFMetaData metadata) throws MarshalException
     {
-        super.validateFields(metadata);
-        if (timeToLive <= 0)
-            throw new MarshalException("A column TTL should be > 0");
-        if (localExpirationTime < 0)
-            throw new MarshalException("The local expiration time should not be negative");
+        ExpiringCell.Impl.validateFields(this, metadata);
     }
-
     @Override
-    public boolean equals(Object o)
+    public boolean equals(Object that)
     {
-        // super.equals() returns false if o is not a CounterCell
-        return super.equals(o)
-            && localExpirationTime == ((ExpiringCell)o).localExpirationTime
-            && timeToLive == ((ExpiringCell)o).timeToLive;
+        return ExpiringCell.Impl.equals(this, that);
     }
-
     @Override
     public int hashCode()
     {
-        int result = super.hashCode();
-        result = 31 * result + localExpirationTime;
-        result = 31 * result + timeToLive;
-        return result;
+        throw new UnsupportedOperationException();
     }
 }

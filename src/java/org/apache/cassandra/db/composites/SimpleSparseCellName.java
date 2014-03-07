@@ -19,10 +19,11 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.ObjectSizes;
-import org.apache.cassandra.utils.memory.PoolAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferPool;
 
 public class SimpleSparseCellName extends AbstractComposite implements CellName
 {
@@ -62,12 +63,18 @@ public class SimpleSparseCellName extends AbstractComposite implements CellName
         return columnName.bytes;
     }
 
+    @Override
+    public int dataSize()
+    {
+        return columnName.bytes.remaining();
+    }
+
     public int clusteringSize()
     {
         return 0;
     }
 
-    public ColumnIdentifier cql3ColumnName()
+    public ColumnIdentifier cql3ColumnName(CFMetaData metadata)
     {
         return columnName;
     }
@@ -87,9 +94,14 @@ public class SimpleSparseCellName extends AbstractComposite implements CellName
         return true;
     }
 
-    public long excessHeapSizeExcludingData()
+    public long unsharedHeapSizeExcludingData()
     {
-        return EMPTY_SIZE + columnName.excessHeapSizeExcludingData();
+        return EMPTY_SIZE + columnName.unsharedHeapSizeExcludingData();
+    }
+
+    public boolean equals(CellName that)
+    {
+        return super.equals(that);
     }
 
     public long unsharedHeapSize()
@@ -97,12 +109,12 @@ public class SimpleSparseCellName extends AbstractComposite implements CellName
         return EMPTY_SIZE + columnName.unsharedHeapSize();
     }
 
-    public CellName copy(AbstractAllocator allocator)
+    public CellName copy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
     {
         return new SimpleSparseCellName(columnName.clone(allocator));
     }
 
-    public void free(PoolAllocator<?> allocator)
+    public void free(ByteBufferPool.Allocator allocator)
     {
         allocator.free(columnName.bytes);
     }

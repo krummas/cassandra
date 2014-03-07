@@ -47,6 +47,8 @@ import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.Cell;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.Token;
@@ -135,9 +137,9 @@ public class BatchlogManager implements BatchlogManagerMBean
         ByteBuffer data = serializeMutations(mutations);
 
         ColumnFamily cf = ArrayBackedSortedColumns.factory.create(CFMetaData.BatchlogCf);
-        cf.addColumn(new Cell(cellName(""), ByteBufferUtil.EMPTY_BYTE_BUFFER, now));
-        cf.addColumn(new Cell(cellName("data"), data, now));
-        cf.addColumn(new Cell(cellName("written_at"), writtenAt, now));
+        cf.addColumn(new BufferCell(cellName(""), ByteBufferUtil.EMPTY_BYTE_BUFFER, now));
+        cf.addColumn(new BufferCell(cellName("data"), data, now));
+        cf.addColumn(new BufferCell(cellName("written_at"), writtenAt, now));
 
         return new Mutation(Keyspace.SYSTEM_KS, UUIDType.instance.decompose(uuid), cf);
     }

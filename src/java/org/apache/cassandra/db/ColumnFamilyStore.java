@@ -33,6 +33,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
+
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Striped;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -52,6 +53,11 @@ import org.apache.cassandra.db.compaction.*;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
+import org.apache.cassandra.db.data.BufferDecoratedKey;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DataAllocator;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.db.filter.ExtendedFilter;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
@@ -113,6 +119,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      * so anyone else who wants to make sure flush doesn't interfere should as well.
      */
     private final DataTracker data;
+
+    public final DataAllocator.DataGroup dataGroup;
 
     /* This is used to generate the next index for a SSTable */
     private final AtomicInteger fileIndexGenerator = new AtomicInteger(0);
@@ -273,6 +281,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         this.directories = directories;
         this.indexManager = new SecondaryIndexManager(this);
         this.metric = new ColumnFamilyMetrics(this);
+        this.dataGroup = Memtable.dataPool.newGroup(name, keyspace.writeOrder);
+
         fileIndexGenerator.set(generation);
         sampleLatencyNanos = DatabaseDescriptor.getReadRpcTimeout() / 2;
 
@@ -820,6 +830,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         logger.info("Enqueuing flush of {}", name);
         synchronized (data)
         {
+            logFlush();
             Flush flush = new Flush(false);
             flushExecutor.execute(flush);
             ListenableFutureTask<?> task = ListenableFutureTask.create(flush.postFlush, null);
@@ -827,6 +838,29 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             return task;
         }
     }
+
+    // print out size of all memtables we're enqueuing
+    private void logFlush()
+    {
+        // reclaiming includes that which we are GC-ing;
+        float onHeapRatio = 0;
+        long onHeapTotal = 0;
+        Memtable memtable = getDataTracker().getView().getCurrentMemtable();
+        onHeapRatio +=  memtable.getAllocator().onHeap().ownershipRatio();
+        onHeapTotal += memtable.getAllocator().onHeap().owns();
+
+        for (SecondaryIndex index : indexManager.getIndexes())
+        {
+            if (index.getAllocator() != null)
+            {
+                onHeapRatio += index.getAllocator().onHeap().ownershipRatio();
+                onHeapTotal += index.getAllocator().onHeap().owns();
+            }
+        }
+
+        logger.info("Enqueuing flush of {}: {}", name, String.format("%d (%.0f%%) on-heap", onHeapTotal, onHeapRatio * 100));
+    }
+
 
     public ListenableFuture<?> forceFlush()
     {
@@ -940,7 +974,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     /**
      * Should only be constructed/used from switchMemtable() or truncate(), with ownership of the DataTracker monitor.
-     * In the constructor the current memtable(s) are swapped, and a barrer on outstanding writes is issued;
+     * In the constructor the current memtable(s) are swapped, and a barrier on outstanding writes is issued;
      * when run by the flushWriter the barrier is waited on to ensure all outstanding writes have completed
      * before all memtables are immediately written, and the CL is either immediately marked clean or, if
      * there are custom secondary indexes, the post flush clean up is left to update those indexes and mark
@@ -1050,12 +1084,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 // find the total ownership ratio for the memtable and all SecondaryIndexes owned by this CF,
                 // both on- and off-heap, and select the largest of the two ratios to weight this CF
                 float onHeap = 0f;
-                onHeap += current.getAllocator().ownershipRatio();
+                onHeap += current.getAllocator().onHeap().ownershipRatio();
 
                 for (SecondaryIndex index : cfs.indexManager.getIndexes())
                 {
-                    if (index.getOnHeapAllocator() != null)
-                        onHeap += index.getOnHeapAllocator().ownershipRatio();
+                    if (index.getAllocator() != null)
+                        onHeap += index.getAllocator().onHeap().ownershipRatio();
                 }
 
                 if (onHeap > largestRatio)
@@ -1066,10 +1100,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             }
 
             if (largest != null)
-            {
                 largest.cfs.switchMemtableIfCurrent(largest);
-                logger.info("Reclaiming {} of {} retained memtable bytes", largest.getAllocator().reclaiming(), Memtable.memoryPool.used());
-            }
         }
     }
 
@@ -1170,7 +1201,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     // 2. if it has been re-added since then, this particular column was inserted before the last drop
     private static boolean isDroppedColumn(Cell c, CFMetaData meta)
     {
-        Long droppedAt = meta.getDroppedColumns().get(c.name().cql3ColumnName());
+        Long droppedAt = meta.getDroppedColumns().get(c.name().cql3ColumnName(meta));
         return droppedAt != null && c.timestamp() <= droppedAt;
     }
 
@@ -1811,7 +1842,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public List<String> getSSTablesForKey(String key)
     {
-        DecoratedKey dk = new DecoratedKey(partitioner.getToken(ByteBuffer.wrap(key.getBytes())), ByteBuffer.wrap(key.getBytes()));
+        DecoratedKey dk = new BufferDecoratedKey(partitioner.getToken(ByteBuffer.wrap(key.getBytes())), ByteBuffer.wrap(key.getBytes()));
         ViewFragment view = markReferenced(dk);
         try
         {
@@ -1846,7 +1877,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         for (RowCacheKey key : CacheService.instance.rowCache.getKeySet())
         {
             DecoratedKey dk = partitioner.decorateKey(ByteBuffer.wrap(key.key));
-            if (key.cfId == metadata.cfId && !Range.isInRanges(dk.token, ranges))
+            if (key.cfId == metadata.cfId && !Range.isInRanges(dk.token(), ranges))
                 invalidateCachedRow(dk);
         }
 
@@ -1855,7 +1886,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             for (CounterCacheKey key : CacheService.instance.counterCache.getKeySet())
             {
                 DecoratedKey dk = partitioner.decorateKey(ByteBuffer.wrap(key.partitionKey));
-                if (key.cfId == metadata.cfId && !Range.isInRanges(dk.token, ranges))
+                if (key.cfId == metadata.cfId && !Range.isInRanges(dk.token(), ranges))
                     CacheService.instance.counterCache.remove(key);
             }
         }
@@ -1905,7 +1936,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                         return computeNext();
 
                     if (logger.isTraceEnabled())
-                        logger.trace("scanned {}", metadata.getKeyValidator().getString(key.key));
+                        logger.trace("scanned {}", metadata.getKeyValidator().getString(key.key()));
 
                     return current;
                 }

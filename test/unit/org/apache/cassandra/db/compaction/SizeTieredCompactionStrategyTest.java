@@ -25,6 +25,7 @@ import org.junit.Test;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.metrics.RestorableMeter;
@@ -160,7 +161,7 @@ public class SizeTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(ksname, key.key);
+            Mutation rm = new Mutation(ksname, key.key());
             rm.add(cfname, Util.cellname("column"), value, 0);
             rm.apply();
             cfs.forceBlockingFlush();
@@ -204,7 +205,7 @@ public class SizeTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(ksname, key.key);
+            Mutation rm = new Mutation(ksname, key.key());
             rm.add(cfname, Util.cellname("column"), value, 0);
             rm.apply();
             cfs.forceBlockingFlush();

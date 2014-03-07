@@ -37,6 +37,7 @@ import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DefsTables;
 import org.apache.cassandra.db.SystemKeyspace;
+import org.apache.cassandra.db.data.DataAllocator;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSWriteError;
@@ -52,7 +53,10 @@ import org.apache.cassandra.scheduler.NoScheduler;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.memory.Pool;
+import org.apache.cassandra.utils.memory.HeapPool;
+import org.apache.cassandra.utils.memory.HeapSlabPool;
+
+import static org.apache.cassandra.db.data.BufferDataAllocator.BufferDataPool;
 
 public class DatabaseDescriptor
 {
@@ -93,8 +97,6 @@ public class DatabaseDescriptor
 
     private static String localDC;
     private static Comparator<InetAddress> localComparator;
-
-    private static Class<? extends Pool> memtablePool;
 
     static
     {
@@ -485,11 +487,6 @@ public class DatabaseDescriptor
             //operate under the assumption that server_encryption_options is not set in yaml rather than both
             conf.server_encryption_options = conf.encryption_options;
         }
-
-        String allocatorPoolClass = conf.memtable_allocator;
-        if (!allocatorPoolClass.contains("."))
-            allocatorPoolClass = "org.apache.cassandra.utils.memory." + allocatorPoolClass;
-        memtablePool = FBUtilities.classForName(allocatorPoolClass, "allocator pool");
 
         // Hardcoded system keyspaces
         List<KSMetaData> systemKeyspaces = Arrays.asList(KSMetaData.systemKeyspace());
@@ -1421,17 +1418,17 @@ public class DatabaseDescriptor
         return conf.preheat_kernel_page_cache;
     }
 
-    public static Pool getMemtableAllocatorPool()
+    public static DataAllocator.DataPool getMemtableAllocatorPool()
     {
-        try
+        long heapLimit = ((long) conf.memtable_total_space_in_mb) << 20;
+        switch (conf.memtable_allocator)
         {
-            return memtablePool
-                   .getConstructor(long.class, float.class, Runnable.class)
-                   .newInstance(((long) conf.memtable_total_space_in_mb) << 20, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily());
-        }
-        catch (Exception e)
-        {
-            throw new AssertionError(e);
+            case heap:
+                return new BufferDataPool(new HeapPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
+            case heap_slab:
+                return new BufferDataPool(new HeapSlabPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
+            default:
+                throw new AssertionError();
         }
     }
 

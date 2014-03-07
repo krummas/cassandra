@@ -29,6 +29,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.utils.FBUtilities;
 import static org.junit.Assert.assertEquals;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -49,8 +50,8 @@ public class RowIterationTest extends SchemaLoader
         Set<DecoratedKey> inserted = new HashSet<DecoratedKey>();
         for (int i = 0; i < ROWS_PER_SSTABLE; i++) {
             DecoratedKey key = Util.dk(String.valueOf(i));
-            Mutation rm = new Mutation(KEYSPACE1, key.key);
-            rm.add("Super3", CellNames.compositeDense(ByteBufferUtil.bytes("sc"), ByteBufferUtil.bytes(String.valueOf(i))), ByteBuffer.wrap(new byte[ROWS_PER_SSTABLE * 10 - i * 2]), i);
+            Mutation rm = new Mutation(KEYSPACE1, key.key());
+            rm.add("Super3", CellNames.compoundDense(ByteBufferUtil.bytes("sc"), ByteBufferUtil.bytes(String.valueOf(i))), ByteBuffer.wrap(new byte[ROWS_PER_SSTABLE * 10 - i * 2]), i);
             rm.apply();
             inserted.add(key);
         }
@@ -67,14 +68,14 @@ public class RowIterationTest extends SchemaLoader
         DecoratedKey key = Util.dk("key");
 
         // Delete row in first sstable
-        Mutation rm = new Mutation(KEYSPACE1, key.key);
+        Mutation rm = new Mutation(KEYSPACE1, key.key());
         rm.delete(CF_NAME, 0);
         rm.add(CF_NAME, Util.cellname("c"), ByteBufferUtil.bytes("values"), 0L);
         rm.apply();
         store.forceBlockingFlush();
 
         // Delete row in second sstable with higher timestamp
-        rm = new Mutation(KEYSPACE1, key.key);
+        rm = new Mutation(KEYSPACE1, key.key());
         rm.delete(CF_NAME, 1);
         rm.add(CF_NAME, Util.cellname("c"), ByteBufferUtil.bytes("values"), 1L);
         DeletionInfo delInfo2 = rm.getColumnFamilies().iterator().next().deletionInfo();
@@ -95,7 +96,7 @@ public class RowIterationTest extends SchemaLoader
         DecoratedKey key = Util.dk("key");
 
         // Delete a row in first sstable
-        Mutation rm = new Mutation(KEYSPACE1, key.key);
+        Mutation rm = new Mutation(KEYSPACE1, key.key());
         rm.delete(CF_NAME, 0);
         rm.apply();
         store.forceBlockingFlush();

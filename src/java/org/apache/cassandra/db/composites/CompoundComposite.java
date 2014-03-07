@@ -19,9 +19,10 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.utils.ObjectSizes;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
-import org.apache.cassandra.utils.memory.PoolAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferPool;
 
 /**
  * A "truly-composite" Composite.
@@ -63,7 +64,7 @@ public class CompoundComposite extends AbstractComposite
         return isStatic;
     }
 
-    protected ByteBuffer[] elementsCopy(AbstractAllocator allocator)
+    protected ByteBuffer[] elementsCopy(ByteBufferAllocator allocator)
     {
         ByteBuffer[] elementsCopy = new ByteBuffer[size];
         for (int i = 0; i < size; i++)
@@ -76,18 +77,18 @@ public class CompoundComposite extends AbstractComposite
         return EMPTY_SIZE + ObjectSizes.sizeOnHeapOf(elements);
     }
 
-    public long excessHeapSizeExcludingData()
+    public long unsharedHeapSizeExcludingData()
     {
         return EMPTY_SIZE + ObjectSizes.sizeOnHeapExcludingData(elements);
     }
 
-    public Composite copy(AbstractAllocator allocator)
+    public Composite copy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
     {
         return new CompoundComposite(elementsCopy(allocator), size, isStatic);
     }
 
     @Override
-    public void free(PoolAllocator<?> allocator)
+    public void free(ByteBufferPool.Allocator allocator)
     {
         for (ByteBuffer element : elements)
             allocator.free(element);

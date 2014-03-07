@@ -15,19 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.db;
+package org.apache.cassandra.db.data;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-public abstract class RowPosition implements RingPosition<RowPosition>
+public interface RowPosition extends RingPosition<RowPosition>
 {
     public static enum Kind
     {
@@ -45,18 +46,16 @@ public abstract class RowPosition implements RingPosition<RowPosition>
 
     public static final RowPositionSerializer serializer = new RowPositionSerializer();
 
-    public static RowPosition forKey(ByteBuffer key, IPartitioner p)
+    public static final class Impl
     {
-        return key == null || key.remaining() == 0 ? p.getMinimumToken().minKeyBound() : p.decorateKey(key);
+        public static RowPosition forKey(ByteBuffer key, IPartitioner p)
+        {
+            return key == null || key.remaining() == 0 ? p.getMinimumToken().minKeyBound() : p.decorateKey(key);
+        }
     }
 
-    public abstract Token getToken();
-    public abstract Kind kind();
-
-    public boolean isMinimum()
-    {
-        return isMinimum(StorageService.getPartitioner());
-    }
+    public Kind kind();
+    public boolean isMinimum();
 
     public static class RowPositionSerializer implements ISerializer<RowPosition>
     {
@@ -76,9 +75,9 @@ public abstract class RowPosition implements RingPosition<RowPosition>
             Kind kind = pos.kind();
             out.writeByte(kind.ordinal());
             if (kind == Kind.ROW_KEY)
-                ByteBufferUtil.writeWithShortLength(((DecoratedKey)pos).key, out);
+                ByteBufferUtil.writeWithShortLength(((DecoratedKey)pos).key(), out);
             else
-                Token.serializer.serialize(pos.getToken(), out);
+                Token.serializer.serialize(pos.token(), out);
         }
 
         public RowPosition deserialize(DataInput in) throws IOException
@@ -102,12 +101,12 @@ public abstract class RowPosition implements RingPosition<RowPosition>
             int size = 1; // 1 byte for enum
             if (kind == Kind.ROW_KEY)
             {
-                int keySize = ((DecoratedKey)pos).key.remaining();
+                int keySize = ((DecoratedKey)pos).key().remaining();
                 size += typeSizes.sizeof((short) keySize) + keySize;
             }
             else
             {
-                size += Token.serializer.serializedSize(pos.getToken(), typeSizes);
+                size += Token.serializer.serializedSize(pos.token(), typeSizes);
             }
             return size;
         }

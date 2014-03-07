@@ -17,46 +17,28 @@
  */
 package org.apache.cassandra.utils.memory;
 
-import org.apache.cassandra.utils.ByteBufferUtil;
-
 import java.nio.ByteBuffer;
 
-public abstract class AbstractAllocator
+import org.apache.cassandra.utils.ByteBufferUtil;
+
+public interface ByteBufferAllocator
 {
-    /**
-     * Allocate a slice of the given length.
-     */
-    public ByteBuffer clone(ByteBuffer buffer)
+    ByteBuffer clone(ByteBuffer buffer);
+    ByteBuffer allocate(int size);
+
+    public static abstract class AbstractAllocator implements ByteBufferAllocator
     {
-        assert buffer != null;
-        if (buffer.remaining() == 0)
-            return ByteBufferUtil.EMPTY_BYTE_BUFFER;
-        ByteBuffer cloned = allocate(buffer.remaining());
+        public ByteBuffer clone(ByteBuffer buffer)
+        {
+            assert buffer != null;
+            if (buffer.remaining() == 0)
+                return ByteBufferUtil.EMPTY_BYTE_BUFFER;
+            ByteBuffer cloned = allocate(buffer.remaining());
 
-        cloned.mark();
-        cloned.put(buffer.duplicate());
-        cloned.reset();
-        return cloned;
-    }
-
-    public abstract ByteBuffer allocate(int size);
-
-    //
-    // only really applicable to Pooled subclasses, but we provide default implementations here
-    //
-
-    public long owns()
-    {
-        return 0;
-    }
-
-    public float ownershipRatio()
-    {
-        return 0;
-    }
-
-    public long reclaiming()
-    {
-        return 0;
+            cloned.mark();
+            cloned.put(buffer.duplicate());
+            cloned.reset();
+            return cloned;
+        }
     }
 }

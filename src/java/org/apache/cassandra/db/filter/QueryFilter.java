@@ -24,6 +24,8 @@ import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.Composite;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.utils.memory.HeapAllocator;
@@ -107,7 +109,7 @@ public class QueryFilter
             public void reduce(Cell next)
             {
                 assert current == null || fcomp.compare(current, next) == 0;
-                current = current == null ? next : current.reconcile(next, HeapAllocator.instance);
+                current = current == null ? next : current.reconcile(next);
             }
 
             protected Cell getReduced()

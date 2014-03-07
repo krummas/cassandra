@@ -30,6 +30,11 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.CellNameType;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.CounterCell;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.DeletedCell;
+import org.apache.cassandra.db.data.ExpiringCell;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -227,7 +232,7 @@ public class SSTableExport
     {
         out.print("{");
         writeKey(out, "key");
-        writeJSON(out, bytesToHex(key.key));
+        writeJSON(out, bytesToHex(key.key()));
         out.print(",");
 
         writeMeta(out, deletionInfo);
@@ -262,7 +267,7 @@ public class SSTableExport
                 throw new IOException("Key out of order! " + lastKey + " > " + key);
             lastKey = key;
 
-            outs.println(bytesToHex(key.key));
+            outs.println(bytesToHex(key.key()));
             checkStream(outs); // flushes
         }
         iter.close();
@@ -350,7 +355,7 @@ public class SSTableExport
         {
             row = (SSTableIdentityIterator) scanner.next();
 
-            String currentKey = bytesToHex(row.getKey().key);
+            String currentKey = bytesToHex(row.getKey().key());
 
             if (excludeSet.contains(currentKey))
                 continue;

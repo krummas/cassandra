@@ -26,8 +26,8 @@ import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.util.Memory;
 import org.apache.cassandra.io.util.MemoryInputStream;
@@ -90,7 +90,7 @@ public class IndexSummary implements Closeable
         while (low <= high)
         {
             mid = (low + high) >> 1;
-            result = -DecoratedKey.compareTo(partitioner, ByteBuffer.wrap(getKey(mid)), key);
+            result = -DecoratedKey.Impl.compareTo(partitioner, ByteBuffer.wrap(getKey(mid)), key);
             if (result > 0)
             {
                 low = mid + 1;

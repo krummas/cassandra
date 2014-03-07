@@ -27,6 +27,7 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.CellNames;
+import org.apache.cassandra.db.data.Cell;
 import org.apache.cassandra.db.filter.ColumnCounter;
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -105,7 +106,7 @@ public class AbstractQueryPagerTest
 
     private void assertRow(Row row, String name, int... values)
     {
-        assertEquals(row.key.key, ByteBufferUtil.bytes(name));
+        assertEquals(row.key.key(), ByteBufferUtil.bytes(name));
         assertEquals(values.length, row.cf.getColumnCount());
 
         int i = 0;

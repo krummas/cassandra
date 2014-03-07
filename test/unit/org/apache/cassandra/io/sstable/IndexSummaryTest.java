@@ -29,7 +29,7 @@ import com.google.common.collect.Lists;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.io.util.FileUtils;
@@ -49,7 +49,7 @@ public class IndexSummaryTest
     {
         Pair<List<DecoratedKey>, IndexSummary> random = generateRandomIndex(100, 1);
         for (int i = 0; i < 100; i++)
-            assertEquals(random.left.get(i).key, ByteBuffer.wrap(random.right.getKey(i)));
+            assertEquals(random.left.get(i).key(), ByteBuffer.wrap(random.right.getKey(i)));
     }
 
     @Test
@@ -164,7 +164,7 @@ public class IndexSummaryTest
 
         // sanity check on the original index summary
         for (int i = 0; i < ORIGINAL_NUM_ENTRIES; i++)
-            assertEquals(keys.get(i * INDEX_INTERVAL).key, ByteBuffer.wrap(original.getKey(i)));
+            assertEquals(keys.get(i * INDEX_INTERVAL).key(), ByteBuffer.wrap(original.getKey(i)));
 
         List<Integer> samplePattern = Downsampling.getSamplingPattern(BASE_SAMPLING_LEVEL);
 
@@ -181,7 +181,7 @@ public class IndexSummaryTest
             {
                 if (!shouldSkip(i, skipStartPoints))
                 {
-                    assertEquals(keys.get(i * INDEX_INTERVAL).key, ByteBuffer.wrap(downsampled.getKey(sampledCount)));
+                    assertEquals(keys.get(i * INDEX_INTERVAL).key(), ByteBuffer.wrap(downsampled.getKey(sampledCount)));
                     sampledCount++;
                 }
             }
@@ -202,7 +202,7 @@ public class IndexSummaryTest
             {
                 if (!shouldSkip(i, skipStartPoints))
                 {
-                    assertEquals(keys.get(i * INDEX_INTERVAL).key, ByteBuffer.wrap(downsampled.getKey(sampledCount)));
+                    assertEquals(keys.get(i * INDEX_INTERVAL).key(), ByteBuffer.wrap(downsampled.getKey(sampledCount)));
                     sampledCount++;
                 }
             }

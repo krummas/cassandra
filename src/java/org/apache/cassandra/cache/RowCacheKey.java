@@ -22,7 +22,7 @@ import java.util.Arrays;
 import java.util.UUID;
 
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.ObjectSizes;
@@ -37,7 +37,7 @@ public class RowCacheKey implements CacheKey, Comparable<RowCacheKey>
 
     public RowCacheKey(UUID cfId, DecoratedKey key)
     {
-        this(cfId, key.key);
+        this(cfId, key.key());
     }
 
     public RowCacheKey(UUID cfId, ByteBuffer key)

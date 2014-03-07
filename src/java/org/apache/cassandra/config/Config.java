@@ -203,7 +203,7 @@ public class Config
 
     public boolean inter_dc_tcp_nodelay = true;
 
-    public String memtable_allocator = "HeapSlabPool";
+    public MemtableAllocator memtable_allocator = MemtableAllocator.heap_slab;
 
     private static boolean outboundBindAny = false;
 
@@ -284,6 +284,12 @@ public class Config
         mmap,
         mmap_index_only,
         standard,
+    }
+
+    public static enum MemtableAllocator
+    {
+        heap,
+        heap_slab
     }
 
     public static enum DiskFailurePolicy

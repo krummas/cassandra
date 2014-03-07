@@ -15,27 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.db;
+package org.apache.cassandra.db.data;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.composites.CellName;
-import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.serializers.MarshalException;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 
-public class DeletedCell extends Cell
+public class BufferDeletedCell extends BufferCell implements DeletedCell
 {
-    public DeletedCell(CellName name, int localDeletionTime, long timestamp)
+    public BufferDeletedCell(CellName name, int localDeletionTime, long timestamp)
     {
         this(name, ByteBufferUtil.bytes(localDeletionTime), timestamp);
     }
 
-    public DeletedCell(CellName name, ByteBuffer value, long timestamp)
+    public BufferDeletedCell(CellName name, ByteBuffer value, long timestamp)
     {
         super(name, value, timestamp);
     }
@@ -43,78 +42,62 @@ public class DeletedCell extends Cell
     @Override
     public Cell withUpdatedName(CellName newName)
     {
-        return new DeletedCell(newName, value, timestamp);
+        return new BufferDeletedCell(newName, value(), timestamp());
     }
-
     @Override
     public Cell withUpdatedTimestamp(long newTimestamp)
     {
-        return new DeletedCell(name, value, newTimestamp);
+        return new BufferDeletedCell(name(), value(), newTimestamp);
     }
 
     @Override
     public boolean isMarkedForDelete(long now)
     {
-        return true;
+        return DeletedCell.Impl.isMarkedForDelete(now);
     }
-
     @Override
     public long getMarkedForDeleteAt()
     {
-        return timestamp;
+        return DeletedCell.Impl.getMarkedForDeleteAt(this);
     }
-
     @Override
     public void updateDigest(MessageDigest digest)
     {
-        digest.update(name.toByteBuffer().duplicate());
-
-        DataOutputBuffer buffer = new DataOutputBuffer();
-        try
-        {
-            buffer.writeLong(timestamp);
-            buffer.writeByte(serializationFlags());
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
-        digest.update(buffer.getData(), 0, buffer.getLength());
+        DeletedCell.Impl.updateDigest(this, digest);
     }
-
     @Override
     public int getLocalDeletionTime()
     {
-       return value.getInt(value.position());
+        return DeletedCell.Impl.getLocalDeletionTime(this);
     }
-
     @Override
-    public Cell reconcile(Cell cell, AbstractAllocator allocator)
+    public Cell reconcile(Cell cell)
     {
-        if (cell instanceof DeletedCell)
-            return super.reconcile(cell, allocator);
-        return cell.reconcile(this, allocator);
+        return DeletedCell.Impl.reconcile(this, cell);
     }
-
     @Override
-    public Cell localCopy(ColumnFamilyStore cfs, AbstractAllocator allocator)
+    public DeletedCell localCopy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
     {
-        return new DeletedCell(name.copy(allocator), allocator.clone(value), timestamp);
+        return DeletedCell.Impl.localCopy(this, cfMetaData, allocator);
     }
-
+    @Override
+    public DeletedCell localCopy(CFMetaData cfMetaData, DataAllocator allocator, OpOrder.Group writeOp)
+    {
+        return allocator.clone(this, cfMetaData, writeOp);
+    }
     @Override
     public int serializationFlags()
     {
-        return ColumnSerializer.DELETION_MASK;
+        return DeletedCell.Impl.serializationFlags();
     }
-
     @Override
     public void validateFields(CFMetaData metadata) throws MarshalException
     {
-        validateName(metadata);
-        if (value().remaining() != 4)
-            throw new MarshalException("A tombstone value should be 4 bytes long");
-        if (getLocalDeletionTime() < 0)
-            throw new MarshalException("The local deletion time should not be negative");
+        DeletedCell.Impl.validateFields(this, metadata);
+    }
+    @Override
+    public boolean equals(Object that)
+    {
+        return DeletedCell.Impl.equals(this, that);
     }
 }

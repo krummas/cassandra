@@ -25,7 +25,7 @@ import java.nio.ByteBuffer;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.db.TypeSizes;
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -107,7 +107,7 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
         }
     }
 
-    public Token<T> getToken()
+    public Token<T> token()
     {
         return this;
     }
@@ -173,7 +173,7 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
             return (R)maxKeyBound();
     }
 
-    public static class KeyBound extends RowPosition
+    public static class KeyBound implements RowPosition
     {
         private final Token token;
         public final boolean isMinimumBound;
@@ -184,7 +184,7 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
             this.isMinimumBound = isMinimumBound;
         }
 
-        public Token getToken()
+        public Token token()
         {
             return token;
         }
@@ -194,7 +194,7 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
             if (this == pos)
                 return 0;
 
-            int cmp = getToken().compareTo(pos.getToken());
+            int cmp = token().compareTo(pos.token());
             if (cmp != 0)
                 return cmp;
 
@@ -206,12 +206,17 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
 
         public boolean isMinimum(IPartitioner partitioner)
         {
-            return getToken().isMinimum(partitioner);
+            return token().isMinimum(partitioner);
         }
 
         public RowPosition.Kind kind()
         {
             return isMinimumBound ? RowPosition.Kind.MIN_BOUND : RowPosition.Kind.MAX_BOUND;
+        }
+
+        public boolean isMinimum()
+        {
+            return isMinimum(StorageService.getPartitioner());
         }
 
         @Override
@@ -229,13 +234,13 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
         @Override
         public int hashCode()
         {
-            return getToken().hashCode() + (isMinimumBound ? 0 : 1);
+            return token().hashCode() + (isMinimumBound ? 0 : 1);
         }
 
         @Override
         public String toString()
         {
-            return String.format("%s(%s)", isMinimumBound ? "min" : "max", getToken().toString());
+            return String.format("%s(%s)", isMinimumBound ? "min" : "max", token().toString());
         }
     }
 }

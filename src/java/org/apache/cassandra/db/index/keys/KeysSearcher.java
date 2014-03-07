@@ -32,6 +32,10 @@ import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.composites.Composites;
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.ExtendedFilter;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
@@ -80,8 +84,8 @@ public class KeysSearcher extends SecondaryIndexSearcher
          */
         final AbstractBounds<RowPosition> range = filter.dataRange.keyRange();
         CellNameType type = index.getIndexCfs().getComparator();
-        final Composite startKey = range.left instanceof DecoratedKey ? type.make(((DecoratedKey)range.left).key) : Composites.EMPTY;
-        final Composite endKey = range.right instanceof DecoratedKey ? type.make(((DecoratedKey)range.right).key) : Composites.EMPTY;
+        final Composite startKey = range.left instanceof DecoratedKey ? type.make(((DecoratedKey)range.left).key()) : Composites.EMPTY;
+        final Composite endKey = range.right instanceof DecoratedKey ? type.make(((DecoratedKey)range.right).key()) : Composites.EMPTY;
 
         final CellName primaryColumn = baseCfs.getComparator().cellFromByteBuffer(primary.column);
 
@@ -163,7 +167,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         }
                         if (!range.contains(dk))
                         {
-                            logger.trace("Skipping entry {} outside of assigned scan range", dk.token);
+                            logger.trace("Skipping entry {} outside of assigned scan range", dk.token());
                             continue;
                         }
 
@@ -183,14 +187,14 @@ public class KeysSearcher extends SecondaryIndexSearcher
                                 data.addAll(cf);
                         }
 
-                        if (((KeysIndex)index).isIndexEntryStale(indexKey.key, data, filter.timestamp))
+                        if (((KeysIndex)index).isIndexEntryStale(indexKey.key(), data, filter.timestamp))
                         {
                             // delete the index entry w/ its own timestamp
-                            Cell dummyCell = new Cell(primaryColumn, indexKey.key, cell.timestamp());
+                            Cell dummyCell = new BufferCell(primaryColumn, indexKey.key(), cell.timestamp());
                             OpOrder.Group opGroup = baseCfs.keyspace.writeOrder.start();
                             try
                             {
-                                ((PerColumnSecondaryIndex)index).delete(dk.key, dummyCell, opGroup);
+                                ((PerColumnSecondaryIndex)index).delete(dk.key(), dummyCell, opGroup);
                             }
                             finally
                             {

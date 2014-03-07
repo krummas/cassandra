@@ -25,6 +25,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertNull;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.QueryFilter;
 
 import static org.apache.cassandra.Util.getBytes;
@@ -46,14 +47,14 @@ public class RemoveSubCellTest extends SchemaLoader
         DecoratedKey dk = Util.dk("key1");
 
         // add data
-        rm = new Mutation("Keyspace1", dk.key);
+        rm = new Mutation("Keyspace1", dk.key());
         Util.addMutation(rm, "Super1", "SC1", 1, "asdf", 0);
         rm.apply();
         store.forceBlockingFlush();
 
-        CellName cname = CellNames.compositeDense(ByteBufferUtil.bytes("SC1"), getBytes(1L));
+        CellName cname = CellNames.compoundDense(ByteBufferUtil.bytes("SC1"), getBytes(1L));
         // remove
-        rm = new Mutation("Keyspace1", dk.key);
+        rm = new Mutation("Keyspace1", dk.key());
         rm.delete("Super1", cname, 1);
         rm.apply();
 
@@ -71,15 +72,15 @@ public class RemoveSubCellTest extends SchemaLoader
         DecoratedKey dk = Util.dk("key2");
 
         // add data
-        rm = new Mutation("Keyspace1", dk.key);
+        rm = new Mutation("Keyspace1", dk.key());
         Util.addMutation(rm, "Super1", "SC1", 1, "asdf", 0);
         rm.apply();
         store.forceBlockingFlush();
 
         // remove the SC
         ByteBuffer scName = ByteBufferUtil.bytes("SC1");
-        CellName cname = CellNames.compositeDense(scName, getBytes(1L));
-        rm = new Mutation("Keyspace1", dk.key);
+        CellName cname = CellNames.compoundDense(scName, getBytes(1L));
+        rm = new Mutation("Keyspace1", dk.key());
         rm.deleteRange("Super1", SuperColumns.startOf(scName), SuperColumns.endOf(scName), 1);
         rm.apply();
 
@@ -89,7 +90,7 @@ public class RemoveSubCellTest extends SchemaLoader
         Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS);
 
         // remove the column itself
-        rm = new Mutation("Keyspace1", dk.key);
+        rm = new Mutation("Keyspace1", dk.key());
         rm.delete("Super1", cname, 2);
         rm.apply();
 

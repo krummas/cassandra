@@ -25,6 +25,8 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.marshal.*;
 
@@ -95,6 +97,6 @@ public class CompositesIndexOnRegular extends CompositesIndex
             return true;
 
         ByteBuffer liveValue = liveCell.value();
-        return columnDef.type.compare(entry.indexValue.key, liveValue) != 0;
+        return columnDef.type.compare(entry.indexValue.key(), liveValue) != 0;
     }
 }

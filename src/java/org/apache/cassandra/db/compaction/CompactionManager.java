@@ -31,6 +31,8 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.RateLimiter;
 
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 import org.slf4j.Logger;
@@ -320,7 +322,7 @@ public class CompactionManager implements CompactionManagerMBean
             SSTableReader sstable = sstableIterator.next();
             for (Range<Token> r : Range.normalize(ranges))
             {
-                Range<Token> sstableRange = new Range<>(sstable.first.token, sstable.last.token, sstable.partitioner);
+                Range<Token> sstableRange = new Range<>(sstable.first.token(), sstable.last.token(), sstable.partitioner);
                 if (r.contains(sstableRange))
                 {
                     logger.info("SSTable {} fully contained in range {}, mutating repairedAt instead of anticompacting", sstable, r);
@@ -542,7 +544,7 @@ public class CompactionManager implements CompactionManagerMBean
         // see if there are any keys LTE the token for the start of the first range
         // (token range ownership is exclusive on the LHS.)
         Range<Token> firstRange = sortedRanges.get(0);
-        if (sstable.first.token.compareTo(firstRange.left) <= 0)
+        if (sstable.first.token().compareTo(firstRange.left) <= 0)
             return true;
 
         // then, iterate over all owned ranges and see if the next key beyond the end of the owned
@@ -571,7 +573,7 @@ public class CompactionManager implements CompactionManagerMBean
             }
 
             Range<Token> nextRange = sortedRanges.get(i + 1);
-            if (!nextRange.contains(firstBeyondRange.token))
+            if (!nextRange.contains(firstBeyondRange.token()))
             {
                 // we found a key in between the owned ranges
                 return true;
@@ -603,7 +605,7 @@ public class CompactionManager implements CompactionManagerMBean
 
         for (SSTableReader sstable : sstables)
         {
-            if (!hasIndexes && !new Bounds<Token>(sstable.first.token, sstable.last.token).intersects(ranges))
+            if (!hasIndexes && !new Bounds<Token>(sstable.first.token(), sstable.last.token()).intersects(ranges))
             {
                 cfs.replaceCompactedSSTables(Arrays.asList(sstable), Collections.<SSTableReader>emptyList(), OperationType.CLEANUP);
                 continue;
@@ -756,7 +758,7 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public SSTableIdentityIterator cleanup(SSTableIdentityIterator row)
             {
-                if (Range.isInRanges(row.getKey().token, ranges))
+                if (Range.isInRanges(row.getKey().token(), ranges))
                     return row;
 
                 cfs.invalidateCachedRow(row.getKey());
@@ -935,7 +937,7 @@ public class CompactionManager implements CompactionManagerMBean
                     {
                         AbstractCompactedRow row = iter.next();
                         // if current range from sstable is repaired, save it into the new repaired sstable
-                        if (Range.isInRanges(row.key.token, ranges))
+                        if (Range.isInRanges(row.key.token(), ranges))
                         {
                             repairedSSTableWriter.append(row);
                             repairedKeyCount++;

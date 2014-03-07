@@ -19,14 +19,15 @@ package org.apache.cassandra.db.composites;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
 import org.apache.cassandra.utils.ObjectSizes;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 
 public class CompoundDenseCellName extends CompoundComposite implements CellName
 {
 
-    private static final long HEAP_SIZE = ObjectSizes.measure(new CompoundDenseCellName(new ByteBuffer[0]));
+    private static final long EMPTY_SIZE = ObjectSizes.measure(new CompoundDenseCellName(new ByteBuffer[0]));
 
     // Not meant to be used directly, you should use the CellNameType method instead
     CompoundDenseCellName(ByteBuffer[] elements)
@@ -44,7 +45,7 @@ public class CompoundDenseCellName extends CompoundComposite implements CellName
         return size;
     }
 
-    public ColumnIdentifier cql3ColumnName()
+    public ColumnIdentifier cql3ColumnName(CFMetaData metadata)
     {
         return null;
     }
@@ -68,16 +69,21 @@ public class CompoundDenseCellName extends CompoundComposite implements CellName
     @Override
     public long unsharedHeapSize()
     {
-        return HEAP_SIZE + ObjectSizes.sizeOnHeapOf(elements);
+        return EMPTY_SIZE + ObjectSizes.sizeOnHeapOf(elements);
     }
 
     @Override
-    public long excessHeapSizeExcludingData()
+    public long unsharedHeapSizeExcludingData()
     {
-        return HEAP_SIZE + ObjectSizes.sizeOnHeapExcludingData(elements);
+        return EMPTY_SIZE + ObjectSizes.sizeOnHeapExcludingData(elements);
     }
 
-    public CellName copy(AbstractAllocator allocator)
+    public boolean equals(CellName that)
+    {
+        return super.equals(that);
+    }
+
+    public CellName copy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
     {
         return new CompoundDenseCellName(elementsCopy(allocator));
     }

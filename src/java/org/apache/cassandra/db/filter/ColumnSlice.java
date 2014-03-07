@@ -22,20 +22,22 @@ import java.nio.ByteBuffer;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NavigableMap;
 import java.util.NavigableSet;
 
 import com.google.common.collect.AbstractIterator;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.Cell;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
-import org.apache.cassandra.utils.memory.PoolAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferPool;
 
 public class ColumnSlice
 {
@@ -189,7 +191,7 @@ public class ColumnSlice
 
     private static Cell fakeCell(Composite name)
     {
-        return new Cell(new FakeCellName(name), ByteBufferUtil.EMPTY_BYTE_BUFFER);
+        return new BufferCell(new FakeCellName(name), ByteBufferUtil.EMPTY_BYTE_BUFFER);
     }
 
     /*
@@ -235,7 +237,7 @@ public class ColumnSlice
             throw new UnsupportedOperationException();
         }
 
-        public ColumnIdentifier cql3ColumnName()
+        public ColumnIdentifier cql3ColumnName(CFMetaData metadata)
         {
             throw new UnsupportedOperationException();
         }
@@ -255,19 +257,22 @@ public class ColumnSlice
             throw new UnsupportedOperationException();
         }
 
-        public CellName copy(AbstractAllocator allocator)
+        public CellName copy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
         {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public long excessHeapSizeExcludingData()
+        public long unsharedHeapSizeExcludingData()
         {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public void free(PoolAllocator<?> allocator)
+        public boolean equals(CellName that)
+        {
+            return super.equals(that);
+        }
+
+        public void free(ByteBufferPool.Allocator allocator)
         {
             throw new UnsupportedOperationException();
         }

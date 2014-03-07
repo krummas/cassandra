@@ -30,6 +30,8 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.cache.RowCacheKey;
 import org.apache.cassandra.db.composites.*;
 import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.dht.BytesToken;
 import org.apache.cassandra.locator.TokenMetadata;
@@ -226,7 +228,7 @@ public class RowCacheTest extends SchemaLoader
         int i = 0;
         for(Cell c : cachedCf)
         {
-            assertEquals(c.name, Util.cellname(i++));
+            assertEquals(c.name(), Util.cellname(i++));
         }
     }
 

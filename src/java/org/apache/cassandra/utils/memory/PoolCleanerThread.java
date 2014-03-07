@@ -18,10 +18,11 @@
  */
 package org.apache.cassandra.utils.memory;
 
+import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.WaitQueue;
 
 /**
- * A thread that reclaims memor from a Pool on demand.  The actual reclaiming work is delegated to the
+ * A thread that reclaims memory from a Pool on demand.  The actual reclaiming work is delegated to the
  * cleaner Runnable, e.g., FlushLargestColumnFamily
  */
 class PoolCleanerThread<P extends Pool> extends Thread
@@ -44,7 +45,7 @@ class PoolCleanerThread<P extends Pool> extends Thread
 
     boolean needsCleaning()
     {
-        return pool.needsCleaning();
+        return pool.onHeap.needsCleaning();
     }
 
     // should ONLY be called when we really think it already needs cleaning
@@ -67,7 +68,24 @@ class PoolCleanerThread<P extends Pool> extends Thread
                     signal.cancel();
             }
 
-            cleaner.run();
+            clean();
         }
     }
+
+    void clean()
+    {
+        cleaner.run();
+    }
+
+    public OpOrder.Barrier getGCBarrier()
+    {
+        return null;
+    }
+
+    // try to do some aggressive cleaning
+    void forceClean()
+    {
+
+    }
+
 }

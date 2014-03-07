@@ -21,8 +21,10 @@ package org.apache.cassandra.db;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DataAllocator;
 import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
@@ -571,11 +573,10 @@ public class RangeTombstoneTest extends SchemaLoader
         public void forceBlockingFlush(){}
 
         @Override
-        public AbstractAllocator getOnHeapAllocator()
+        public DataAllocator getAllocator()
         {
             return null;
         }
-
 
         public ColumnFamilyStore getIndexCfs(){ return null; }
 

@@ -34,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.metrics.RestorableMeter;
 
@@ -135,7 +137,7 @@ public class IndexSummaryManagerTest extends SchemaLoader
             for (int row = 0; row < numRows; row++)
             {
                 DecoratedKey key = Util.dk(String.format("%3d", row));
-                Mutation rm = new Mutation(ksname, key.key);
+                Mutation rm = new Mutation(ksname, key.key());
                 rm.add(cfname, Util.cellname("column"), value, 0);
                 rm.applyUnsafe();
             }
@@ -408,7 +410,7 @@ public class IndexSummaryManagerTest extends SchemaLoader
         for (int row = 0; row < numRows; row++)
         {
             DecoratedKey key = Util.dk(String.valueOf(row));
-            Mutation rm = new Mutation(ksname, key.key);
+            Mutation rm = new Mutation(ksname, key.key());
             rm.add(cfname, Util.cellname("column"), value, 0);
             rm.apply();
         }
@@ -468,7 +470,7 @@ public class IndexSummaryManagerTest extends SchemaLoader
             for (int row = 0; row < numRows; row++)
             {
                 DecoratedKey key = Util.dk(String.valueOf(row));
-                Mutation rm = new Mutation(ksname, key.key);
+                Mutation rm = new Mutation(ksname, key.key());
                 rm.add(cfname, Util.cellname("column"), value, 0);
                 rm.apply();
             }

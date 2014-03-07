@@ -22,8 +22,11 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Set;
 
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DataAllocator;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+
 import org.junit.Before;
 import org.junit.Test;
 
@@ -175,7 +178,7 @@ public class PerRowSecondaryIndexTest extends SchemaLoader
         }
 
         @Override
-        public AbstractAllocator getOnHeapAllocator()
+        public DataAllocator getAllocator()
         {
             return null;
         }

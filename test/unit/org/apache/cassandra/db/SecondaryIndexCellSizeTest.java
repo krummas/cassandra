@@ -21,8 +21,12 @@ package org.apache.cassandra.db;
 import java.nio.ByteBuffer;
 import java.util.Set;
 
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DataAllocator;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 import org.junit.Test;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -50,7 +54,7 @@ public class SecondaryIndexCellSizeTest
 
         // for read
         buffer.flip();
-        Cell cell = new Cell(CellNames.simpleDense(ByteBufferUtil.bytes("test")), buffer, 0);
+        Cell cell = new BufferCell(CellNames.simpleDense(ByteBufferUtil.bytes("test")), buffer, 0);
 
         SecondaryIndexCellSizeTest.MockRowIndex mockRowIndex = new SecondaryIndexCellSizeTest.MockRowIndex();
         SecondaryIndexCellSizeTest.MockColumnIndex mockColumnIndex = new SecondaryIndexCellSizeTest.MockColumnIndex();
@@ -92,7 +96,7 @@ public class SecondaryIndexCellSizeTest
         {
         }
 
-        public AbstractAllocator getOnHeapAllocator()
+        public DataAllocator getAllocator()
         {
             return null;
         }
@@ -172,7 +176,7 @@ public class SecondaryIndexCellSizeTest
         }
 
         @Override
-        public AbstractAllocator getOnHeapAllocator()
+        public DataAllocator getAllocator()
         {
             return null;
         }

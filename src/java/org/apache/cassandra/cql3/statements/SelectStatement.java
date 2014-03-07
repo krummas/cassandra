@@ -25,6 +25,9 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
+
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.RowPosition;
 import org.github.jamm.MemoryMeter;
 
 import org.apache.cassandra.auth.Permission;
@@ -38,7 +41,6 @@ import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.exceptions.*;
-import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageProxy;
@@ -391,8 +393,8 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
             ByteBuffer startKeyBytes = getKeyBound(Bound.START, variables);
             ByteBuffer finishKeyBytes = getKeyBound(Bound.END, variables);
 
-            RowPosition startKey = RowPosition.forKey(startKeyBytes, p);
-            RowPosition finishKey = RowPosition.forKey(finishKeyBytes, p);
+            RowPosition startKey = RowPosition.Impl.forKey(startKeyBytes, p);
+            RowPosition finishKey = RowPosition.Impl.forKey(finishKeyBytes, p);
 
             if (startKey.compareTo(finishKey) > 0 && !finishKey.isMinimum(p))
                 return null;
@@ -994,7 +996,7 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
             if (row.cf == null)
                 continue;
 
-            processColumnFamily(row.key.key, row.cf, variables, now, result);
+            processColumnFamily(row.key.key(), row.cf, variables, now, result);
         }
 
         ResultSet cqlRows = result.build();
@@ -1029,7 +1031,7 @@ public class SelectStatement implements CQLStatement, MeasurableForPreparedCache
         if (sliceRestriction != null)
             cells = applySliceRestriction(cells, variables);
 
-        CQL3Row.RowIterator iter = cfm.comparator.CQL3RowBuilder(now).group(cells);
+        CQL3Row.RowIterator iter = cfm.comparator.CQL3RowBuilder(cf.metadata(), now).group(cells);
 
         // If there is static columns but there is no non-static row, then provided the select was a full
         // partition selection (i.e. not a 2ndary index search and there was no condition on clustering columns)

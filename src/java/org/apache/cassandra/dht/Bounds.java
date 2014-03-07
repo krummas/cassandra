@@ -20,7 +20,7 @@ package org.apache.cassandra.dht;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Pair;
 
@@ -113,7 +113,7 @@ public class Bounds<T extends RingPosition> extends AbstractBounds<T>
 
     public AbstractBounds<Token> toTokenBounds()
     {
-        return (left instanceof RowPosition) ? new Bounds<Token>(((RowPosition)left).getToken(), ((RowPosition)right).getToken(), partitioner) : (Bounds<Token>)this;
+        return (left instanceof RowPosition) ? new Bounds<>(left.token(), right.token(), partitioner) : (Bounds<Token>)this;
     }
 
     public AbstractBounds<T> withNewRight(T newRight)

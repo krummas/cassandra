@@ -25,7 +25,7 @@ import org.apache.cassandra.cql3.statements.Selectable;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.ObjectSizes;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 
 /**
  * Represents an identifer for a CQL column definition.
@@ -89,7 +89,7 @@ public class ColumnIdentifier implements Selectable, Comparable<ColumnIdentifier
              + ObjectSizes.sizeOf(text);
     }
 
-    public long excessHeapSizeExcludingData()
+    public long unsharedHeapSizeExcludingData()
     {
         return EMPTY_SIZE
              + ObjectSizes.sizeOnHeapExcludingData(bytes)
@@ -104,7 +104,7 @@ public class ColumnIdentifier implements Selectable, Comparable<ColumnIdentifier
         return bytes.compareTo(other.bytes);
     }
 
-    public ColumnIdentifier clone(AbstractAllocator allocator)
+    public ColumnIdentifier clone(ByteBufferAllocator allocator)
     {
         return new ColumnIdentifier(allocator.clone(bytes), text);
     }

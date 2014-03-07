@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * interleaved throughout the heap, and the old generation gets progressively
  * more fragmented until a stop-the-world compacting collection occurs.
  */
-public class HeapSlabAllocator extends PoolAllocator
+public class HeapSlabAllocator extends ByteBufferPool.Allocator<HeapSlabPool.Group, HeapSlabPool>
 {
     private static final Logger logger = LoggerFactory.getLogger(HeapSlabAllocator.class);
 
@@ -57,9 +57,9 @@ public class HeapSlabAllocator extends PoolAllocator
     private final AtomicInteger regionCount = new AtomicInteger(0);
     private AtomicLong unslabbed = new AtomicLong(0);
 
-    HeapSlabAllocator(Pool pool)
+    HeapSlabAllocator(HeapSlabPool.Group group)
     {
-        super(pool);
+        super(group);
     }
 
     public ByteBuffer allocate(int size)
@@ -73,7 +73,7 @@ public class HeapSlabAllocator extends PoolAllocator
         if (size == 0)
             return ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
-        markAllocated(size, opGroup);
+        onHeap.allocate(size, opGroup);
         // satisfy large allocations directly from JVM since they don't cause fragmentation
         // as badly, and fill up our regions quickly
         if (size > MAX_CLONED_SIZE)

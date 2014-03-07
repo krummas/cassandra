@@ -25,6 +25,8 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.marshal.*;
 
@@ -86,7 +88,7 @@ public class CompositesIndexOnClusteringKey extends CompositesIndex
         for (int i = 0; i < columnDef.position(); i++)
             builder.add(indexEntry.name().get(i + 1));
 
-        builder.add(indexedValue.key);
+        builder.add(indexedValue.key());
 
         for (int i = columnDef.position() + 1; i < ckCount; i++)
             builder.add(indexEntry.name().get(i));

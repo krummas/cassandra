@@ -15,14 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.db;
+package org.apache.cassandra.db.data;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.db.ColumnSerializer;
 import org.apache.cassandra.db.composites.CellName;
-import org.apache.cassandra.utils.memory.AbstractAllocator;
+import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.db.composites.CellNameType;
+import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 
 /**
  * A counter update while it hasn't been applied yet by the leader replica.
@@ -31,7 +34,7 @@ import org.apache.cassandra.db.composites.CellNameType;
  * is transformed to a relevant CounterCell. This Cell is a temporary data
  * structure that should never be stored inside a memtable or an sstable.
  */
-public class CounterUpdateCell extends Cell
+public class CounterUpdateCell extends BufferCell
 {
     public CounterUpdateCell(CellName name, long value, long timestamp)
     {
@@ -56,7 +59,7 @@ public class CounterUpdateCell extends Cell
     }
 
     @Override
-    public Cell reconcile(Cell cell, AbstractAllocator allocator)
+    public Cell reconcile(Cell cell)
     {
         // The only time this could happen is if a batchAdd ships two
         // increment for the same cell. Hence we simply sums the delta.
@@ -78,7 +81,12 @@ public class CounterUpdateCell extends Cell
     }
 
     @Override
-    public Cell localCopy(ColumnFamilyStore cfs, AbstractAllocator allocator)
+    public Cell localCopy(CFMetaData cfMetaData, ByteBufferAllocator allocator)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    public Cell localCopy(CFMetaData cfMetaData, ByteBufferAllocator allocator, OpOrder.Group writeOp)
     {
         throw new UnsupportedOperationException();
     }
@@ -86,6 +94,6 @@ public class CounterUpdateCell extends Cell
     @Override
     public String getString(CellNameType comparator)
     {
-        return String.format("%s:%s@%d", comparator.getString(name), ByteBufferUtil.toLong(value), timestamp);
+        return String.format("%s:%s@%d", comparator.getString(name()), ByteBufferUtil.toLong(value()), timestamp());
     }
 }

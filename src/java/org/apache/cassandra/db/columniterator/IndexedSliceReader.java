@@ -28,6 +28,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.CellNames;
 import org.apache.cassandra.db.composites.Composite;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.IndexHelper;
@@ -186,7 +187,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         if (sstable.metadata.isSuper() && sstable.descriptor.version.hasSuperColumns)
         {
             CellNameType scComparator = SuperColumns.scNameType(comparator);
-            Composite scName = CellNames.compositeDense(SuperColumns.scName(name));
+            Composite scName = CellNames.compoundDense(SuperColumns.scName(name));
             return IndexHelper.indexFor(scName, indexes, scComparator, reversed, startIdx);
         }
         return IndexHelper.indexFor(name, indexes, comparator, reversed, startIdx);
@@ -196,7 +197,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     {
         // See indexFor above.
         return sstable.metadata.isSuper() && sstable.descriptor.version.hasSuperColumns
-             ? CellNames.compositeDense(SuperColumns.scName(name))
+             ? CellNames.compoundDense(SuperColumns.scName(name))
              : name;
     }
 

@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.marshal.CollectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -253,7 +255,7 @@ public abstract class ExtendedFilter
              * 2) We don't yet allow non-indexed range slice with filters in CQL3 (i.e. this will never be
              * called by CFS.filter() for composites).
              */
-            if (!needsExtraQuery(rowKey.key, data))
+            if (!needsExtraQuery(rowKey.key(), data))
                 return null;
 
             // Note: for counters we must be careful to not add a column that was already there (to avoid overcount). That is
@@ -275,7 +277,7 @@ public abstract class ExtendedFilter
                 return data;
 
             ColumnFamily pruned = data.cloneMeShallow();
-            IDiskAtomFilter filter = dataRange.columnFilter(rowKey.key);
+            IDiskAtomFilter filter = dataRange.columnFilter(rowKey.key());
             OnDiskAtomIterator iter = filter.getColumnFamilyIterator(rowKey, data);
             filter.collectReducedColumns(pruned, QueryFilter.gatherTombstones(pruned, iter), cfs.gcBefore(timestamp), timestamp);
             return pruned;
@@ -308,7 +310,7 @@ public abstract class ExtendedFilter
                         continue;
                     }
 
-                    dataValue = extractDataValue(def, rowKey.key, data, prefix);
+                    dataValue = extractDataValue(def, rowKey.key(), data, prefix);
                     validator = def.type;
                 }
 

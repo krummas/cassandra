@@ -28,6 +28,9 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.composites.Composites;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
@@ -90,8 +93,8 @@ public class CompositesSearcher extends SecondaryIndexSearcher
          * indexed row.
          */
         final AbstractBounds<RowPosition> range = filter.dataRange.keyRange();
-        ByteBuffer startKey = range.left instanceof DecoratedKey ? ((DecoratedKey)range.left).key : ByteBufferUtil.EMPTY_BYTE_BUFFER;
-        ByteBuffer endKey = range.right instanceof DecoratedKey ? ((DecoratedKey)range.right).key : ByteBufferUtil.EMPTY_BYTE_BUFFER;
+        ByteBuffer startKey = range.left instanceof DecoratedKey ? ((DecoratedKey)range.left).key() : ByteBufferUtil.EMPTY_BYTE_BUFFER;
+        ByteBuffer endKey = range.right instanceof DecoratedKey ? ((DecoratedKey)range.right).key() : ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
         final CellNameType baseComparator = baseCfs.getComparator();
         final CellNameType indexComparator = index.getIndexCfs().getComparator();
@@ -222,14 +225,14 @@ public class CompositesSearcher extends SecondaryIndexSearcher
                             }
                             else
                             {
-                                logger.debug("Skipping entry {} before assigned scan range", dk.token);
+                                logger.debug("Skipping entry {} before assigned scan range", dk.token());
                                 continue;
                             }
                         }
 
                         // Check if this entry cannot be a hit due to the original cell filter
                         Composite start = entry.indexedEntryPrefix;
-                        if (!filter.columnFilter(dk.key).maySelectPrefix(baseComparator, start))
+                        if (!filter.columnFilter(dk.key()).maySelectPrefix(baseComparator, start))
                             continue;
 
                         // If we've record the previous prefix, it means we're dealing with an index on the collection value. In

@@ -29,6 +29,7 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.cache.KeyCacheKey;
 import org.apache.cassandra.db.composites.*;
 import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -116,10 +117,10 @@ public class KeyCacheTest extends SchemaLoader
         Mutation rm;
 
         // inserts
-        rm = new Mutation(KEYSPACE1, key1.key);
+        rm = new Mutation(KEYSPACE1, key1.key());
         rm.add(COLUMN_FAMILY1, Util.cellname("1"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 0);
         rm.apply();
-        rm = new Mutation(KEYSPACE1, key2.key);
+        rm = new Mutation(KEYSPACE1, key2.key());
         rm.add(COLUMN_FAMILY1, Util.cellname("2"), ByteBufferUtil.EMPTY_BYTE_BUFFER, 0);
         rm.apply();
 

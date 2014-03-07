@@ -59,6 +59,7 @@ import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.commitlog.CommitLog;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.dht.*;
 import org.apache.cassandra.dht.Range;
@@ -1235,7 +1236,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 epDetails.add(details);
             }
 
-            TokenRange tr = new TokenRange(tf.toString(range.left.getToken()), tf.toString(range.right.getToken()), endpoints)
+            TokenRange tr = new TokenRange(tf.toString(range.left.token()), tf.toString(range.right.token()), endpoints)
                                     .setEndpoint_details(epDetails)
                                     .setRpc_endpoints(rpc_endpoints);
 
@@ -2864,7 +2865,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         List<Token> tokens = Lists.newArrayListWithExpectedSize(keys.size() + 2);
         tokens.add(range.left);
         for (DecoratedKey key : keys)
-            tokens.add(key.token);
+            tokens.add(key.token());
         tokens.add(range.right);
         return tokens;
     }
@@ -3845,9 +3846,9 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 keys.addAll(keySamples(keyspace.getColumnFamilyStores(), range));
         }
 
-        List<String> sampledKeys = new ArrayList<String>(keys.size());
+        List<String> sampledKeys = new ArrayList<>(keys.size());
         for (DecoratedKey key : keys)
-            sampledKeys.add(key.getToken().toString());
+            sampledKeys.add(key.token().toString());
         return sampledKeys;
     }
 

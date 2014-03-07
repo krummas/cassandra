@@ -20,15 +20,29 @@ package org.apache.cassandra.utils.memory;
 
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
-public class HeapSlabPool extends Pool
+public class HeapSlabPool extends ByteBufferPool
 {
     public HeapSlabPool(long maxOnHeapMemory, float cleanupThreshold, Runnable cleaner)
     {
         super(maxOnHeapMemory, cleanupThreshold, cleaner);
     }
 
-    public HeapSlabAllocator newAllocator(OpOrder writes)
+    public Group newAllocatorGroup(String name, OpOrder writes)
     {
-        return new HeapSlabAllocator(this);
+        return new Group(name, this, writes);
     }
+
+    public static final class Group extends ByteBufferPool.Group<HeapSlabPool>
+    {
+        public Group(String name, HeapSlabPool pool, OpOrder writes)
+        {
+            super(name, pool, writes);
+        }
+
+        public HeapSlabAllocator newAllocator()
+        {
+            return new HeapSlabAllocator(this);
+        }
+    }
+
 }

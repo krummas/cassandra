@@ -23,6 +23,10 @@ import org.junit.Test;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.cassandra.db.data.BufferDeletedCell;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.DeletedCell;
 import org.apache.cassandra.db.filter.QueryFilter;
 
 import org.apache.cassandra.SchemaLoader;
@@ -41,13 +45,13 @@ public class RemoveCellTest extends SchemaLoader
         DecoratedKey dk = Util.dk("key1");
 
         // add data
-        rm = new Mutation("Keyspace1", dk.key);
+        rm = new Mutation("Keyspace1", dk.key());
         rm.add("Standard1", Util.cellname("Column1"), ByteBufferUtil.bytes("asdf"), 0);
         rm.apply();
         store.forceBlockingFlush();
 
         // remove
-        rm = new Mutation("Keyspace1", dk.key);
+        rm = new Mutation("Keyspace1", dk.key());
         rm.delete("Standard1", Util.cellname("Column1"), 1);
         rm.apply();
 
@@ -62,7 +66,7 @@ public class RemoveCellTest extends SchemaLoader
 
     private static DeletedCell dc(String name, int ldt, long timestamp)
     {
-        return new DeletedCell(Util.cellname(name), ldt, timestamp);
+        return new BufferDeletedCell(Util.cellname(name), ldt, timestamp);
     }
 
     @Test

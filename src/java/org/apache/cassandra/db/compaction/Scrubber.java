@@ -24,6 +24,7 @@ import java.util.*;
 import com.google.common.base.Throwables;
 
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
@@ -133,7 +134,7 @@ public class Scrubber implements Closeable
                     if (sstable.descriptor.version.hasRowSizeAndColumnCount)
                     {
                         dataSize = dataFile.readLong();
-                        outputHandler.debug(String.format("row %s is %s bytes", ByteBufferUtil.bytesToHex(key.key), dataSize));
+                        outputHandler.debug(String.format("row %s is %s bytes", ByteBufferUtil.bytesToHex(key.key()), dataSize));
                     }
                 }
                 catch (Throwable th)
@@ -170,7 +171,7 @@ public class Scrubber implements Closeable
                 {
                     dataSize = dataSizeFromIndex;
                     // avoid an NPE if key is null
-                    String keyName = key == null ? "(unreadable key)" : ByteBufferUtil.bytesToHex(key.key);
+                    String keyName = key == null ? "(unreadable key)" : ByteBufferUtil.bytesToHex(key.key());
                     outputHandler.debug(String.format("row %s is %s bytes", keyName, dataSize));
                 }
                 else
@@ -202,7 +203,7 @@ public class Scrubber implements Closeable
                     else
                         goodRows++;
                     prevKey = key;
-                    if (!key.key.equals(currentIndexKey) || dataStart != dataStartFromIndex)
+                    if (!key.key().equals(currentIndexKey) || dataStart != dataStartFromIndex)
                         outputHandler.warn("Index file contained a different key or row size; using key from data file");
                 }
                 catch (Throwable th)
@@ -212,7 +213,7 @@ public class Scrubber implements Closeable
                     writer.resetAndTruncate();
 
                     if (currentIndexKey != null
-                        && (key == null || !key.key.equals(currentIndexKey) || dataStart != dataStartFromIndex || dataSize != dataSizeFromIndex))
+                        && (key == null || !key.key().equals(currentIndexKey) || dataStart != dataStartFromIndex || dataSize != dataSizeFromIndex))
                     {
                         outputHandler.output(String.format("Retrying from row index; data is %s bytes starting at %s",
                                                   dataSizeFromIndex, dataStartFromIndex));

@@ -22,7 +22,7 @@ import java.nio.ByteBuffer;
 import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -63,7 +63,7 @@ public class LocalByPartionerType<T extends Token> extends AbstractType<ByteBuff
     public int compare(ByteBuffer o1, ByteBuffer o2)
     {
         // o1 and o2 can be empty so we need to use RowPosition, not DecoratedKey
-        return RowPosition.forKey(o1, partitioner).compareTo(RowPosition.forKey(o2, partitioner));
+        return RowPosition.Impl.forKey(o1, partitioner).compareTo(RowPosition.Impl.forKey(o2, partitioner));
     }
 
     @Override

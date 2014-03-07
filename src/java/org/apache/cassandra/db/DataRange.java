@@ -25,6 +25,8 @@ import java.util.List;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.dht.*;
 
@@ -163,7 +165,7 @@ public class DataRange
 
         private boolean equals(RowPosition pos, ByteBuffer rowKey)
         {
-            return pos instanceof DecoratedKey && ((DecoratedKey)pos).key.equals(rowKey);
+            return pos instanceof DecoratedKey && ((DecoratedKey)pos).key().equals(rowKey);
         }
 
         @Override

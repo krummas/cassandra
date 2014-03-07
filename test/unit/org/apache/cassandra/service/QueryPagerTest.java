@@ -31,6 +31,8 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.dht.*;
@@ -100,7 +102,7 @@ public class QueryPagerTest extends SchemaLoader
     {
         StringBuilder sb = new StringBuilder();
         for (Row row : rows)
-            sb.append(string(row.key.key)).append(":").append(toString(row.cf)).append("\n");
+            sb.append(string(row.key.key())).append(":").append(toString(row.cf)).append("\n");
         return sb.toString();
     }
 
@@ -159,7 +161,7 @@ public class QueryPagerTest extends SchemaLoader
 
     private static void assertRow(Row r, String key, ByteBuffer... names)
     {
-        assertEquals(key, string(r.key.key));
+        assertEquals(key, string(r.key.key()));
         assertNotNull(r.cf);
         int i = 0;
         for (Cell c : r.cf)

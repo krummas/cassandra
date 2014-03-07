@@ -30,6 +30,7 @@ import com.google.common.collect.AbstractIterator;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
+
 import org.apache.cassandra.db.composites.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -45,6 +46,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.AbstractCompactionStrategy;
 import org.apache.cassandra.db.compaction.LeveledCompactionStrategy;
 import org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy;
+import org.apache.cassandra.db.data.Cell;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -1409,7 +1411,7 @@ public final class CFMetaData
      */
     public ColumnDefinition getColumnDefinition(CellName cellName)
     {
-        ColumnIdentifier id = cellName.cql3ColumnName();
+        ColumnIdentifier id = cellName.cql3ColumnName(this);
         return id == null
              ? getColumnDefinition(cellName.toByteBuffer())  // Means a dense layout, try the full column name
              : getColumnDefinition(id);
@@ -1482,7 +1484,7 @@ public final class CFMetaData
     {
         if (version.hasSuperColumns && cfType == ColumnFamilyType.Super)
             return SuperColumns.onDiskIterator(in, count, flag, expireBefore, comparator);
-        return Cell.onDiskIterator(in, count, flag, expireBefore, version, comparator);
+        return Cell.Impl.onDiskIterator(in, count, flag, expireBefore, version, comparator);
     }
 
     public AtomDeserializer getOnDiskDeserializer(DataInput in, Descriptor.Version version)

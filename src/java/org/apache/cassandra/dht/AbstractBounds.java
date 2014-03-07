@@ -23,9 +23,9 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 
-import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.TypeSizes;
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.utils.Pair;
@@ -99,7 +99,7 @@ public abstract class AbstractBounds<T extends RingPosition> implements Serializ
     {
         if (value instanceof DecoratedKey)
         {
-            return keyValidator.getString(((DecoratedKey)value).key);
+            return keyValidator.getString(((DecoratedKey)value).key());
         }
         else
         {

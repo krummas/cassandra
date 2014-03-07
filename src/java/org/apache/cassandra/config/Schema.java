@@ -398,7 +398,7 @@ public class Schema
     {
         try
         {
-            return systemKeyspaceNames.contains(ByteBufferUtil.string(row.key.key));
+            return systemKeyspaceNames.contains(ByteBufferUtil.string(row.key.key()));
         }
         catch (CharacterCodingException e)
         {

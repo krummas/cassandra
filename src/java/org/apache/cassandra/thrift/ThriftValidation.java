@@ -27,6 +27,11 @@ import org.apache.cassandra.config.*;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.composites.*;
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.BufferExpiringCell;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.ExpiringCell;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
@@ -473,9 +478,9 @@ public class ThriftValidation
     private static Cell asDBColumn(CellName name, Column column)
     {
         if (column.ttl <= 0)
-            return new Cell(name, column.value, column.timestamp);
+            return new BufferCell(name, column.value, column.timestamp);
         else
-            return new ExpiringCell(name, column.value, column.timestamp, column.ttl);
+            return new BufferExpiringCell(name, column.value, column.timestamp, column.ttl);
     }
 
     /**
@@ -535,7 +540,7 @@ public class ThriftValidation
         {
             // start_token/end_token can wrap, but key/token should not
             RowPosition stop = p.getTokenFactory().fromString(range.end_token).maxKeyBound(p);
-            if (RowPosition.forKey(range.start_key, p).compareTo(stop) > 0 && !stop.isMinimum())
+            if (RowPosition.Impl.forKey(range.start_key, p).compareTo(stop) > 0 && !stop.isMinimum())
                 throw new org.apache.cassandra.exceptions.InvalidRequestException("Start key's token sorts after end token");
         }
 

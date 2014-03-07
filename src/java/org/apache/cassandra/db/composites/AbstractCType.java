@@ -330,7 +330,7 @@ public abstract class AbstractCType implements CType
 
         public long serializedSize(Composite c, TypeSizes type)
         {
-            return type.sizeofWithShortLength(c.toByteBuffer());
+            return type.sizeofByteBufferWithShortLength(c.dataSize());
         }
 
         public void skip(DataInput in) throws IOException

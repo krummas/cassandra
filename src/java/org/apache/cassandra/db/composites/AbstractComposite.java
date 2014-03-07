@@ -73,7 +73,7 @@ public abstract class AbstractComposite implements Composite
     {
         // This is the legacy format of composites.
         // See org.apache.cassandra.db.marshal.CompositeType for details.
-        ByteBuffer result = ByteBuffer.allocate(dataSize() + 3 * size() + (isStatic() ? 2 : 0));
+        ByteBuffer result = ByteBuffer.allocate(dataSize());
         if (isStatic())
             AbstractCompositeType.putShortLength(result, CompositeType.STATIC_MARKER);
 
@@ -90,10 +90,10 @@ public abstract class AbstractComposite implements Composite
 
     public int dataSize()
     {
-        int size = 0;
+        int size = isStatic() ? 2 : 0;
         for (int i = 0; i < size(); i++)
             size += get(i).remaining();
-        return size;
+        return size + 3 * size();
     }
 
     public boolean isPrefixOf(Composite c)

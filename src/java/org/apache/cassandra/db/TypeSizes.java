@@ -67,6 +67,11 @@ public abstract class TypeSizes
         return sizeof((short) value.remaining()) + value.remaining();
     }
 
+    public long sizeofByteBufferWithShortLength(int bytes)
+    {
+        return sizeof((short) bytes) + bytes;
+    }
+
     public int sizeofWithLength(ByteBuffer value)
     {
         return sizeof(value.remaining()) + value.remaining();

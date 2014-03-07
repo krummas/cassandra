@@ -39,6 +39,13 @@ import org.apache.cassandra.db.composites.*;
 import org.apache.cassandra.db.compaction.AbstractCompactionTask;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.db.data.BufferCell;
+import org.apache.cassandra.db.data.BufferExpiringCell;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.CounterUpdateCell;
+import org.apache.cassandra.db.data.DecoratedKey;
+import org.apache.cassandra.db.data.ExpiringCell;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
@@ -76,7 +83,7 @@ public class Util
 
     public static RowPosition rp(String key, IPartitioner partitioner)
     {
-        return RowPosition.forKey(ByteBufferUtil.bytes(key), partitioner);
+        return RowPosition.Impl.forKey(ByteBufferUtil.bytes(key), partitioner);
     }
 
     public static CellName cellname(ByteBuffer... bbs)
@@ -84,7 +91,7 @@ public class Util
         if (bbs.length == 1)
             return CellNames.simpleDense(bbs[0]);
         else
-            return CellNames.compositeDense(bbs);
+            return CellNames.compoundDense(bbs);
     }
 
     public static CellName cellname(String... strs)
@@ -107,12 +114,12 @@ public class Util
 
     public static Cell column(String name, String value, long timestamp)
     {
-        return new Cell(cellname(name), ByteBufferUtil.bytes(value), timestamp);
+        return new BufferCell(cellname(name), ByteBufferUtil.bytes(value), timestamp);
     }
 
     public static Cell expiringColumn(String name, String value, long timestamp, int ttl)
     {
-        return new ExpiringCell(cellname(name), ByteBufferUtil.bytes(value), timestamp, ttl);
+        return new BufferExpiringCell(cellname(name), ByteBufferUtil.bytes(value), timestamp, ttl);
     }
 
     public static Cell counterColumn(String name, long value, long timestamp)
@@ -144,7 +151,7 @@ public class Util
     {
         CellName cname = superColumnName == null
                        ? CellNames.simpleDense(getBytes(columnName))
-                       : CellNames.compositeDense(ByteBufferUtil.bytes(superColumnName), getBytes(columnName));
+                       : CellNames.compoundDense(ByteBufferUtil.bytes(superColumnName), getBytes(columnName));
         rm.add(columnFamilyName, cname, ByteBufferUtil.bytes(value), timestamp);
     }
 

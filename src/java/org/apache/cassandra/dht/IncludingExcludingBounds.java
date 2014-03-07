@@ -20,7 +20,7 @@ package org.apache.cassandra.dht;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.data.RowPosition;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Pair;
 
@@ -101,7 +101,7 @@ public class IncludingExcludingBounds<T extends RingPosition> extends AbstractBo
 
     public AbstractBounds<Token> toTokenBounds()
     {
-        return (left instanceof RowPosition) ? new IncludingExcludingBounds<Token>(((RowPosition)left).getToken(), ((RowPosition)right).getToken(), partitioner) : (IncludingExcludingBounds<Token>)this;
+        return (left instanceof RowPosition) ? new IncludingExcludingBounds<>(left.token(), right.token(), partitioner) : (IncludingExcludingBounds<Token>)this;
     }
 
     public AbstractBounds<T> withNewRight(T newRight)

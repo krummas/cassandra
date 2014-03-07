@@ -28,6 +28,7 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableScanner;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -44,7 +45,7 @@ public class TTLExpiryTest extends SchemaLoader
         cfs.disableAutoCompaction();
         cfs.metadata.gcGraceSeconds(0);
         long timestamp = System.currentTimeMillis();
-        Mutation rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        Mutation rm = new Mutation("Keyspace1", Util.dk("ttl").key());
         rm.add("Standard1", Util.cellname("col"),
                ByteBufferUtil.EMPTY_BYTE_BUFFER,
                timestamp,
@@ -57,21 +58,21 @@ public class TTLExpiryTest extends SchemaLoader
         rm.apply();
         cfs.forceBlockingFlush();
 
-        rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        rm = new Mutation("Keyspace1", Util.dk("ttl").key());
                 rm.add("Standard1", Util.cellname("col2"),
                        ByteBufferUtil.EMPTY_BYTE_BUFFER,
                        timestamp,
                        1);
                 rm.apply();
         cfs.forceBlockingFlush();
-        rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        rm = new Mutation("Keyspace1", Util.dk("ttl").key());
         rm.add("Standard1", Util.cellname("col3"),
                    ByteBufferUtil.EMPTY_BYTE_BUFFER,
                    timestamp,
                    1);
         rm.apply();
         cfs.forceBlockingFlush();
-        rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        rm = new Mutation("Keyspace1", Util.dk("ttl").key());
         rm.add("Standard1", Util.cellname("col311"),
                    ByteBufferUtil.EMPTY_BYTE_BUFFER,
                    timestamp,
@@ -92,7 +93,7 @@ public class TTLExpiryTest extends SchemaLoader
         cfs.disableAutoCompaction();
         cfs.metadata.gcGraceSeconds(0);
         long timestamp = System.currentTimeMillis();
-        Mutation rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        Mutation rm = new Mutation("Keyspace1", Util.dk("ttl").key());
         rm.add("Standard1", Util.cellname("col"),
                ByteBufferUtil.EMPTY_BYTE_BUFFER,
                timestamp,
@@ -105,14 +106,14 @@ public class TTLExpiryTest extends SchemaLoader
         rm.apply();
         cfs.forceBlockingFlush();
 
-        rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        rm = new Mutation("Keyspace1", Util.dk("ttl").key());
                 rm.add("Standard1", Util.cellname("col2"),
                        ByteBufferUtil.EMPTY_BYTE_BUFFER,
                        timestamp,
                        1);
                 rm.apply();
         cfs.forceBlockingFlush();
-        rm = new Mutation("Keyspace1", Util.dk("ttl").key);
+        rm = new Mutation("Keyspace1", Util.dk("ttl").key());
         rm.add("Standard1", Util.cellname("col3"),
                    ByteBufferUtil.EMPTY_BYTE_BUFFER,
                    timestamp,
@@ -120,7 +121,7 @@ public class TTLExpiryTest extends SchemaLoader
         rm.apply();
         cfs.forceBlockingFlush();
         DecoratedKey noTTLKey = Util.dk("nottl");
-        rm = new Mutation("Keyspace1", noTTLKey.key);
+        rm = new Mutation("Keyspace1", noTTLKey.key());
         rm.add("Standard1", Util.cellname("col311"),
                    ByteBufferUtil.EMPTY_BYTE_BUFFER,
                    timestamp);

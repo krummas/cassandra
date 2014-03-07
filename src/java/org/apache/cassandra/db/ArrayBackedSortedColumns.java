@@ -28,6 +28,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
+import org.apache.cassandra.db.data.Cell;
 import org.apache.cassandra.db.filter.ColumnSlice;
 
 /**
@@ -115,21 +116,21 @@ public class ArrayBackedSortedColumns extends ColumnFamily
             return; // Just sorted by a previous call
 
         Comparator<Cell> comparator = reversed
-                                    ? getComparator().columnReverseComparator()
-                                    : getComparator().columnComparator();
+                                      ? getComparator().columnReverseComparator()
+                                      : getComparator().columnComparator();
 
         // Sort the unsorted segment - will still potentially contain duplicate (non-reconciled) cells
         Arrays.sort(cells, sortedSize, size, comparator);
 
         // Determine the merge start position for that segment
-        int pos = binarySearch(0, sortedSize, cells[sortedSize].name, internalComparator());
+        int pos = binarySearch(0, sortedSize, cells[sortedSize].name(), internalComparator());
         if (pos < 0)
             pos = -pos - 1;
 
         // Copy [pos, lastSortedCellIndex] cells into a separate array
         Cell[] leftCopy = pos == sortedSize
-                        ? EMPTY_ARRAY
-                        : Arrays.copyOfRange(cells, pos, sortedSize);
+                          ? EMPTY_ARRAY
+                          : Arrays.copyOfRange(cells, pos, sortedSize);
 
         // Store the beginning (inclusive) and the end (exclusive) indexes of the right segment
         int rightStart = sortedSize;
@@ -399,7 +400,7 @@ public class ArrayBackedSortedColumns extends ColumnFamily
         {
             public CellName apply(Cell cell)
             {
-                return cell.name;
+                return cell.name();
             }
         });
     }

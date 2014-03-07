@@ -28,6 +28,8 @@ import com.google.common.collect.Iterables;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.db.data.Cell;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.net.*;
@@ -116,7 +118,7 @@ public class RowDataResolver extends AbstractRowResolver
                 continue;
 
             // create and send the mutation message based on the diff
-            Mutation mutation = new Mutation(keyspaceName, key.key, diffCf);
+            Mutation mutation = new Mutation(keyspaceName, key.key(), diffCf);
             // use a separate verb here because we don't want these to be get the white glove hint-
             // on-timeout behavior that a "real" mutation gets
             results.add(MessagingService.instance().sendRR(mutation.createMessage(MessagingService.Verb.READ_REPAIR),

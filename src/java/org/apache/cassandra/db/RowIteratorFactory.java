@@ -22,6 +22,7 @@ import java.util.*;
 import org.apache.cassandra.db.columniterator.IColumnIteratorFactory;
 import org.apache.cassandra.db.columniterator.LazyColumnIterator;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
+import org.apache.cassandra.db.data.DecoratedKey;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.IDiskAtomFilter;
 import org.apache.cassandra.io.sstable.SSTableReader;
@@ -96,7 +97,7 @@ public class RowIteratorFactory
             {
                 // First check if this row is in the rowCache. If it is and it covers our filter, we can skip the rest
                 ColumnFamily cached = cfs.getRawCachedRow(key);
-                IDiskAtomFilter filter = range.columnFilter(key.key);
+                IDiskAtomFilter filter = range.columnFilter(key.key());
 
                 if (cached == null || !cfs.isFilterFullyCoveredBy(filter, cached, now))
                 {
@@ -123,9 +124,9 @@ public class RowIteratorFactory
     private static class ConvertToColumnIterator<T extends ColumnFamily> implements CloseableIterator<OnDiskAtomIterator>
     {
         private final DataRange range;
-        private final Iterator<Map.Entry<DecoratedKey, T>> iter;
+        private final Iterator<Map.Entry<DecoratedKey, ? extends ColumnFamily>> iter;
 
-        public ConvertToColumnIterator(DataRange range, Iterator<Map.Entry<DecoratedKey, T>> iter)
+        public ConvertToColumnIterator(DataRange range, Iterator<Map.Entry<DecoratedKey, ? extends ColumnFamily>> iter)
         {
             this.range = range;
             this.iter = iter;
@@ -145,12 +146,12 @@ public class RowIteratorFactory
          */
         public OnDiskAtomIterator next()
         {
-            final Map.Entry<DecoratedKey, T> entry = iter.next();
+            final Map.Entry<DecoratedKey, ? extends ColumnFamily> entry = iter.next();
             return new LazyColumnIterator(entry.getKey(), new IColumnIteratorFactory()
             {
                 public OnDiskAtomIterator create()
                 {
-                    return range.columnFilter(entry.getKey().key).getColumnFamilyIterator(entry.getKey(), entry.getValue());
+                    return range.columnFilter(entry.getKey().key()).getColumnFamilyIterator(entry.getKey(), entry.getValue());
                 }
             });
         }

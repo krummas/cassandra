@@ -18,17 +18,59 @@
  */
 package org.apache.cassandra.utils.memory;
 
+import java.nio.ByteBuffer;
+
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
-public class HeapPool extends Pool
+public class HeapPool extends ByteBufferPool
 {
     public HeapPool(long maxOnHeapMemory, float cleanupThreshold, Runnable cleaner)
     {
         super(maxOnHeapMemory, cleanupThreshold, cleaner);
     }
 
-    public HeapPoolAllocator newAllocator(OpOrder writes)
+    public Group newAllocatorGroup(String name, OpOrder writes)
     {
-        return new HeapPoolAllocator(this);
+        return new Group(name, this, writes);
     }
+
+    public static final class Group extends ByteBufferPool.Group<HeapPool>
+    {
+        public Group(String name, HeapPool pool, OpOrder writes)
+        {
+            super(name, pool, writes);
+        }
+
+        public Allocator newAllocator()
+        {
+            return new Allocator(this);
+        }
+    }
+
+    public static final class Allocator extends ByteBufferPool.Allocator<Group, HeapPool>
+    {
+        Allocator(Group group)
+        {
+            super(group);
+        }
+
+        public ByteBuffer allocate(int size)
+        {
+            return allocate(size, null);
+        }
+
+        public ByteBuffer allocate(int size, OpOrder.Group opGroup)
+        {
+            onHeap.allocate(size, opGroup);
+            // must loop trying to acquire
+            return ByteBuffer.allocate(size);
+        }
+
+        public void free(ByteBuffer name)
+        {
+            onHeap.release(name.remaining());
+        }
+
+    }
+
 }
