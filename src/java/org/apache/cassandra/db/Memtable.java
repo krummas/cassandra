@@ -216,15 +216,15 @@ public class Memtable
 
     public String toString()
     {
-        return String.format("Memtable-%s@%s(%s serialized bytes, %s ops, %.0f%% of heap limit)",
-                             cfs.name, hashCode(), liveDataSize, currentOperations, 100 * allocator.onHeap().ownershipRatio());
+        return String.format("Memtable-%s@%s(%s serialized bytes, %s ops, %.0f%%/%.0f%% of on/off-heap limit)",
+                cfs.name, hashCode(), liveDataSize, currentOperations, 100 * allocator.onHeap().ownershipRatio(), 100 * allocator.offHeap().ownershipRatio());
     }
 
     /**
      * @param startWith Include data in the result from and including this key and to the end of the memtable
      * @return An iterator of entries with the data from the start key
      */
-    public Iterator<Map.Entry<DecoratedKey, ? extends ColumnFamily>> getEntryIterator(final RowPosition startWith, final RowPosition stopAt)
+    public Iterator<Map.Entry<DecoratedKey, ? extends ColumnFamily>> getEntryIterator(final boolean copyToHeap, final RowPosition startWith, final RowPosition stopAt)
     {
         return new Iterator<Map.Entry<DecoratedKey, ? extends ColumnFamily>>()
         {
@@ -243,6 +243,12 @@ public class Memtable
                 Map.Entry<? extends RowPosition, ? extends ColumnFamily> entry = iter.next();
                 // Actual stored key should be true DecoratedKey
                 assert entry.getKey() instanceof DecoratedKey;
+                if (copyToHeap)
+                {
+                    DecoratedKey key = HeapDataAllocator.instance.clone((DecoratedKey) entry.getKey(), null);
+                    ColumnFamily columns = ArrayBackedSortedColumns.cloneToHeap(entry.getValue(), cfs);
+                    entry = new AbstractMap.SimpleImmutableEntry<>(key, columns);
+                }
                 // Store the reference to the current entry so that remove() can update the current size.
                 currentEntry = entry;
                 // Object cast is required since otherwise we can't turn RowPosition into DecoratedKey

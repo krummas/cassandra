@@ -176,7 +176,7 @@ public class CommitLogSegment
             int position = allocate(size);
             if (position < 0)
             {
-                commandOrder.finishOne();
+                commandOrder.close();
                 return false;
             }
             alloc.buffer = (ByteBuffer) buffer.duplicate().position(position).limit(position + size);
@@ -188,7 +188,7 @@ public class CommitLogSegment
         }
         catch (Throwable t)
         {
-            commandOrder.finishOne();
+            commandOrder.close();
             throw t;
         }
     }
@@ -233,7 +233,7 @@ public class CommitLogSegment
         }
         finally
         {
-            group.finishOne();
+            group.close();
         }
     }
 
@@ -578,7 +578,7 @@ public class CommitLogSegment
         // but must not be called more than once
         void markWritten()
         {
-            appendOp.finishOne();
+            appendOp.close();
         }
 
         void awaitDiskSync()

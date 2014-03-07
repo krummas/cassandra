@@ -26,19 +26,24 @@ public class HeapPool extends ByteBufferPool
 {
     public HeapPool(long maxOnHeapMemory, float cleanupThreshold, Runnable cleaner)
     {
-        super(maxOnHeapMemory, cleanupThreshold, cleaner);
+        super(maxOnHeapMemory, 0, cleanupThreshold, cleaner);
     }
 
-    public Group newAllocatorGroup(String name, OpOrder writes)
+    public Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes)
     {
-        return new Group(name, this, writes);
+        return new Group(name, this, reads, writes);
+    }
+
+    public boolean needToCopyOnHeap()
+    {
+        return false;
     }
 
     public static final class Group extends ByteBufferPool.Group<HeapPool>
     {
-        public Group(String name, HeapPool pool, OpOrder writes)
+        public Group(String name, HeapPool pool, OpOrder reads, OpOrder writes)
         {
-            super(name, pool, writes);
+            super(name, pool, reads, writes);
         }
 
         public Allocator newAllocator()

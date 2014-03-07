@@ -38,16 +38,16 @@ public abstract class Pool
 
     final WaitQueue hasRoom = new WaitQueue();
 
-    Pool(long maxOnHeapMemory, float cleanThreshold, Runnable cleaner)
+    Pool(long maxOnHeapMemory, long maxOffHeapMemory, float cleanThreshold, Runnable cleaner)
     {
         this.onHeap = getSubPool(maxOnHeapMemory, cleanThreshold);
-        this.offHeap = getSubPool(maxOnHeapMemory, cleanThreshold);
+        this.offHeap = getSubPool(maxOffHeapMemory, cleanThreshold);
         this.cleaner = getCleaner(cleaner);
         if (this.cleaner != null)
             this.cleaner.start();
     }
 
-    public abstract PoolAllocatorGroup newAllocatorGroup(String name, OpOrder writes);
+    public abstract PoolAllocatorGroup newAllocatorGroup(String name, OpOrder reads, OpOrder writes);
 
     SubPool getSubPool(long limit, float cleanThreshold)
     {

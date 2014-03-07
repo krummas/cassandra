@@ -29,95 +29,25 @@ public abstract class PoolAllocator<G extends PoolAllocatorGroup<P>, P extends P
     public final G group;
     public final SubAllocator onHeap;
     public final SubAllocator offHeap;
-    volatile State state = State.get(LifeCycle.LIVE, Gc.INACTIVE);
+    volatile LifeCycle state = LifeCycle.LIVE;
 
-    static final AtomicReferenceFieldUpdater<PoolAllocator, State> stateUpdater = AtomicReferenceFieldUpdater.newUpdater(PoolAllocator.class, State.class, "state");
+    static final AtomicReferenceFieldUpdater<PoolAllocator, LifeCycle> stateUpdater = AtomicReferenceFieldUpdater.newUpdater(PoolAllocator.class, LifeCycle.class, "state");
 
     static enum LifeCycle
     {
-        LIVE, DISCARDING, DISCARDED
-    }
-    static enum Gc
-    {
-        INACTIVE, REALLOCATING, COLLECTING, FORBIDDEN
-    }
-
-    // we mix in life-cycle information for off-heap allocators here, because it's neater than specialising there
-    static final class State
-    {
-        final LifeCycle lifeCycle;
-        final Gc gc;
-
-        // Cache not all of the possible combinations of LifeCycle/Gc.
-        // Not all of these states are valid, but easier to just create them all.
-        private static final State[] ALL;
-        private static final int MULT;
-        static
-        {
-            LifeCycle[] lifeCycles = LifeCycle.values();
-            Gc[] gcs = Gc.values();
-            ALL = new State[lifeCycles.length * gcs.length];
-            for (int i = 0 ; i < lifeCycles.length ; i++)
-                for (int j = 0 ; j < gcs.length ; j++)
-                    ALL[(i * gcs.length) + j] = new State(lifeCycles[i], gcs[j]);
-            MULT = gcs.length;
-        }
-
-        private State(LifeCycle lifeCycle, Gc gc)
-        {
-            this.lifeCycle = lifeCycle;
-            this.gc = gc;
-        }
-
-        private static State get(LifeCycle lifeCycle, Gc gc)
-        {
-            return ALL[(lifeCycle.ordinal() * MULT) + gc.ordinal()];
-        }
-
-        /**
-         * maybe transition to the requested Gc state, depending on the current state.
-         */
-        State transition(Gc targetState)
-        {
-            switch (targetState)
-            {
-                case REALLOCATING:
-                    // we only permit entering the marking state if GC is not already running for this allocator
-                    if (gc != Gc.INACTIVE)
-                        return null;
-                    // we don't permit GC on an allocator we're discarding, or have discarded
-                    if (lifeCycle.compareTo(LifeCycle.DISCARDING) >= 0)
-                        return null;
-                    return get(lifeCycle, Gc.REALLOCATING);
-                case COLLECTING:
-                    assert gc == Gc.REALLOCATING;
-                    return get(lifeCycle, Gc.COLLECTING);
-                case INACTIVE:
-                    assert gc == Gc.COLLECTING;
-                    if (lifeCycle.compareTo(LifeCycle.DISCARDING) >= 0)
-                        return get(lifeCycle, Gc.FORBIDDEN);
-                    return get(lifeCycle, Gc.INACTIVE);
-            }
-            throw new IllegalStateException();
-        }
-
-        State transition(LifeCycle targetState)
+        LIVE, DISCARDING, DISCARDED;
+        LifeCycle transition(LifeCycle targetState)
         {
             switch (targetState)
             {
                 case DISCARDING:
-                    assert lifeCycle == LifeCycle.LIVE;
-                    return get(LifeCycle.DISCARDING, gc);
+                    assert this == LifeCycle.LIVE;
+                    return LifeCycle.DISCARDING;
                 case DISCARDED:
-                    assert lifeCycle == LifeCycle.DISCARDING;
-                    return get(LifeCycle.DISCARDED, gc);
+                    assert this == LifeCycle.DISCARDING;
+                    return LifeCycle.DISCARDED;
             }
             throw new IllegalStateException();
-        }
-
-        public String toString()
-        {
-            return lifeCycle + ", GC:" + gc;
         }
     }
 
@@ -125,6 +55,7 @@ public abstract class PoolAllocator<G extends PoolAllocatorGroup<P>, P extends P
     {
         this.group = group;
         this.onHeap = group.pool.onHeap.newAllocator();
+        this.offHeap = group.pool.offHeap.newAllocator();
     }
 
     /**
@@ -136,6 +67,7 @@ public abstract class PoolAllocator<G extends PoolAllocatorGroup<P>, P extends P
         state = state.transition(LifeCycle.DISCARDING);
         // mark the memory owned by this allocator as reclaiming
         onHeap.markAllReclaiming();
+        offHeap.markAllReclaiming();
     }
 
     /**
@@ -147,11 +79,12 @@ public abstract class PoolAllocator<G extends PoolAllocatorGroup<P>, P extends P
         state = state.transition(LifeCycle.DISCARDED);
         // release any memory owned by this allocator; automatically signals waiters
         onHeap.releaseAll();
+        offHeap.releaseAll();
     }
 
     public boolean isLive()
     {
-        return state.lifeCycle == LifeCycle.LIVE;
+        return state == LifeCycle.LIVE;
     }
 
     /**

@@ -57,17 +57,23 @@ public class KeysSearcher extends SecondaryIndexSearcher
     public List<Row> search(ExtendedFilter filter)
     {
         assert filter.getClause() != null && !filter.getClause().isEmpty();
-        return baseCfs.filter(getIndexedIterator(filter), filter);
+        final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
+        final SecondaryIndex index = indexManager.getIndexForColumn(primary.column);
+        // TODO: this should perhaps not open and maintain a writeOp for the full duration, but instead only *try* to delete stale entries, without blocking if there's no room
+        // as it stands, we open a writeOp and keep it open for the duration to ensure that should this CF get flushed to make room we don't block the reclamation of any room  being made
+        try (OpOrder.Group baseOp = baseCfs.readOrdering.start(); OpOrder.Group indexOp = index.getIndexCfs().readOrdering.start(); OpOrder.Group writeOp = baseCfs.keyspace.writeOrder.start())
+        {
+            List<Row> result = baseCfs.filter(getIndexedIterator(writeOp, filter, primary, index), filter);
+            return result;
+        }
     }
 
-    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final ExtendedFilter filter)
+    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final OpOrder.Group writeOp, final ExtendedFilter filter, final IndexExpression primary, final SecondaryIndex index)
     {
 
         // Start with the most-restrictive indexed clause, then apply remaining clauses
         // to each row matching that clause.
         // TODO: allow merge join instead of just one index + loop
-        final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
-        final SecondaryIndex index = indexManager.getIndexForColumn(primary.column);
         assert index != null;
         assert index.getIndexCfs() != null;
         final DecoratedKey indexKey = index.getIndexKeyFor(primary.value);
@@ -191,15 +197,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         {
                             // delete the index entry w/ its own timestamp
                             Cell dummyCell = new BufferCell(primaryColumn, indexKey.key(), cell.timestamp());
-                            OpOrder.Group opGroup = baseCfs.keyspace.writeOrder.start();
-                            try
-                            {
-                                ((PerColumnSecondaryIndex)index).delete(dk.key(), dummyCell, opGroup);
-                            }
-                            finally
-                            {
-                                opGroup.finishOne();
-                            }
+                            ((PerColumnSecondaryIndex)index).delete(dk.key(), dummyCell, writeOp);
                             continue;
                         }
                         return new Row(dk, data);

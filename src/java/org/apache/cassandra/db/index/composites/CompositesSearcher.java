@@ -36,6 +36,7 @@ import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public class CompositesSearcher extends SecondaryIndexSearcher
 {
@@ -50,7 +51,15 @@ public class CompositesSearcher extends SecondaryIndexSearcher
     public List<Row> search(ExtendedFilter filter)
     {
         assert filter.getClause() != null && !filter.getClause().isEmpty();
-        return baseCfs.filter(getIndexedIterator(filter), filter);
+        final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
+        final CompositesIndex index = (CompositesIndex)indexManager.getIndexForColumn(primary.column);
+        // TODO: this should perhaps not open and maintain a writeOp for the full duration, but instead only *try* to delete stale entries, without blocking if there's no room
+        // as it stands, we open a writeOp and keep it open for the duration to ensure that should this CF get flushed to make room we don't block the reclamation of any room being made
+        try (OpOrder.Group baseOp = baseCfs.readOrdering.start(); OpOrder.Group indexOp = index.getIndexCfs().readOrdering.start(); OpOrder.Group writeOp = baseCfs.keyspace.writeOrder.start())
+        {
+            List<Row> result = baseCfs.filter(getIndexedIterator(writeOp, filter), filter);
+            return result;
+        }
     }
 
     private Composite makePrefix(CompositesIndex index, ByteBuffer key, ExtendedFilter filter, boolean isStart)
@@ -72,7 +81,7 @@ public class CompositesSearcher extends SecondaryIndexSearcher
         return isStart ? prefix.start() : prefix.end();
     }
 
-    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final ExtendedFilter filter)
+    private ColumnFamilyStore.AbstractScanIterator getIndexedIterator(final OpOrder.Group writeOp, final ExtendedFilter filter)
     {
         // Start with the most-restrictive indexed clause, then apply remaining clauses
         // to each row matching that clause.
@@ -166,7 +175,7 @@ public class CompositesSearcher extends SecondaryIndexSearcher
                                                                              rowsPerQuery,
                                                                              filter.timestamp);
                         ColumnFamily indexRow = index.getIndexCfs().getColumnFamily(indexFilter);
-                        if (indexRow == null || indexRow.getColumnCount() == 0)
+                        if (indexRow == null || !indexRow.hasColumns())
                             return makeReturn(currentKey, data);
 
                         Collection<Cell> sortedCells = indexRow.getSortedColumns();
@@ -267,7 +276,7 @@ public class CompositesSearcher extends SecondaryIndexSearcher
                         ColumnFamily newData = baseCfs.getColumnFamily(new QueryFilter(dk, baseCfs.name, dataFilter, filter.timestamp));
                         if (newData == null || index.isStale(entry, newData, filter.timestamp))
                         {
-                            index.delete(entry);
+                            index.delete(entry, writeOp);
                             continue;
                         }
 

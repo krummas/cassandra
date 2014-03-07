@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder;
+import sun.nio.ch.DirectBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,6 +107,12 @@ public class SlabAllocator extends ByteBufferPool.Allocator<SlabPool.Group, Slab
     public void free(ByteBuffer name)
     {
         // have to assume we cannot free the memory here, and just reclaim it all when we flush
+    }
+
+    public void setDiscarded()
+    {
+        for (Region region : regions)
+            ((DirectBuffer) region.data).cleaner().clean();
     }
 
     /**

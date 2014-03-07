@@ -261,12 +261,20 @@ public class DatabaseDescriptor
         if (conf.file_cache_size_in_mb == null)
             conf.file_cache_size_in_mb = Math.min(512, (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576)));
 
-        if (conf.memtable_total_space_in_mb == null)
-            conf.memtable_total_space_in_mb = (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576));
-        if (conf.memtable_total_space_in_mb <= 0)
+        if (conf.memtable_offheap_space_in_mb == null)
+            conf.memtable_offheap_space_in_mb = (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576));
+        if (conf.memtable_offheap_space_in_mb < 0)
+            throw new ConfigurationException("memtable_offheap_space_in_mb must be positive");
+        // for the moment, we default to twice as much on-heap space as off-heap, as heap overhead is very large
+        if (conf.memtable_heap_space_in_mb == null)
+            conf.memtable_heap_space_in_mb = (int) (Runtime.getRuntime().maxMemory() / (4 * 1048576));
+        if (conf.memtable_heap_space_in_mb <= 0)
             throw new ConfigurationException("memtable_heap_space_in_mb must be positive");
-        logger.info("Global memtable heap threshold is enabled at {}MB", conf.memtable_total_space_in_mb);
-
+        logger.info("Global memtable on-heap threshold is enabled at {}MB", conf.memtable_heap_space_in_mb);
+        if (conf.memtable_offheap_space_in_mb == 0)
+            logger.info("Global memtable off-heap threshold is disabled, HeapAllocator will be used instead");
+        else
+            logger.info("Global memtable off-heap threshold is enabled at {}MB", conf.memtable_offheap_space_in_mb);
         if (conf.memtable_cleanup_threshold < 0.01f)
             throw new ConfigurationException("memtable_cleanup_threshold must be >= 0.01");
         if (conf.memtable_cleanup_threshold > 0.99f)
@@ -1420,13 +1428,16 @@ public class DatabaseDescriptor
 
     public static DataAllocator.DataPool getMemtableAllocatorPool()
     {
-        long heapLimit = ((long) conf.memtable_total_space_in_mb) << 20;
+        long heapLimit = ((long) conf.memtable_heap_space_in_mb) << 20;
+        long offHeapLimit = ((long) conf.memtable_offheap_space_in_mb) << 20;
         switch (conf.memtable_allocator)
         {
             case heap:
                 return new BufferDataPool(new HeapPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
             case heap_slab:
-                return new BufferDataPool(new SlabPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
+                return new BufferDataPool(new SlabPool(heapLimit, 0, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
+            case offheap_slab:
+                return new BufferDataPool(new SlabPool(heapLimit, offHeapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
             default:
                 throw new AssertionError();
         }

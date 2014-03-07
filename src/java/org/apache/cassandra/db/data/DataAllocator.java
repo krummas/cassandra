@@ -31,7 +31,8 @@ public interface DataAllocator
 
     public static interface DataPool
     {
-        DataGroup newGroup(String name, OpOrder writeOps);
+        DataGroup newGroup(String name, OpOrder reads, OpOrder writeOps);
+        boolean needToCopyOnHeap();
     }
 
     public static interface DataReclaimer
@@ -58,4 +59,5 @@ public interface DataAllocator
     boolean isLive();
 
     PoolAllocator.SubAllocator onHeap();
+    PoolAllocator.SubAllocator offHeap();
 }

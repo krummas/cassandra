@@ -102,6 +102,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                                              new LinkedBlockingQueue<Runnable>(),
                                                                                              new NamedThreadFactory("MemtablePostFlush"),
                                                                                              "internal");
+    public static final ExecutorService reclaimExecutor = new JMXEnabledThreadPoolExecutor(1, StageManager.KEEPALIVE,
+                                                                                           TimeUnit.SECONDS,
+                                                                                           new LinkedBlockingQueue<Runnable>(),
+                                                                                           new NamedThreadFactory("MemtableReclaimMemory"),
+                                                                                           "internal");
 
     public final Keyspace keyspace;
     public final String name;
@@ -120,6 +125,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      */
     private final DataTracker data;
 
+    /* The read order, used to track accesses to off-heap memtable storage */
+    public final OpOrder readOrdering = new OpOrder();
     public final DataAllocator.DataGroup dataGroup;
 
     /* This is used to generate the next index for a SSTable */
@@ -281,7 +288,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         this.directories = directories;
         this.indexManager = new SecondaryIndexManager(this);
         this.metric = new ColumnFamilyMetrics(this);
-        this.dataGroup = Memtable.dataPool.newGroup(name, keyspace.writeOrder);
+        this.dataGroup = Memtable.dataPool.newGroup(name, readOrdering, keyspace.writeOrder);
 
         fileIndexGenerator.set(generation);
         sampleLatencyNanos = DatabaseDescriptor.getReadRpcTimeout() / 2;
@@ -827,7 +834,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      */
     public ListenableFuture<?> switchMemtable()
     {
-        logger.info("Enqueuing flush of {}", name);
         synchronized (data)
         {
             logFlush();
@@ -843,22 +849,27 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     private void logFlush()
     {
         // reclaiming includes that which we are GC-ing;
-        float onHeapRatio = 0;
-        long onHeapTotal = 0;
+        float onHeapRatio = 0, offHeapRatio = 0;
+        long onHeapTotal = 0, offHeapTotal = 0;
         Memtable memtable = getDataTracker().getView().getCurrentMemtable();
         onHeapRatio +=  memtable.getAllocator().onHeap().ownershipRatio();
+        offHeapRatio += memtable.getAllocator().offHeap().ownershipRatio();
         onHeapTotal += memtable.getAllocator().onHeap().owns();
+        offHeapTotal += memtable.getAllocator().offHeap().owns();
 
         for (SecondaryIndex index : indexManager.getIndexes())
         {
             if (index.getAllocator() != null)
             {
                 onHeapRatio += index.getAllocator().onHeap().ownershipRatio();
+                offHeapRatio += index.getAllocator().offHeap().ownershipRatio();
                 onHeapTotal += index.getAllocator().onHeap().owns();
+                offHeapTotal += index.getAllocator().offHeap().owns();
             }
         }
 
-        logger.info("Enqueuing flush of {}: {}", name, String.format("%d (%.0f%%) on-heap", onHeapTotal, onHeapRatio * 100));
+        logger.info("Enqueuing flush of {}: {}", name, String.format("%d (%.0f%%) on-heap, %d (%.0f%%) off-heap",
+                                                                     onHeapTotal, onHeapRatio * 100, offHeapTotal, offHeapRatio * 100));
     }
 
 
@@ -1055,7 +1066,18 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             {
                 // flush the memtable
                 MoreExecutors.sameThreadExecutor().execute(memtable.flushRunnable());
-                memtable.setDiscarded();
+
+                // issue a read barrier for reclaiming the memory, and offload the wait to another thread
+                final OpOrder.Barrier readBarrier = readOrdering.newBarrier();
+                readBarrier.issue();
+                reclaimExecutor.execute(new WrappedRunnable()
+                {
+                    public void runMayThrow() throws InterruptedException, ExecutionException
+                    {
+                        readBarrier.await();
+                        memtable.setDiscarded();
+                    }
+                });
             }
 
             // signal the post-flush we've done our work
@@ -1083,19 +1105,25 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
                 // find the total ownership ratio for the memtable and all SecondaryIndexes owned by this CF,
                 // both on- and off-heap, and select the largest of the two ratios to weight this CF
-                float onHeap = 0f;
+                float onHeap = 0f, offHeap = 0f;
                 onHeap += current.getAllocator().onHeap().ownershipRatio();
+                offHeap += current.getAllocator().offHeap().ownershipRatio();
 
                 for (SecondaryIndex index : cfs.indexManager.getIndexes())
                 {
                     if (index.getAllocator() != null)
+                    {
                         onHeap += index.getAllocator().onHeap().ownershipRatio();
+                        offHeap += index.getAllocator().offHeap().ownershipRatio();
+                    }
                 }
 
-                if (onHeap > largestRatio)
+                float ratio = Math.max(onHeap, offHeap);
+
+                if (ratio > largestRatio)
                 {
                     largest = current;
-                    largestRatio = onHeap;
+                    largestRatio = ratio;
                 }
             }
 
@@ -1865,7 +1893,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         Tracing.trace("Executing single-partition query on {}", name);
         CollationController controller = new CollationController(this, filter, gcBefore);
-        ColumnFamily columns = controller.getTopLevelColumns();
+        ColumnFamily columns;
+        try (OpOrder.Group op = readOrdering.start())
+        {
+            columns = controller.getTopLevelColumns(Memtable.dataPool.needToCopyOnHeap());
+        }
         metric.updateSSTableIterated(controller.getSstablesIterated());
         return columns;
     }

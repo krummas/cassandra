@@ -24,18 +24,19 @@ import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public abstract class ByteBufferPool extends Pool
 {
-    ByteBufferPool(long maxOnHeapMemory, float cleanThreshold, Runnable cleaner)
+    ByteBufferPool(long maxOnHeapMemory, long maxOffHeapMemory, float cleanThreshold, Runnable cleaner)
     {
-        super(maxOnHeapMemory, cleanThreshold, cleaner);
+        super(maxOnHeapMemory, maxOffHeapMemory, cleanThreshold, cleaner);
     }
 
-    public abstract Group newAllocatorGroup(String name, OpOrder writes);
+    public abstract Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes);
+    public abstract boolean needToCopyOnHeap();
 
     public static abstract class Group<P extends ByteBufferPool> extends PoolAllocatorGroup<P>
     {
-        public Group(String name, P pool, OpOrder writes)
+        public Group(String name, P pool, OpOrder reads, OpOrder writes)
         {
-            super(name, pool, writes);
+            super(name, pool, reads, writes);
         }
 
         public abstract Allocator<? extends Group<P>, P> newAllocator();
@@ -63,6 +64,8 @@ public abstract class ByteBufferPool extends Pool
             cloned.reset();
             return cloned;
         }
+
+        public abstract void free(ByteBuffer buffer);
 
         public ByteBufferAllocator context(final OpOrder.Group writeOp)
         {

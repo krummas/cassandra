@@ -30,6 +30,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.db.composites.Composite;
 import org.apache.cassandra.db.data.Cell;
 import org.apache.cassandra.db.filter.ColumnSlice;
+import org.apache.cassandra.utils.memory.HeapAllocator;
 
 /**
  * A ColumnFamily backed by an array.
@@ -55,19 +56,19 @@ public class ArrayBackedSortedColumns extends ColumnFamily
     {
         public ArrayBackedSortedColumns create(CFMetaData metadata, boolean insertReversed, int initialCapacity)
         {
-            return new ArrayBackedSortedColumns(metadata, insertReversed, initialCapacity);
+            return new ArrayBackedSortedColumns(metadata, insertReversed, initialCapacity == 0 ? EMPTY_ARRAY : new Cell[initialCapacity], 0, 0);
         }
     };
 
-    private ArrayBackedSortedColumns(CFMetaData metadata, boolean reversed, int initialCapacity)
+    private ArrayBackedSortedColumns(CFMetaData metadata, boolean reversed, Cell[] cells, int size, int sortedSize)
     {
         super(metadata);
         this.reversed = reversed;
         this.deletionInfo = DeletionInfo.live();
-        this.cells = initialCapacity == 0 ? EMPTY_ARRAY : new Cell[initialCapacity];
-        this.size = 0;
-        this.sortedSize = 0;
-        this.isSorted = true;
+        this.cells = cells;
+        this.size = size;
+        this.sortedSize = sortedSize;
+        this.isSorted = size == sortedSize;
     }
 
     private ArrayBackedSortedColumns(ArrayBackedSortedColumns original)
@@ -79,6 +80,20 @@ public class ArrayBackedSortedColumns extends ColumnFamily
         this.size = original.size;
         this.sortedSize = original.sortedSize;
         this.isSorted = original.isSorted;
+    }
+
+    public static ColumnFamily cloneToHeap(ColumnFamily value, ColumnFamilyStore cfs)
+    {
+        if (value.getColumnCount() == 0)
+            return value;
+        // we skip anything
+        final Cell[] cells = new Cell[value.getColumnCount()];
+        int i = 0;
+        for (Cell cell : value)
+            cells[i++] = cell.localCopy(value.metadata, HeapAllocator.instance);
+        ColumnFamily r = new ArrayBackedSortedColumns(cfs.metadata, value.isInsertReversed(), cells, i, i);
+        r.delete(value);
+        return r;
     }
 
     public ColumnFamily.Factory getFactory()

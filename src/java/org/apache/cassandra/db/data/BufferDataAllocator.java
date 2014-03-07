@@ -36,9 +36,14 @@ public class BufferDataAllocator implements DataAllocator
             this.wrapped = wrapped;
         }
 
-        public DataGroup newGroup(String name, OpOrder writeOps)
+        public DataGroup newGroup(String name, OpOrder reads, OpOrder writeOps)
         {
-            return new BufferDataGroup(wrapped.newAllocatorGroup(name, writeOps));
+            return new BufferDataGroup(wrapped.newAllocatorGroup(name, reads, writeOps));
+        }
+
+        public boolean needToCopyOnHeap()
+        {
+            return wrapped.needToCopyOnHeap();
         }
     }
 
@@ -154,5 +159,10 @@ public class BufferDataAllocator implements DataAllocator
     public PoolAllocator.SubAllocator onHeap()
     {
         return allocator.onHeap;
+    }
+
+    public PoolAllocator.SubAllocator offHeap()
+    {
+        return allocator.offHeap;
     }
 }

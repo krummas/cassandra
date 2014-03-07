@@ -634,7 +634,7 @@ public class SecondaryIndexManager
                     }
                     finally
                     {
-                        opGroup.finishOne();
+                        opGroup.close();
                     }
                 }
             }

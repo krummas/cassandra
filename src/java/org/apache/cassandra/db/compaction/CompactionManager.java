@@ -789,7 +789,7 @@ public class CompactionManager implements CompactionManagerMBean
                     }
                     finally
                     {
-                        opGroup.finishOne();
+                        opGroup.close();
                     }
                 }
                 return null;

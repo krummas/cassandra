@@ -92,8 +92,8 @@ public class Config
     // we don't want a lot of contention, but we also don't want to starve all other tables
     // if a big one flushes. OS buffering should be able to minimize contention with 2 threads.
     public int memtable_flush_writers = 2;
-
-    public Integer memtable_total_space_in_mb;
+    public Integer memtable_heap_space_in_mb;
+    public Integer memtable_offheap_space_in_mb;
     public float memtable_cleanup_threshold = 0.4f;
 
     public Integer storage_port = 7000;
@@ -289,7 +289,8 @@ public class Config
     public static enum MemtableAllocator
     {
         heap,
-        heap_slab
+        heap_slab,
+        offheap_slab
     }
 
     public static enum DiskFailurePolicy

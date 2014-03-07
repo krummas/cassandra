@@ -45,7 +45,7 @@ class PoolCleanerThread<P extends Pool> extends Thread
 
     boolean needsCleaning()
     {
-        return pool.onHeap.needsCleaning();
+        return pool.onHeap.needsCleaning() || pool.offHeap.needsCleaning();
     }
 
     // should ONLY be called when we really think it already needs cleaning

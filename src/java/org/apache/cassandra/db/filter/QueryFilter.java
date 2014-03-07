@@ -46,14 +46,6 @@ public class QueryFilter
         this.timestamp = timestamp;
     }
 
-    public OnDiskAtomIterator getMemtableColumnIterator(Memtable memtable)
-    {
-        ColumnFamily cf = memtable.getColumnFamily(key);
-        if (cf == null)
-            return null;
-        return getColumnFamilyIterator(cf);
-    }
-
     public OnDiskAtomIterator getColumnFamilyIterator(ColumnFamily cf)
     {
         assert cf != null;
@@ -63,11 +55,6 @@ public class QueryFilter
     public OnDiskAtomIterator getSSTableColumnIterator(SSTableReader sstable)
     {
         return filter.getSSTableColumnIterator(sstable, key);
-    }
-
-    public OnDiskAtomIterator getSSTableColumnIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key, RowIndexEntry indexEntry)
-    {
-        return filter.getSSTableColumnIterator(sstable, file, key, indexEntry);
     }
 
     public void collateOnDiskAtom(final ColumnFamily returnCF, List<? extends Iterator<? extends OnDiskAtom>> toCollate, final int gcBefore)

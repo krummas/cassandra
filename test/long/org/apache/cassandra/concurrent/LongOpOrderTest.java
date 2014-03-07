@@ -217,7 +217,7 @@ public class LongOpOrderTest
                     }
                     finally
                     {
-                        opGroup.finishOne();
+                        opGroup.close();
                     }
                 }
             }

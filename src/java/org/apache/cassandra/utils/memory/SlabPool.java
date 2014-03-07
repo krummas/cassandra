@@ -26,20 +26,25 @@ public class SlabPool extends ByteBufferPool
     final boolean allocateOnHeap;
     public SlabPool(long maxOnHeapMemory, long maxOffHeapMemory, float cleanupThreshold, Runnable cleaner)
     {
-        super(maxOnHeapMemory, cleanupThreshold, cleaner);
+        super(maxOnHeapMemory, maxOffHeapMemory, cleanupThreshold, cleaner);
         this.allocateOnHeap = maxOffHeapMemory > 0;
     }
 
-    public Group newAllocatorGroup(String name, OpOrder writes)
+    public Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes)
     {
-        return new Group(name, this, writes);
+        return new Group(name, this, reads, writes);
+    }
+
+    public boolean needToCopyOnHeap()
+    {
+        return !allocateOnHeap;
     }
 
     public static final class Group extends ByteBufferPool.Group<SlabPool>
     {
-        public Group(String name, SlabPool pool, OpOrder writes)
+        public Group(String name, SlabPool pool, OpOrder reads, OpOrder writes)
         {
-            super(name, pool, writes);
+            super(name, pool, reads, writes);
         }
 
         public SlabAllocator newAllocator()

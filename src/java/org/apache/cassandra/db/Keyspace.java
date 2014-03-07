@@ -374,7 +374,7 @@ public class Keyspace
         }
         finally
         {
-            opGroup.finishOne();
+            opGroup.close();
         }
     }
 
@@ -413,7 +413,7 @@ public class Keyspace
         }
         finally
         {
-            opGroup.finishOne();
+            opGroup.close();
         }
     }
 

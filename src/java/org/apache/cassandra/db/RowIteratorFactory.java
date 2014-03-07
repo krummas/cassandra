@@ -63,7 +63,7 @@ public class RowIteratorFactory
         // memtables
         for (Memtable memtable : memtables)
         {
-            iterators.add(new ConvertToColumnIterator<>(range, memtable.getEntryIterator(range.startKey(), range.stopKey())));
+            iterators.add(new ConvertToColumnIterator<>(range, memtable.getEntryIterator(Memtable.dataPool.needToCopyOnHeap(), range.startKey(), range.stopKey())));
         }
 
         for (SSTableReader sstable : sstables)
