@@ -34,12 +34,14 @@ public abstract class Pool
 
     // the total memory used by this pool
     public final SubPool onHeap;
+    public final SubPool offHeap;
 
     final WaitQueue hasRoom = new WaitQueue();
 
     Pool(long maxOnHeapMemory, float cleanThreshold, Runnable cleaner)
     {
         this.onHeap = getSubPool(maxOnHeapMemory, cleanThreshold);
+        this.offHeap = getSubPool(maxOnHeapMemory, cleanThreshold);
         this.cleaner = getCleaner(cleaner);
         if (this.cleaner != null)
             this.cleaner.start();

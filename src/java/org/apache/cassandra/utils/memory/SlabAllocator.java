@@ -43,9 +43,9 @@ import org.slf4j.LoggerFactory;
  * interleaved throughout the heap, and the old generation gets progressively
  * more fragmented until a stop-the-world compacting collection occurs.
  */
-public class HeapSlabAllocator extends ByteBufferPool.Allocator<HeapSlabPool.Group, HeapSlabPool>
+public class SlabAllocator extends ByteBufferPool.Allocator<SlabPool.Group, SlabPool>
 {
-    private static final Logger logger = LoggerFactory.getLogger(HeapSlabAllocator.class);
+    private static final Logger logger = LoggerFactory.getLogger(SlabAllocator.class);
 
     private final static int REGION_SIZE = 1024 * 1024;
     private final static int MAX_CLONED_SIZE = 128 * 1024; // bigger than this don't go in the region
@@ -55,11 +55,14 @@ public class HeapSlabAllocator extends ByteBufferPool.Allocator<HeapSlabPool.Gro
 
     private final AtomicReference<Region> currentRegion = new AtomicReference<Region>();
     private final AtomicInteger regionCount = new AtomicInteger(0);
+    private final ConcurrentLinkedQueue<Region> regions = new ConcurrentLinkedQueue<>();
     private AtomicLong unslabbed = new AtomicLong(0);
+    private final boolean allocateOnHeap;
 
-    HeapSlabAllocator(HeapSlabPool.Group group)
+    SlabAllocator(SlabPool.Group group)
     {
         super(group);
+        this.allocateOnHeap = group.pool.allocateOnHeap;
     }
 
     public ByteBuffer allocate(int size)
@@ -73,13 +76,17 @@ public class HeapSlabAllocator extends ByteBufferPool.Allocator<HeapSlabPool.Gro
         if (size == 0)
             return ByteBufferUtil.EMPTY_BYTE_BUFFER;
 
-        onHeap.allocate(size, opGroup);
+        (allocateOnHeap ? onHeap : offHeap).allocate(size, opGroup);
         // satisfy large allocations directly from JVM since they don't cause fragmentation
         // as badly, and fill up our regions quickly
         if (size > MAX_CLONED_SIZE)
         {
             unslabbed.addAndGet(size);
-            return ByteBuffer.allocate(size);
+            if (allocateOnHeap)
+                return ByteBuffer.allocate(size);
+            Region region = new Region(ByteBuffer.allocateDirect(size));
+            regions.add(region);
+            return region.allocate(size);
         }
 
         while (true)
@@ -117,9 +124,11 @@ public class HeapSlabAllocator extends ByteBufferPool.Allocator<HeapSlabPool.Gro
             // against other allocators to CAS in a Region, and if we fail we stash the region for re-use
             region = RACE_ALLOCATED.poll();
             if (region == null)
-                region = new Region(REGION_SIZE);
+                region = new Region(allocateOnHeap ? ByteBuffer.allocate(REGION_SIZE) : ByteBuffer.allocateDirect(REGION_SIZE));
             if (currentRegion.compareAndSet(null, region))
             {
+                if (!allocateOnHeap)
+                    regions.add(region);
                 regionCount.incrementAndGet();
                 logger.trace("{} regions now allocated in {}", regionCount, this);
                 return region;
@@ -161,11 +170,11 @@ public class HeapSlabAllocator extends ByteBufferPool.Allocator<HeapSlabPool.Gro
          * Create an uninitialized region. Note that memory is not allocated yet, so
          * this is cheap.
          *
-         * @param size in bytes
+         * @param buffer bytes
          */
-        private Region(int size)
+        private Region(ByteBuffer buffer)
         {
-            data = ByteBuffer.allocate(size);
+            data = buffer;
         }
 
         /**

@@ -64,11 +64,6 @@ public abstract class ByteBufferPool extends Pool
             return cloned;
         }
 
-        public void free(ByteBuffer buffer)
-        {
-            onHeap.release(buffer.remaining());
-        }
-
         public ByteBufferAllocator context(final OpOrder.Group writeOp)
         {
             return new ByteBufferAllocator.AbstractAllocator()

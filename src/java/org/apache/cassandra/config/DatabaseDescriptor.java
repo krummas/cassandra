@@ -54,7 +54,7 @@ import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.memory.HeapPool;
-import org.apache.cassandra.utils.memory.HeapSlabPool;
+import org.apache.cassandra.utils.memory.SlabPool;
 
 import static org.apache.cassandra.db.data.BufferDataAllocator.BufferDataPool;
 
@@ -1426,7 +1426,7 @@ public class DatabaseDescriptor
             case heap:
                 return new BufferDataPool(new HeapPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
             case heap_slab:
-                return new BufferDataPool(new HeapSlabPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
+                return new BufferDataPool(new SlabPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
             default:
                 throw new AssertionError();
         }

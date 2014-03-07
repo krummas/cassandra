@@ -28,6 +28,7 @@ public abstract class PoolAllocator<G extends PoolAllocatorGroup<P>, P extends P
 
     public final G group;
     public final SubAllocator onHeap;
+    public final SubAllocator offHeap;
     volatile State state = State.get(LifeCycle.LIVE, Gc.INACTIVE);
 
     static final AtomicReferenceFieldUpdater<PoolAllocator, State> stateUpdater = AtomicReferenceFieldUpdater.newUpdater(PoolAllocator.class, State.class, "state");
