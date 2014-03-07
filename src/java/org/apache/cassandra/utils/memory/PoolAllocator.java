@@ -23,7 +23,7 @@ import org.apache.cassandra.utils.concurrent.WaitQueue;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
-public abstract class PoolAllocator<G extends PoolAllocatorGroup<P>, P extends Pool>
+public abstract class PoolAllocator<G extends Pool.AllocatorGroup<P>, P extends Pool>
 {
 
     public final G group;

@@ -47,7 +47,27 @@ public abstract class Pool
             this.cleaner.start();
     }
 
-    public abstract PoolAllocatorGroup newAllocatorGroup(String name, OpOrder reads, OpOrder writes);
+    public abstract AllocatorGroup newAllocatorGroup(String name, OpOrder reads, OpOrder writes);
+
+    public static abstract class AllocatorGroup<P extends Pool>
+    {
+
+        public final String name;
+        public final P pool;
+        public final OpOrder reads;
+        public final OpOrder writes;
+
+        public AllocatorGroup(String name, P pool, OpOrder reads, OpOrder writes)
+        {
+            this.name = name;
+            this.pool = pool;
+            this.reads = reads;
+            this.writes = writes;
+        }
+
+        public abstract PoolAllocator newAllocator();
+
+    }
 
     SubPool getSubPool(long limit, float cleanThreshold)
     {

@@ -32,7 +32,7 @@ public abstract class ByteBufferPool extends Pool
     public abstract Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes);
     public abstract boolean needToCopyOnHeap();
 
-    public static abstract class Group<P extends ByteBufferPool> extends PoolAllocatorGroup<P>
+    public static abstract class Group<P extends ByteBufferPool> extends AllocatorGroup<P>
     {
         public Group(String name, P pool, OpOrder reads, OpOrder writes)
         {
@@ -42,7 +42,7 @@ public abstract class ByteBufferPool extends Pool
         public abstract Allocator<? extends Group<P>, P> newAllocator();
     }
 
-    public static abstract class Allocator<G extends PoolAllocatorGroup<P>, P extends Pool> extends PoolAllocator<G, P>
+    public static abstract class Allocator<G extends AllocatorGroup<P>, P extends Pool> extends PoolAllocator<G, P>
     {
 
         Allocator(G group)
