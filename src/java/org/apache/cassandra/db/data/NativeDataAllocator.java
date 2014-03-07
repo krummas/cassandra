@@ -47,6 +47,11 @@ public class NativeDataAllocator extends NativeAllocator implements DataAllocato
         {
             return new NativeDataGroup(name, this, readOps, writeOps);
         }
+
+        public boolean needToCopyOnHeap()
+        {
+            return true;
+        }
     }
 
     public static class NativeDataReclaimer implements DataReclaimer

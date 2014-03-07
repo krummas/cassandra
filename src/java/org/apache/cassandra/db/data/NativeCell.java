@@ -47,8 +47,6 @@ import org.apache.cassandra.utils.memory.NativeAllocator;
  * name extra:  lowest 2 bits indicate the clustering size delta (i.e. how many name items are NOT part of the clustering key)
  *              the next 2 bits indicate the CellNameType
  *              the next bit indicates if the column is a static or clustered/dynamic column
- *
- *
  */
 public class NativeCell extends NativeAllocation implements Cell, CellName
 {
