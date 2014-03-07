@@ -7,12 +7,12 @@ import org.apache.cassandra.db.composites.CellName;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.ByteBufferAllocator;
-import org.apache.cassandra.utils.memory.NativePoolAllocator;
+import org.apache.cassandra.utils.memory.NativeAllocator;
 
 public class NativeDeletedCell extends NativeCell implements DeletedCell, CellName
 {
 
-    public NativeDeletedCell(NativePoolAllocator allocator, OpOrder.Group writeOp, DeletedCell copyOf)
+    public NativeDeletedCell(NativeAllocator allocator, OpOrder.Group writeOp, DeletedCell copyOf)
     {
         super(allocator, writeOp, copyOf);
     }

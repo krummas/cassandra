@@ -9,7 +9,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.ByteBufferAllocator;
-import org.apache.cassandra.utils.memory.NativePoolAllocator;
+import org.apache.cassandra.utils.memory.NativeAllocator;
 
 public class NativeCounterCell extends NativeCell implements CounterCell, CellName
 {
@@ -23,7 +23,7 @@ public class NativeCounterCell extends NativeCell implements CounterCell, CellNa
         return 8;
     }
 
-    public NativeCounterCell(NativePoolAllocator allocator, OpOrder.Group writeOp, CounterCell copyOf)
+    public NativeCounterCell(NativeAllocator allocator, OpOrder.Group writeOp, CounterCell copyOf)
     {
         int size = sizeOf(copyOf);
         allocator.allocate(this, size, writeOp);

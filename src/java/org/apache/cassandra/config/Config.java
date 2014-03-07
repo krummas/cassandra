@@ -203,7 +203,7 @@ public class Config
 
     public boolean inter_dc_tcp_nodelay = true;
 
-    public MemtableAllocator memtable_allocator = MemtableAllocator.heap_slab;
+    public MemtableAllocator memtable_allocator = MemtableAllocator.heap_buffers;
 
     private static boolean outboundBindAny = false;
 
@@ -288,9 +288,10 @@ public class Config
 
     public static enum MemtableAllocator
     {
-        heap,
-        heap_slab,
-        offheap_slab
+        unslabbed_heap_buffers,
+        heap_buffers,
+        offheap_buffers,
+        offheap_objects
     }
 
     public static enum DiskFailurePolicy

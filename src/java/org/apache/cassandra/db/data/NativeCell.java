@@ -26,7 +26,7 @@ import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.ByteBufferAllocator;
 import org.apache.cassandra.utils.memory.ByteBufferPool;
 import org.apache.cassandra.utils.memory.NativeAllocation;
-import org.apache.cassandra.utils.memory.NativePoolAllocator;
+import org.apache.cassandra.utils.memory.NativeAllocator;
 
 /**
  * Packs a CellName AND a Cell into one off-heap representation.
@@ -97,7 +97,7 @@ public class NativeCell extends NativeAllocation implements Cell, CellName
 
     NativeCell() {}
 
-    public NativeCell(NativePoolAllocator allocator, OpOrder.Group writeOp, Cell copyOf)
+    public NativeCell(NativeAllocator allocator, OpOrder.Group writeOp, Cell copyOf)
     {
         int size = sizeOf(copyOf);
         allocator.allocate(this, size, writeOp);
@@ -241,25 +241,20 @@ public class NativeCell extends NativeAllocation implements Cell, CellName
         return clusteringSizeDelta() == 2;
     }
 
-    public boolean isSameCQL3RowAs(CellName other)
+    public boolean isSameCQL3RowAs(CellNameType type, CellName other)
     {
         switch (nametype())
         {
             case SIMPLE_DENSE:
             case COMPOUND_DENSE:
-                if (size() != other.size())
-                    return false;
-                for (int i = 0; i < size(); i++)
-                    if (!get(i).equals(other.get(i)))
-                        return false;
-                return true;
+                return type.compare(this, other) == 0;
             case COMPOUND_SPARSE_STATIC:
             case COMPOUND_SPARSE:
                 int clusteringSize = clusteringSize();
-                if (clusteringSize != other.clusteringSize())
+                if (clusteringSize != other.clusteringSize() || other.isStatic() != isStatic())
                     return false;
-                for (int i = 0; i < clusteringSize(); i++)
-                    if (!get(i).equals(other.get(i)))
+                for (int i = 0; i < clusteringSize; i++)
+                    if (type.subtype(i).compare(get(i), other.get(i)) != 0)
                         return false;
                 return true;
             case SIMPLE_SPARSE:

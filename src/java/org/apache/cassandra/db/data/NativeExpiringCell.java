@@ -9,7 +9,7 @@ import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.ByteBufferAllocator;
-import org.apache.cassandra.utils.memory.NativePoolAllocator;
+import org.apache.cassandra.utils.memory.NativeAllocator;
 
 public class NativeExpiringCell extends NativeCell implements ExpiringCell, CellName
 {
@@ -29,7 +29,7 @@ public class NativeExpiringCell extends NativeCell implements ExpiringCell, Cell
         return internalGetInt(4);
     }
 
-    public NativeExpiringCell(NativePoolAllocator allocator, OpOrder.Group writeOp, ExpiringCell copyOf)
+    public NativeExpiringCell(NativeAllocator allocator, OpOrder.Group writeOp, ExpiringCell copyOf)
     {
         int size = sizeOf(copyOf);
         allocator.allocate(this, size, writeOp);

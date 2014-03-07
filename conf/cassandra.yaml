@@ -294,10 +294,10 @@ memtable_cleanup_threshold: 0.4
 
 # Specify the way Cassandra allocates and manages memtable memory.
 # Options are:
-#     heap:         allocate Java buffers for all values
-#     heap_slab:    allocate shared Java buffers to reduce fragmentation
-#     offheap_slab: allocate direct Java buffers to reduce heap utilisation
-memtable_allocator: heap_slab
+#   heap_buffers:    allocate shared Java buffers to reduce fragmentation
+#   offheap_buffers: allocate direct Java buffers to reduce heap utilisation
+#   offheap_objects: allocate objects with native memory, to eliminate buffer heap overhead  
+memtable_allocator: heap_buffers
 
 # Total space to use for commitlogs.  Since commitlog segments are
 # mmapped, and hence use up address space, the default size is 32

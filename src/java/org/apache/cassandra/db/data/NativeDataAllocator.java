@@ -19,16 +19,13 @@ package org.apache.cassandra.db.data;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.utils.concurrent.OpOrder;
-import org.apache.cassandra.utils.memory.NativePoolAllocator;
-import org.apache.cassandra.utils.memory.NativePoolGroup;
+import org.apache.cassandra.utils.memory.NativeAllocator;
 import org.apache.cassandra.utils.memory.NativePool;
-import org.apache.cassandra.utils.memory.PoolAllocator;
-import org.apache.cassandra.utils.memory.RefAction;
 
-public class NativeDataAllocator extends NativePoolAllocator implements DataAllocator
+public class NativeDataAllocator extends NativeAllocator implements DataAllocator
 {
 
-    public static final class NativeDataGroup extends NativePoolGroup implements DataGroup
+    public static final class NativeDataGroup extends NativePool.Group implements DataGroup
     {
         NativeDataGroup(String name, NativePool parent, OpOrder reads, OpOrder writes)
         {
@@ -36,14 +33,7 @@ public class NativeDataAllocator extends NativePoolAllocator implements DataAllo
         }
         public NativeDataAllocator newAllocator()
         {
-            NativeDataAllocator allocator = new NativeDataAllocator(this);
-            live.put(allocator, Boolean.TRUE);
-            return allocator;
-        }
-
-        public void complete(RefAction refAction, OpOrder.Group readOp, Object referent)
-        {
-            refAction.complete(this, readOp, referent);
+            return new NativeDataAllocator(this);
         }
     }
 
@@ -53,47 +43,28 @@ public class NativeDataAllocator extends NativePoolAllocator implements DataAllo
         {
             super(maxOnHeapMemory, maxOffHeapMemory, cleanupThreshold, cleaner);
         }
-
-        public NativeDataPool(int regionSize, long maxOnHeapMemory, long maxOffHeapMemory, float cleanupThreshold, Runnable cleaner)
-        {
-            super(regionSize, maxOnHeapMemory, maxOffHeapMemory, cleanupThreshold, cleaner);
-        }
         public NativeDataGroup newGroup(String name, OpOrder readOps, OpOrder writeOps)
         {
             return new NativeDataGroup(name, this, readOps, writeOps);
         }
-
-        public boolean isRefSafe()
-        {
-            return false;
-        }
-
-        public NativeDataPool setGcEnabled(boolean enabled)
-        {
-            super.setGcEnabled(enabled);
-            return this;
-        }
     }
 
-    public static final class NativeDataReclaimer implements DataReclaimer
+    public static class NativeDataReclaimer implements DataReclaimer
     {
         private static final NativeDataReclaimer instance = new NativeDataReclaimer();
 
-        public NativeDataReclaimer reclaim(Cell cell)
+        public DataReclaimer reclaim(Cell cell)
         {
-            ((NativeCell) cell).free();
             return this;
         }
 
         public DataReclaimer reclaimImmediately(Cell cell)
         {
-            ((NativeCell) cell).free();
             return this;
         }
 
         public DataReclaimer reclaimImmediately(DecoratedKey key)
         {
-            ((NativeDecoratedKey) key).free();
             return this;
         }
 
@@ -106,7 +77,7 @@ public class NativeDataAllocator extends NativePoolAllocator implements DataAllo
         }
     }
 
-    NativeDataAllocator(NativePoolGroup group)
+    NativeDataAllocator(NativePool.Group group)
     {
         super(group);
     }

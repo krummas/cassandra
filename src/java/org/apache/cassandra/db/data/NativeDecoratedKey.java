@@ -6,13 +6,13 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.NativeAllocation;
-import org.apache.cassandra.utils.memory.NativePoolAllocator;
+import org.apache.cassandra.utils.memory.NativeAllocator;
 
 public class NativeDecoratedKey extends NativeAllocation implements DecoratedKey
 {
     private final Token token;
 
-    public NativeDecoratedKey(ByteBuffer key, Token token, NativePoolAllocator allocator, OpOrder.Group writeOp)
+    public NativeDecoratedKey(ByteBuffer key, Token token, NativeAllocator allocator, OpOrder.Group writeOp)
     {
         this.token = token;
         allocator.allocate(this, key.remaining(), writeOp);

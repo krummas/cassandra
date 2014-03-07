@@ -38,6 +38,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DefsTables;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.data.DataAllocator;
+import org.apache.cassandra.db.data.NativeDataAllocator;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSWriteError;
@@ -1432,12 +1433,14 @@ public class DatabaseDescriptor
         long offHeapLimit = ((long) conf.memtable_offheap_space_in_mb) << 20;
         switch (conf.memtable_allocator)
         {
-            case heap:
+            case unslabbed_heap_buffers:
                 return new BufferDataPool(new HeapPool(heapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
-            case heap_slab:
+            case heap_buffers:
                 return new BufferDataPool(new SlabPool(heapLimit, 0, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
-            case offheap_slab:
+            case offheap_buffers:
                 return new BufferDataPool(new SlabPool(heapLimit, offHeapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily()));
+            case offheap_objects:
+                return new NativeDataAllocator.NativeDataPool(heapLimit, offHeapLimit, conf.memtable_cleanup_threshold, new ColumnFamilyStore.FlushLargestColumnFamily());
             default:
                 throw new AssertionError();
         }
