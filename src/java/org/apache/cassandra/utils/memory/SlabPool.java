@@ -27,7 +27,7 @@ public class SlabPool extends ByteBufferPool
     public SlabPool(long maxOnHeapMemory, long maxOffHeapMemory, float cleanupThreshold, Runnable cleaner)
     {
         super(maxOnHeapMemory, maxOffHeapMemory, cleanupThreshold, cleaner);
-        this.allocateOnHeap = maxOffHeapMemory > 0;
+        this.allocateOnHeap = maxOffHeapMemory == 0;
     }
 
     public Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes)
