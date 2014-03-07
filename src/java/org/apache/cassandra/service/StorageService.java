@@ -2578,9 +2578,14 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     return;
                 }
 
-                Set<InetAddress> neighbours = new HashSet<>();
+                Set<InetAddress> allNeighbors = new HashSet<>();
+                Map<Range, Set<InetAddress>> rangeToNeighbors = new HashMap<>();
                 for (Range<Token> range : ranges)
-                    neighbours.addAll(ActiveRepairService.getNeighbors(keyspace, range, dataCenters, hosts));
+                {
+                    Set<InetAddress> neighbors = ActiveRepairService.getNeighbors(keyspace, range, dataCenters, hosts);
+                    rangeToNeighbors.put(range, neighbors);
+                    allNeighbors.addAll(neighbors);
+                }
 
                 List<ColumnFamilyStore> columnFamilyStores = new ArrayList<>();
                 for (ColumnFamilyStore cfs : getValidColumnFamilies(false, false, keyspace, columnFamilies))
@@ -2588,7 +2593,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
                 UUID parentSession = null;
                 if (!fullRepair)
-                    parentSession = ActiveRepairService.instance.prepareForRepair(neighbours, ranges, columnFamilyStores);
+                    parentSession = ActiveRepairService.instance.prepareForRepair(allNeighbors, ranges, columnFamilyStores);
 
                 List<RepairFuture> futures = new ArrayList<>(ranges.size());
                 for (Range<Token> range : ranges)
@@ -2596,7 +2601,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     RepairFuture future;
                     try
                     {
-                        future = forceKeyspaceRepair(parentSession, range, keyspace, isSequential, neighbours, columnFamilies);
+                        future = forceKeyspaceRepair(parentSession, range, keyspace, isSequential, rangeToNeighbors.get(range), columnFamilies);
                     }
                     catch (IllegalArgumentException e)
                     {
@@ -2643,7 +2648,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     }
                 }
                 if (!fullRepair)
-                    ActiveRepairService.instance.finishParentSession(parentSession, neighbours);
+                    ActiveRepairService.instance.finishParentSession(parentSession, allNeighbors);
                 sendNotification("repair", String.format("Repair command #%d finished", cmd), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
             }
         }, null);
