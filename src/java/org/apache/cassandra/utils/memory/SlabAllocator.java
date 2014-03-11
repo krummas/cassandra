@@ -113,6 +113,7 @@ public class SlabAllocator extends ByteBufferPool.Allocator<SlabPool.Group, Slab
     {
         for (Region region : regions)
             ((DirectBuffer) region.data).cleaner().clean();
+        super.setDiscarded();
     }
 
     /**

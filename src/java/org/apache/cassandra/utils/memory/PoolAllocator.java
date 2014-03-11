@@ -218,7 +218,10 @@ public abstract class PoolAllocator<G extends Pool.AllocatorGroup<P>, P extends 
 
         public float ownershipRatio()
         {
-            return owns / (float) parent.limit;
+            float r = owns / (float) parent.limit;
+            if (Float.isNaN(r))
+                return 0;
+            return r;
         }
 
         public WaitQueue.Signal hasRoomSignal()

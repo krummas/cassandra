@@ -103,6 +103,7 @@ public class NativeAllocator extends PoolAllocator<NativePool.Group, NativePool>
     {
         for (Region region : regions)
             unsafe.freeMemory(region.peer);
+        super.setDiscarded();
     }
 
     /**
