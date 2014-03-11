@@ -82,10 +82,4 @@ class PoolCleanerThread<P extends Pool> extends Thread
         return null;
     }
 
-    // try to do some aggressive cleaning
-    void forceClean()
-    {
-
-    }
-
 }

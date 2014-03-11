@@ -49,7 +49,7 @@ import sun.nio.ch.DirectBuffer;
  * interleaved throughout the heap, and the old generation gets progressively
  * more fragmented until a stop-the-world compacting collection occurs.
  */
-public class NativeAllocator extends PoolAllocator<NativePool.Group, NativePool>
+public class NativeAllocator extends PoolAllocator
 {
     private static final Logger logger = LoggerFactory.getLogger(NativeAllocator.class);
 
@@ -64,9 +64,9 @@ public class NativeAllocator extends PoolAllocator<NativePool.Group, NativePool>
     private final ConcurrentLinkedQueue<Region> regions = new ConcurrentLinkedQueue<>();
     private AtomicLong unslabbed = new AtomicLong(0);
 
-    protected NativeAllocator(NativePool.Group group)
+    protected NativeAllocator(SubAllocator onHeap, SubAllocator offHeap)
     {
-        super(group);
+        super(onHeap, offHeap);
     }
 
     public void allocate(NativeAllocation allocation, int size, OpOrder.Group opGroup)

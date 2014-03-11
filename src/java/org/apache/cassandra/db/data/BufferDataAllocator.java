@@ -36,28 +36,15 @@ public class BufferDataAllocator implements DataAllocator
             this.wrapped = wrapped;
         }
 
-        public DataGroup newGroup(String name, OpOrder reads, OpOrder writeOps)
+        @Override
+        public DataAllocator newAllocator()
         {
-            return new BufferDataGroup(wrapped.newAllocatorGroup(name, reads, writeOps));
+            return new BufferDataAllocator(wrapped.newAllocator());
         }
 
         public boolean needToCopyOnHeap()
         {
             return wrapped.needToCopyOnHeap();
-        }
-    }
-
-    public static final class BufferDataGroup implements DataGroup
-    {
-        final ByteBufferPool.Group wrapped;
-        public BufferDataGroup(ByteBufferPool.Group wrapped)
-        {
-            this.wrapped = wrapped;
-        }
-
-        public DataAllocator newAllocator()
-        {
-            return new BufferDataAllocator(wrapped.newAllocator());
         }
     }
 

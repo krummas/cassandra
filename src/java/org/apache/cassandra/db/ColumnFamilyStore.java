@@ -127,7 +127,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     /* The read order, used to track accesses to off-heap memtable storage */
     public final OpOrder readOrdering = new OpOrder();
-    public final DataAllocator.DataGroup dataGroup;
 
     /* This is used to generate the next index for a SSTable */
     private final AtomicInteger fileIndexGenerator = new AtomicInteger(0);
@@ -288,7 +287,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         this.directories = directories;
         this.indexManager = new SecondaryIndexManager(this);
         this.metric = new ColumnFamilyMetrics(this);
-        this.dataGroup = Memtable.dataPool.newGroup(name, readOrdering, keyspace.writeOrder);
 
         fileIndexGenerator.set(generation);
         sampleLatencyNanos = DatabaseDescriptor.getReadRpcTimeout() / 2;

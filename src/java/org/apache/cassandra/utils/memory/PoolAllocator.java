@@ -23,10 +23,9 @@ import org.apache.cassandra.utils.concurrent.WaitQueue;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
-public abstract class PoolAllocator<G extends Pool.AllocatorGroup<P>, P extends Pool>
+public abstract class PoolAllocator
 {
 
-    public final G group;
     public final SubAllocator onHeap;
     public final SubAllocator offHeap;
     volatile LifeCycle state = LifeCycle.LIVE;
@@ -51,11 +50,10 @@ public abstract class PoolAllocator<G extends Pool.AllocatorGroup<P>, P extends 
         }
     }
 
-    PoolAllocator(G group)
+    PoolAllocator(SubAllocator onHeap, SubAllocator offHeap)
     {
-        this.group = group;
-        this.onHeap = group.pool.onHeap.newAllocator();
-        this.offHeap = group.pool.offHeap.newAllocator();
+        this.onHeap = onHeap;
+        this.offHeap = offHeap;
     }
 
     /**
@@ -161,39 +159,6 @@ public abstract class PoolAllocator<G extends Pool.AllocatorGroup<P>, P extends 
         {
             parent.adjustAcquired(-size, false);
             ownsUpdater.addAndGet(this, -size);
-        }
-
-        // if this.owns > size, subtract size from this.owns (atomically), otherwise return false.
-        // is used by recycle to take ownership of a portion what we own without returning it to the pool
-        boolean transferAcquired(int size)
-        {
-            while (true)
-            {
-                long cur = owns;
-                long next = cur - size;
-                if (next < 0)
-                    return false;
-                if (ownsUpdater.compareAndSet(this, cur, next))
-                    return true;
-            }
-        }
-
-        // subtract at most size from this.reclaiming (atomically), and adjust the parent's reclaiming by
-        // the difference between what we wanted to subtract and we actually subtracted.
-        // this is used to atomically correct the reclaiming amount after it was speculatively set before an absolute
-        // figure could be established, and to take ownership of the reclamation away from this allocator for delayed recycling
-        void transferReclaiming(int size)
-        {
-            while (true)
-            {
-                long cur = reclaiming;
-                long next = Math.max(0, cur - size);
-                if (cur == 0 || reclaimingUpdater.compareAndSet(this, cur, next))
-                {
-                    parent.adjustReclaiming(size - (cur - next));
-                    return;
-                }
-            }
         }
 
         // mark everything we currently own as reclaiming, both here and in our parent

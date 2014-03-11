@@ -32,9 +32,4 @@ public final class HeapAllocator extends ByteBufferAllocator.AbstractAllocator
     {
         return ByteBuffer.allocate(size);
     }
-
-    public ByteBuffer allocate(int size, OpOrder.Group writeOp)
-    {
-        return ByteBuffer.allocate(size);
-    }
 }

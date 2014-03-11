@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * interleaved throughout the heap, and the old generation gets progressively
  * more fragmented until a stop-the-world compacting collection occurs.
  */
-public class SlabAllocator extends ByteBufferPool.Allocator<SlabPool.Group, SlabPool>
+public class SlabAllocator extends ByteBufferPool.Allocator
 {
     private static final Logger logger = LoggerFactory.getLogger(SlabAllocator.class);
 
@@ -60,10 +60,10 @@ public class SlabAllocator extends ByteBufferPool.Allocator<SlabPool.Group, Slab
     private AtomicLong unslabbed = new AtomicLong(0);
     private final boolean allocateOnHeap;
 
-    SlabAllocator(SlabPool.Group group)
+    SlabAllocator(SubAllocator onHeap, SubAllocator offHeap, boolean allocateOnHeap)
     {
-        super(group);
-        this.allocateOnHeap = group.pool.allocateOnHeap;
+        super(onHeap, offHeap);
+        this.allocateOnHeap = allocateOnHeap;
     }
 
     public ByteBuffer allocate(int size)

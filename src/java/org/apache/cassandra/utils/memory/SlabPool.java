@@ -18,7 +18,6 @@
  */
 package org.apache.cassandra.utils.memory;
 
-import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public class SlabPool extends ByteBufferPool
 {
@@ -30,27 +29,13 @@ public class SlabPool extends ByteBufferPool
         this.allocateOnHeap = maxOffHeapMemory == 0;
     }
 
-    public Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes)
+    public SlabAllocator newAllocator()
     {
-        return new Group(name, this, reads, writes);
+        return new SlabAllocator(onHeap.newAllocator(), offHeap.newAllocator(), allocateOnHeap);
     }
 
     public boolean needToCopyOnHeap()
     {
         return !allocateOnHeap;
     }
-
-    public static final class Group extends ByteBufferPool.Group<SlabPool>
-    {
-        public Group(String name, SlabPool pool, OpOrder reads, OpOrder writes)
-        {
-            super(name, pool, reads, writes);
-        }
-
-        public SlabAllocator newAllocator()
-        {
-            return new SlabAllocator(this);
-        }
-    }
-
 }

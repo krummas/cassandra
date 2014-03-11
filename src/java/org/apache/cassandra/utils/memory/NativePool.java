@@ -18,7 +18,6 @@
  */
 package org.apache.cassandra.utils.memory;
 
-import org.apache.cassandra.utils.concurrent.OpOrder;
 
 public class NativePool extends Pool
 {
@@ -28,22 +27,8 @@ public class NativePool extends Pool
         super(maxOnHeapMemory, maxOffHeapMemory, cleanupThreshold, cleaner);
     }
 
-    public Group newAllocatorGroup(String name, OpOrder reads, OpOrder writes)
+    public NativeAllocator newAllocator()
     {
-        return new Group(name, this, reads, writes);
+        return new NativeAllocator(onHeap.newAllocator(), offHeap.newAllocator());
     }
-
-    public static class Group extends AllocatorGroup<NativePool>
-    {
-        public Group(String name, NativePool pool, OpOrder reads, OpOrder writes)
-        {
-            super(name, pool, reads, writes);
-        }
-
-        public NativeAllocator newAllocator()
-        {
-            return new NativeAllocator(this);
-        }
-    }
-
 }
