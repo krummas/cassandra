@@ -150,12 +150,20 @@ public class CFPropDefs extends PropertyDefinitions
             return new HashMap<>();
         return compressionOptions;
     }
-    public Map<String, String> getCachingOptions() throws SyntaxException
+    public CachingOptions getCachingOptions() throws SyntaxException, ConfigurationException
     {
-        Map<String, String> cachingOptions = getMap(KW_CACHING);
-        if (cachingOptions == null)
-            return new HashMap<>();
-        return cachingOptions;
+        CachingOptions options = null;
+        Object val = properties.get(KW_CACHING);
+        if (val == null)
+            return null;
+        else if (val instanceof Map)
+            options = CachingOptions.fromMap(getMap(KW_CACHING));
+        else if (val instanceof String) // legacy syntax
+        {
+            options = CachingOptions.fromString(getSimple(KW_CACHING));
+            logger.warn("Setting caching options with deprecated syntax.");
+        }
+        return options;
     }
 
     public void applyToCFMetadata(CFMetaData cfm) throws ConfigurationException, SyntaxException
@@ -189,9 +197,9 @@ public class CFPropDefs extends PropertyDefinitions
 
         if (!getCompressionOptions().isEmpty())
             cfm.compressionParameters(CompressionParameters.create(getCompressionOptions()));
-
-        if (!getCachingOptions().isEmpty())
-            cfm.caching(CachingOptions.fromMap(getCachingOptions()));
+        CachingOptions cachingOptions = getCachingOptions();
+        if (cachingOptions != null)
+            cfm.caching(cachingOptions);
     }
 
     @Override
