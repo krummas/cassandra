@@ -75,7 +75,8 @@ public class SSTableWriter extends SSTable
                                                                          Component.PRIMARY_INDEX,
                                                                          Component.STATS,
                                                                          Component.SUMMARY,
-                                                                         Component.TOC));
+                                                                         Component.TOC,
+                                                                         Component.DIGEST));
 
         if (metadata.getBloomFilterFpChance() < 1.0)
             components.add(Component.FILTER);
@@ -88,7 +89,6 @@ public class SSTableWriter extends SSTable
         {
             // it would feel safer to actually add this component later in maybeWriteDigest(),
             // but the components are unmodifiable after construction
-            components.add(Component.DIGEST);
             components.add(Component.CRC);
         }
         return components;
