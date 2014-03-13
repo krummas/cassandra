@@ -176,7 +176,7 @@ public class SSTableUtils
             return write(sorted.size(), new Appender()
             {
                 @Override
-                public boolean append(SSTableWriter writer) throws IOException
+                public boolean append(SSTableWriterInterface writer) throws IOException
                 {
                     if (!iter.hasNext())
                         return false;
@@ -199,9 +199,9 @@ public class SSTableUtils
         public SSTableReader write(int expectedSize, Appender appender) throws IOException
         {
             File datafile = (dest == null) ? tempSSTableFile(ksname, cfname, generation) : new File(dest.filenameFor(Component.DATA));
-            SSTableWriter writer = new SSTableWriter(datafile.getAbsolutePath(), expectedSize, ActiveRepairService.UNREPAIRED_SSTABLE);
+            SSTableWriterInterface writer = new SSTableWriter(datafile.getAbsolutePath(), expectedSize, ActiveRepairService.UNREPAIRED_SSTABLE);
             while (appender.append(writer)) { /* pass */ }
-            SSTableReader reader = writer.closeAndOpenReader();
+            SSTableReader reader = writer.closeAndOpenReader().iterator().next();
             // mark all components for removal
             if (cleanup)
                 for (Component component : reader.components)
@@ -213,6 +213,6 @@ public class SSTableUtils
     public static abstract class Appender
     {
         /** Called with an open writer until it returns false. */
-        public abstract boolean append(SSTableWriter writer) throws IOException;
+        public abstract boolean append(SSTableWriterInterface writer) throws IOException;
     }
 }

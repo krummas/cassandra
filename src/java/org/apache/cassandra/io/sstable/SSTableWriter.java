@@ -44,12 +44,19 @@ import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.StreamingHistogram;
 
-public class SSTableWriter extends SSTable
+public class SSTableWriter implements SSTableWriterInterface
 {
     private static final Logger logger = LoggerFactory.getLogger(SSTableWriter.class);
 
     // not very random, but the only value that can't be mistaken for a legal column-name length
     public static final int END_OF_ROW = 0x0000;
+    private final String fileName;
+    private final Set<Component> components;
+    private final CFMetaData metadata;
+    private final IPartitioner<?> partitioner;
+    private final Descriptor descriptor;
+    private DecoratedKey first;
+    private DecoratedKey last;
 
     private IndexWriter iwriter;
     private SegmentedFile.Builder dbuilder;
@@ -71,12 +78,12 @@ public class SSTableWriter extends SSTable
 
     private static Set<Component> components(CFMetaData metadata)
     {
-        Set<Component> components = new HashSet<Component>(Arrays.asList(Component.DATA,
-                                                                         Component.PRIMARY_INDEX,
-                                                                         Component.STATS,
-                                                                         Component.SUMMARY,
-                                                                         Component.TOC,
-                                                                         Component.DIGEST));
+        Set<Component> components = new HashSet<>(Arrays.asList(Component.DATA,
+                                                                Component.PRIMARY_INDEX,
+                                                                Component.STATS,
+                                                                Component.SUMMARY,
+                                                                Component.TOC,
+                                                                Component.DIGEST));
 
         if (metadata.getBloomFilterFpChance() < 1.0)
             components.add(Component.FILTER);
@@ -101,14 +108,15 @@ public class SSTableWriter extends SSTable
                          IPartitioner<?> partitioner,
                          MetadataCollector sstableMetadataCollector)
     {
-        super(Descriptor.fromFilename(filename),
-              components(metadata),
-              metadata,
-              partitioner);
+        this.fileName = filename;
+        this.components = components(metadata);
+        this.descriptor = Descriptor.fromFilename(filename);
+        this.metadata = metadata;
+        this.partitioner = partitioner;
         this.repairedAt = repairedAt;
         iwriter = new IndexWriter(keyCount);
 
-        if (compression)
+        if (components.contains(Component.COMPRESSION_INFO))
         {
             dbuilder = SegmentedFile.getCompressedBuilder();
             dataFile = SequentialWriter.open(getFilename(),
@@ -201,7 +209,7 @@ public class SSTableWriter extends SSTable
         sstableMetadataCollector.update(dataFile.getFilePointer() - startPosition, cf.getColumnStats());
     }
 
-    public static RowIndexEntry rawAppend(ColumnFamily cf, long startPosition, DecoratedKey key, DataOutputPlus out) throws IOException
+    private static RowIndexEntry rawAppend(ColumnFamily cf, long startPosition, DecoratedKey key, DataOutputPlus out) throws IOException
     {
         assert cf.getColumnCount() > 0 || cf.isMarkedForDelete();
 
@@ -226,7 +234,7 @@ public class SSTableWriter extends SSTable
         int maxLocalDeletionTime = Integer.MIN_VALUE;
         List<ByteBuffer> minColumnNames = Collections.emptyList();
         List<ByteBuffer> maxColumnNames = Collections.emptyList();
-        StreamingHistogram tombstones = new StreamingHistogram(TOMBSTONE_HISTOGRAM_BIN_SIZE);
+        StreamingHistogram tombstones = new StreamingHistogram(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE);
         ColumnFamily cf = ArrayBackedSortedColumns.factory.create(metadata);
 
         // skip row size for version < ja
@@ -321,17 +329,17 @@ public class SSTableWriter extends SSTable
         }
     }
 
-    public SSTableReader closeAndOpenReader()
+    public Collection<SSTableReader> closeAndOpenReader()
     {
         return closeAndOpenReader(System.currentTimeMillis());
     }
 
-    public SSTableReader closeAndOpenReader(long maxDataAge)
+    public Collection<SSTableReader> closeAndOpenReader(long maxDataAge)
     {
         return closeAndOpenReader(maxDataAge, this.repairedAt);
     }
 
-    public SSTableReader closeAndOpenReader(long maxDataAge, long repairedAt)
+    public Collection<SSTableReader> closeAndOpenReader(long maxDataAge, long repairedAt)
     {
         Pair<Descriptor, StatsMetadata> p = close(repairedAt);
         Descriptor newdesc = p.left;
@@ -350,13 +358,13 @@ public class SSTableWriter extends SSTable
                                                            iwriter.bf,
                                                            maxDataAge,
                                                            sstableMetadata);
-        sstable.first = getMinimalKey(first);
-        sstable.last = getMinimalKey(last);
+        sstable.first = SSTable.getMinimalKey(first);
+        sstable.last = SSTable.getMinimalKey(last);
         // try to save the summaries to disk
         sstable.saveSummary(iwriter.builder, dbuilder);
         iwriter = null;
         dbuilder = null;
-        return sstable;
+        return Collections.singleton(sstable);
     }
 
     // Close the writer and return the descriptor to the new sstable and it's metadata
@@ -426,12 +434,30 @@ public class SSTableWriter extends SSTable
         FileUtils.renameWithOutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
     }
 
-    public long getFilePointer()
+    public boolean hasDataWritten()
     {
-        return dataFile.getFilePointer();
+        return dataFile.getFilePointer() > 0;
     }
 
-    public long getOnDiskFilePointer()
+    public String getFilename()
+    {
+        return fileName;
+    }
+
+    @Override
+    public CFMetaData getMetadata()
+    {
+        return metadata;
+    }
+
+    @Override
+    public Descriptor getDescriptor()
+    {
+        return descriptor;
+    }
+
+    @Override
+    public long dataWritten()
     {
         return dataFile.getOnDiskFilePointer();
     }

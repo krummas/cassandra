@@ -35,9 +35,10 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.json.simple.JSONArray;
@@ -53,11 +54,11 @@ public class SSTableExportTest extends SchemaLoader
         return bytesToHex(ByteBufferUtil.bytes(str));
     }
     
-    public SSTableWriter getDummyWriter() throws IOException
+    public SSTableWriterInterface getDummyWriter() throws IOException
     {
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
         ColumnFamily cfamily = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
-        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
+        SSTableWriterInterface writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
 
         // Add rowA
         cfamily.addColumn(Util.cellname("colA"), ByteBufferUtil.bytes("valA"), System.currentTimeMillis());
@@ -118,7 +119,7 @@ public class SSTableExportTest extends SchemaLoader
     {
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
         ColumnFamily cfamily = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
-        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
+        SSTableWriterInterface writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
 
         int nowInSec = (int)(System.currentTimeMillis() / 1000) + 42; //live for 42 seconds
         // Add rowA
@@ -137,7 +138,7 @@ public class SSTableExportTest extends SchemaLoader
         writer.append(Util.dk("rowExclude"), cfamily);
         cfamily.clear();
 
-        SSTableReader reader = writer.closeAndOpenReader();
+        SSTableReader reader = writer.closeAndOpenReader().iterator().next();
 
         // Export to JSON and verify
         File tempJson = File.createTempFile("Standard1", ".json");
@@ -174,7 +175,7 @@ public class SSTableExportTest extends SchemaLoader
         ColumnFamilyStore cfs = Keyspace.open("Keyspace1").getColumnFamilyStore("Standard1");
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
         ColumnFamily cfamily = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
-        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
+        SSTableWriterInterface writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
 
         // Add rowA
         cfamily.addColumn(Util.cellname("name"), ByteBufferUtil.bytes("val"), System.currentTimeMillis());
@@ -186,7 +187,7 @@ public class SSTableExportTest extends SchemaLoader
         writer.append(Util.dk("rowExclude"), cfamily);
         cfamily.clear();
 
-        SSTableReader reader = writer.closeAndOpenReader();
+        SSTableReader reader = writer.closeAndOpenReader().iterator().next();
 
         // Export to JSON and verify
         File tempJson = File.createTempFile("Standard1", ".json");
@@ -213,14 +214,14 @@ public class SSTableExportTest extends SchemaLoader
     {
         File tempSS = tempSSTableFile("Keyspace1", "Counter1");
         ColumnFamily cfamily = ArrayBackedSortedColumns.factory.create("Keyspace1", "Counter1");
-        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
+        SSTableWriterInterface writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
 
         // Add rowA
         cfamily.addColumn(CounterCell.createLocal(Util.cellname("colA"), 42, System.currentTimeMillis(), Long.MIN_VALUE));
         writer.append(Util.dk("rowA"), cfamily);
         cfamily.clear();
 
-        SSTableReader reader = writer.closeAndOpenReader();
+        SSTableReader reader = writer.closeAndOpenReader().iterator().next();
 
         // Export to JSON and verify
         File tempJson = File.createTempFile("Counter1", ".json");
@@ -244,14 +245,14 @@ public class SSTableExportTest extends SchemaLoader
     {
         File tempSS = tempSSTableFile("Keyspace1", "ValuesWithQuotes");
         ColumnFamily cfamily = ArrayBackedSortedColumns.factory.create("Keyspace1", "ValuesWithQuotes");
-        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
+        SSTableWriterInterface writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
 
         // Add rowA
         cfamily.addColumn(new Cell(Util.cellname("data"), UTF8Type.instance.fromString("{\"foo\":\"bar\"}")));
         writer.append(Util.dk("rowA"), cfamily);
         cfamily.clear();
 
-        SSTableReader reader = writer.closeAndOpenReader();
+        SSTableReader reader = writer.closeAndOpenReader().iterator().next();
 
         // Export to JSON and verify
         File tempJson = File.createTempFile("ValuesWithQuotes", ".json");
@@ -276,7 +277,7 @@ public class SSTableExportTest extends SchemaLoader
 
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
         ColumnFamily cfamily = ArrayBackedSortedColumns.factory.create("Keyspace1", "Standard1");
-        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
+        SSTableWriterInterface writer = new SSTableWriter(tempSS.getPath(), 2, ActiveRepairService.UNREPAIRED_SSTABLE);
 
         // Add rowA
         cfamily.addColumn(Util.cellname("colName"), ByteBufferUtil.bytes("val"), System.currentTimeMillis());
@@ -284,7 +285,7 @@ public class SSTableExportTest extends SchemaLoader
         cfamily.delete(new DeletionInfo(0, 0));
         writer.append(Util.dk("rowA"), cfamily);
 
-        SSTableReader reader = writer.closeAndOpenReader();
+        SSTableReader reader = writer.closeAndOpenReader().iterator().next();
         // Export to JSON and verify
         File tempJson = File.createTempFile("CFWithDeletionInfo", ".json");
         SSTableExport.export(reader, new PrintStream(tempJson.getPath()), new String[0]);

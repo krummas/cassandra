@@ -34,10 +34,10 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorStatsCollector;
+import org.apache.cassandra.io.sstable.DiskAwareSSTableWriter;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.io.sstable.SSTableWriter;
-import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.CloseableIterator;
 
@@ -94,11 +94,11 @@ public class CompactionTask extends AbstractCompactionTask
      * which are properly serialized.
      * Caller is in charge of marking/unmarking the sstables as compacting.
      */
-    protected void runWith(File sstableDirectory) throws Exception
+    protected void runWith(File [] sstableDirectories) throws Exception
     {
         // The collection of sstables passed may be empty (but not null); even if
         // it is not empty, it may compact down to nothing if all rows are deleted.
-        assert sstables != null && sstableDirectory != null;
+        assert sstables != null && sstableDirectories != null;
 
         if (toCompact.size() == 0)
             return;
@@ -146,7 +146,7 @@ public class CompactionTask extends AbstractCompactionTask
         Map<Descriptor, Map<DecoratedKey, RowIndexEntry>> cachedKeyMap =  new HashMap<>();
 
         Collection<SSTableReader> sstables = new ArrayList<>();
-        Collection<SSTableWriter> writers = new ArrayList<>();
+        Collection<SSTableWriterInterface> writers = new ArrayList<>();
         long minRepairedAt = getMinRepairedAt(actuallyCompact);
         if (collector != null)
             collector.beginCompaction(ci);
@@ -161,7 +161,7 @@ public class CompactionTask extends AbstractCompactionTask
                 return;
             }
 
-            SSTableWriter writer = createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt);
+            SSTableWriterInterface writer = createCompactionWriter(sstableDirectories, keysPerSSTable, minRepairedAt, toCompact);
             writers.add(writer);
             while (iter.hasNext())
             {
@@ -194,16 +194,16 @@ public class CompactionTask extends AbstractCompactionTask
                 if (newSSTableSegmentThresholdReached(writer))
                 {
                     // tmp = false because later we want to query it with descriptor from SSTableReader
-                    cachedKeyMap.put(writer.descriptor.asTemporary(false), cachedKeys);
-                    writer = createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt);
+                    cachedKeyMap.put(writer.getDescriptor().asTemporary(false), cachedKeys);
+                    writer = createCompactionWriter(sstableDirectories, keysPerSSTable, minRepairedAt, toCompact);
                     writers.add(writer);
                     cachedKeys = new HashMap<>();
                 }
             }
 
-            if (writer.getFilePointer() > 0)
+            if (writer.hasDataWritten())
             {
-                cachedKeyMap.put(writer.descriptor.asTemporary(false), cachedKeys);
+                cachedKeyMap.put(writer.getDescriptor().asTemporary(false), cachedKeys);
             }
             else
             {
@@ -212,12 +212,12 @@ public class CompactionTask extends AbstractCompactionTask
             }
 
             long maxAge = getMaxDataAge(toCompact);
-            for (SSTableWriter completedWriter : writers)
-                sstables.add(completedWriter.closeAndOpenReader(maxAge));
+            for (SSTableWriterInterface completedWriter : writers)
+                sstables.addAll(completedWriter.closeAndOpenReader(maxAge));
         }
         catch (Throwable t)
         {
-            for (SSTableWriter writer : writers)
+            for (SSTableWriterInterface writer : writers)
                 writer.abort();
             // also remove already completed SSTables
             for (SSTableReader sstable : sstables)
@@ -300,14 +300,14 @@ public class CompactionTask extends AbstractCompactionTask
         return minRepairedAt;
     }
 
-    private SSTableWriter createCompactionWriter(File sstableDirectory, long keysPerSSTable, long repairedAt)
+    private SSTableWriterInterface createCompactionWriter(File[] sstableDirectories, long keysPerSSTable, long repairedAt, Collection<SSTableReader> sstables)
     {
-        return new SSTableWriter(cfs.getTempSSTablePath(sstableDirectory),
+        String [] fileLocs = cfs.getTempSSTablePaths(sstableDirectories);
+        return new DiskAwareSSTableWriter(fileLocs,
+                                 getLevel(),
                                  keysPerSSTable,
                                  repairedAt,
-                                 cfs.metadata,
-                                 cfs.partitioner,
-                                 new MetadataCollector(toCompact, cfs.metadata.comparator, getLevel()));
+                                 cfs, sstables);
     }
 
     protected int getLevel()
@@ -331,7 +331,7 @@ public class CompactionTask extends AbstractCompactionTask
     }
 
     // extensibility point for other strategies that may want to limit the upper bounds of the sstable segment size
-    protected boolean newSSTableSegmentThresholdReached(SSTableWriter writer)
+    protected boolean newSSTableSegmentThresholdReached(SSTableWriterInterface writer)
     {
         return false;
     }

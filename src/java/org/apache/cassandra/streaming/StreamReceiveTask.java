@@ -26,7 +26,7 @@ import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Pair;
 
@@ -42,28 +42,28 @@ public class StreamReceiveTask extends StreamTask
     private volatile boolean aborted;
 
     //  holds references to SSTables received
-    protected Collection<SSTableWriter> sstables;
+    protected Collection<SSTableWriterInterface> sstableWriters;
 
     public StreamReceiveTask(StreamSession session, UUID cfId, int totalFiles, long totalSize)
     {
         super(session, cfId);
         this.totalFiles = totalFiles;
         this.totalSize = totalSize;
-        this.sstables = new ArrayList<>(totalFiles);
+        this.sstableWriters = new ArrayList<>(totalFiles);
     }
 
     /**
      * Process received file.
      *
-     * @param sstable SSTable file received.
+     * @param writer SSTable file received.
      */
-    public void received(SSTableWriter sstable)
+    public void received(SSTableWriterInterface writer)
     {
-        assert cfId.equals(sstable.metadata.cfId);
+        assert cfId.equals(writer.getMetadata().cfId);
         assert !aborted;
 
-        sstables.add(sstable);
-        if (sstables.size() == totalFiles)
+        sstableWriters.add(writer);
+        if (sstableWriters.size() == totalFiles)
             complete();
     }
 
@@ -79,7 +79,7 @@ public class StreamReceiveTask extends StreamTask
 
     private void complete()
     {
-        if (!sstables.isEmpty())
+        if (!sstableWriters.isEmpty())
             StorageService.tasks.submit(new OnCompletionRunnable(this));
     }
 
@@ -96,12 +96,12 @@ public class StreamReceiveTask extends StreamTask
         {
             Pair<String, String> kscf = Schema.instance.getCF(task.cfId);
             ColumnFamilyStore cfs = Keyspace.open(kscf.left).getColumnFamilyStore(kscf.right);
-
-            StreamLockfile lockfile = new StreamLockfile(cfs.directories.getCompactionLocationAsFile(), UUID.randomUUID());
-            lockfile.create(task.sstables);
+            // todo: should not use [0]
+            StreamLockfile lockfile = new StreamLockfile(cfs.directories.getCompactionLocationsAsFiles()[0], UUID.randomUUID());
+            lockfile.create(task.sstableWriters);
             List<SSTableReader> readers = new ArrayList<>();
-            for (SSTableWriter writer : task.sstables)
-                readers.add(writer.closeAndOpenReader());
+            for (SSTableWriterInterface writer : task.sstableWriters)
+                readers.addAll(writer.closeAndOpenReader());
             lockfile.delete();
 
             if (!SSTableReader.acquireReferences(readers))
@@ -128,7 +128,7 @@ public class StreamReceiveTask extends StreamTask
         {
             public void run()
             {
-                for (SSTableWriter writer : sstables)
+                for (SSTableWriterInterface writer : sstableWriters)
                     writer.abort();
             }
         };

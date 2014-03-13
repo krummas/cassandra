@@ -76,9 +76,9 @@ public class SSTableSplitter {
         }
 
         @Override
-        protected boolean newSSTableSegmentThresholdReached(SSTableWriter writer)
+        protected boolean newSSTableSegmentThresholdReached(SSTableWriterInterface writer)
         {
-            return writer.getOnDiskFilePointer() > sstableSizeInMB * 1024L * 1024L;
+            return writer.dataWritten() > sstableSizeInMB * 1024L * 1024L;
         }
 
         @Override

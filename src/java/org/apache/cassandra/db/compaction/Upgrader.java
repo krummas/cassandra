@@ -35,7 +35,7 @@ public class Upgrader
     private final ColumnFamilyStore cfs;
     private final SSTableReader sstable;
     private final Collection<SSTableReader> toUpgrade;
-    private final File directory;
+    private final File[] directories;
 
     private final OperationType compactionType = OperationType.UPGRADE_SSTABLES;
     private final CompactionController controller;
@@ -51,7 +51,7 @@ public class Upgrader
         this.toUpgrade = Collections.singletonList(sstable);
         this.outputHandler = outputHandler;
 
-        this.directory = new File(sstable.getFilename()).getParentFile();
+        this.directories = cfs.directories.getDirectoryForCompactedSSTables();
 
         this.controller = new UpgradeController(cfs);
 
@@ -61,23 +61,9 @@ public class Upgrader
         this.estimatedRows = (long) Math.ceil((double) estimatedTotalKeys / estimatedSSTables);
     }
 
-    private SSTableWriter createCompactionWriter(long repairedAt)
+    private SSTableWriterInterface createCompactionWriter(long repairedAt)
     {
-        MetadataCollector sstableMetadataCollector = new MetadataCollector(cfs.getComparator());
-
-        // Get the max timestamp of the precompacted sstables
-        // and adds generation of live ancestors
-        for (SSTableReader sstable : toUpgrade)
-        {
-            sstableMetadataCollector.addAncestor(sstable.descriptor.generation);
-            for (Integer i : sstable.getAncestors())
-            {
-                if (new File(sstable.descriptor.withGeneration(i).filenameFor(Component.DATA)).exists())
-                    sstableMetadataCollector.addAncestor(i);
-            }
-        }
-
-        return new SSTableWriter(cfs.getTempSSTablePath(directory), estimatedRows, repairedAt, cfs.metadata, cfs.partitioner, sstableMetadataCollector);
+        return CompactionManager.createWriter(cfs, directories, estimatedRows, repairedAt, sstable);
     }
 
     public void upgrade()
@@ -90,11 +76,11 @@ public class Upgrader
         CloseableIterator<AbstractCompactedRow> iter = ci.iterator();
 
         Collection<SSTableReader> sstables = new ArrayList<SSTableReader>();
-        Collection<SSTableWriter> writers = new ArrayList<SSTableWriter>();
+        Collection<SSTableWriterInterface> writers = new ArrayList<SSTableWriterInterface>();
 
         try
         {
-            SSTableWriter writer = createCompactionWriter(sstable.getSSTableMetadata().repairedAt);
+            SSTableWriterInterface writer = createCompactionWriter(sstable.getSSTableMetadata().repairedAt);
             writers.add(writer);
             while (iter.hasNext())
             {
@@ -104,15 +90,15 @@ public class Upgrader
             }
 
             long maxAge = CompactionTask.getMaxDataAge(this.toUpgrade);
-            for (SSTableWriter completedWriter : writers)
-                sstables.add(completedWriter.closeAndOpenReader(maxAge));
+            for (SSTableWriterInterface completedWriter : writers)
+                sstables.addAll(completedWriter.closeAndOpenReader(maxAge));
 
             outputHandler.output("Upgrade of " + sstable + " complete.");
 
         }
         catch (Throwable t)
         {
-            for (SSTableWriter writer : writers)
+            for (SSTableWriterInterface writer : writers)
                 writer.abort();
             // also remove already completed SSTables
             for (SSTableReader sstable : sstables)

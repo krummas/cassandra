@@ -783,6 +783,16 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return name;
     }
 
+    public String[] getTempSSTablePaths(File[] directories)
+    {
+        String[] paths = new String[directories.length];
+        for (int i = 0; i < directories.length; i++)
+        {
+            paths[i] = getTempSSTablePath(directories[i]);
+        }
+        return paths;
+    }
+
     public String getTempSSTablePath(File directory)
     {
         return getTempSSTablePath(directory, Descriptor.Version.CURRENT);
@@ -1331,9 +1341,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         data.replaceCompactedSSTables(sstables, replacements, compactionType);
     }
 
-    void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    void replaceFlushed(Memtable memtable, Collection<SSTableReader> sstables)
     {
-        compactionStrategy.replaceFlushed(memtable, sstable);
+        compactionStrategy.replaceFlushed(memtable, sstables);
     }
 
     public boolean isValid()

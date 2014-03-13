@@ -177,7 +177,11 @@ public class MetadataCollector
         this.replayPosition = replayPosition;
         return this;
     }
-
+    public MetadataCollector setAncestors(Set<Integer> ancestors)
+    {
+        this.ancestors = ancestors;
+        return this;
+    }
     public MetadataCollector addAncestor(int generation)
     {
         this.ancestors.add(generation);

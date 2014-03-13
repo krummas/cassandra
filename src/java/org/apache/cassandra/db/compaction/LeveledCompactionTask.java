@@ -21,7 +21,7 @@ import java.util.Collection;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 
 public class LeveledCompactionTask extends CompactionTask
 {
@@ -36,9 +36,9 @@ public class LeveledCompactionTask extends CompactionTask
     }
 
     @Override
-    protected boolean newSSTableSegmentThresholdReached(SSTableWriter writer)
+    protected boolean newSSTableSegmentThresholdReached(SSTableWriterInterface writer)
     {
-        return writer.getOnDiskFilePointer() > maxSSTableBytes;
+        return writer.dataWritten() > maxSSTableBytes;
     }
 
     @Override

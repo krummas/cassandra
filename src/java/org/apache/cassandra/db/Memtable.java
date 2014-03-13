@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.google.common.base.Throwables;
 
 import org.apache.cassandra.db.commitlog.CommitLog;
+import org.apache.cassandra.io.sstable.DiskAwareSSTableWriter;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -45,8 +47,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.composites.CellNameType;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.io.sstable.SSTableWriter;
-import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 
 public class Memtable
 {
@@ -304,7 +304,7 @@ public class Memtable
                                     * 1.2); // bloom filter and row index overhead
         }
 
-        protected Directories.DataDirectory getWriteableLocation()
+        protected Directories.DataDirectory[] getWriteableLocations()
         {
             return cfs.directories.getFlushLocation();
         }
@@ -314,12 +314,12 @@ public class Memtable
             return estimatedSize;
         }
 
-        protected void runWith(File sstableDirectory) throws Exception
+        protected void runWith(File[] sstableDirectories) throws Exception
         {
-            assert sstableDirectory != null : "Flush task is not bound to any disk";
+            assert sstableDirectories != null : "Flush task is not bound to any disks";
 
-            SSTableReader sstable = writeSortedContents(context, sstableDirectory);
-            cfs.replaceFlushed(Memtable.this, sstable);
+            Collection<SSTableReader> sstables = writeSortedContents(context, sstableDirectories);
+            cfs.replaceFlushed(Memtable.this, sstables);
         }
 
         protected Directories getDirectories()
@@ -327,14 +327,14 @@ public class Memtable
             return cfs.directories;
         }
 
-        private SSTableReader writeSortedContents(ReplayPosition context, File sstableDirectory)
+        private Collection<SSTableReader> writeSortedContents(ReplayPosition context, File[] sstableDirectories)
         throws ExecutionException, InterruptedException
         {
             logger.info("Writing {}", Memtable.this.toString());
 
-            SSTableReader ssTable;
+            Collection<SSTableReader> ssTables;
             // errors when creating the writer that may leave empty temp files.
-            SSTableWriter writer = createFlushWriter(cfs.getTempSSTablePath(sstableDirectory));
+            SSTableWriterInterface writer = createFlushWriter(sstableDirectories);
             try
             {
                 // (we can't clear out the map as-we-go to free up memory,
@@ -357,22 +357,27 @@ public class Memtable
                         writer.append((DecoratedKey)entry.getKey(), cf);
                 }
 
-                if (writer.getFilePointer() > 0)
+                if (writer.hasDataWritten())
                 {
                     // temp sstables should contain non-repaired data.
-                    ssTable = writer.closeAndOpenReader();
+                    ssTables = writer.closeAndOpenReader();
+
+                    long len = 0;
+                    for (SSTableReader sstable : ssTables)
+                        len += new File(sstable.getFilename()).length();
+
                     logger.info(String.format("Completed flushing %s (%d bytes) for commitlog position %s",
-                                              ssTable.getFilename(), new File(ssTable.getFilename()).length(), context));
+                                              ssTables, len, context));
                 }
                 else
                 {
                     writer.abort();
-                    ssTable = null;
+                    ssTables = null;
                     logger.info("Completed flushing; nothing needed to be retained.  Commitlog position was {}",
                                 context);
                 }
 
-                return ssTable;
+                return ssTables;
             }
             catch (Throwable e)
             {
@@ -381,15 +386,15 @@ public class Memtable
             }
         }
 
-        public SSTableWriter createFlushWriter(String filename) throws ExecutionException, InterruptedException
+        public SSTableWriterInterface createFlushWriter(File[] files) throws ExecutionException, InterruptedException
         {
-            MetadataCollector sstableMetadataCollector = new MetadataCollector(cfs.metadata.comparator).replayPosition(context);
-            return new SSTableWriter(filename,
-                                     rows.size(),
-                                     ActiveRepairService.UNREPAIRED_SSTABLE,
-                                     cfs.metadata,
-                                     cfs.partitioner,
-                                     sstableMetadataCollector);
+            String [] sstableLocations = cfs.getTempSSTablePaths(files);
+            Arrays.sort(sstableLocations);
+            return new DiskAwareSSTableWriter(sstableLocations,
+                                              0,
+                                              rows.size(),
+                                              ActiveRepairService.UNREPAIRED_SSTABLE,
+                                              cfs, context);
         }
     }
 

@@ -38,7 +38,7 @@ import org.apache.cassandra.io.FSError;
  */
 public class SSTableSimpleWriter extends AbstractSSTableSimpleWriter
 {
-    private final SSTableWriter writer;
+    private final SSTableWriterInterface writer;
 
     /**
      * Create a new writer.

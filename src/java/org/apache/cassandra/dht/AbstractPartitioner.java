@@ -17,6 +17,9 @@
  */
 package org.apache.cassandra.dht;
 
+import java.util.Collection;
+import java.util.List;
+
 public abstract class AbstractPartitioner<T extends Token> implements IPartitioner<T>
 {
     public <R extends RingPosition> R minValue(Class<R> klass)
@@ -26,5 +29,11 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
             return (R)minToken;
         else
             return (R)minToken.minKeyBound();
+    }
+
+    @Override
+    public List<T> splitRanges(Collection<Range<T>> localRanges, int parts)
+    {
+        return null;
     }
 }

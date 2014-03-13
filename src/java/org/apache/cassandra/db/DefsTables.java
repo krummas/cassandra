@@ -369,7 +369,7 @@ public class DefsTables
 
     private static void addKeyspace(KSMetaData ksm)
     {
-        assert Schema.instance.getKSMetaData(ksm.name) == null;
+        assert Schema.instance.getKSMetaData(ksm.name) == null : ksm.name;
         Schema.instance.load(ksm);
 
         if (!StorageService.instance.isClientMode())

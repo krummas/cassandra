@@ -20,6 +20,9 @@ package org.apache.cassandra.dht;
 import org.apache.cassandra.utils.ObjectSizes;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 
 public class ByteOrderedPartitioner extends AbstractByteOrderedPartitioner
 {
@@ -32,6 +35,13 @@ public class ByteOrderedPartitioner extends AbstractByteOrderedPartitioner
         return new BytesToken(key);
     }
 
+    public List<BytesToken> splitRanges(Collection<Range<BytesToken>> localRanges, int parts)
+    {
+        byte [] maxToken = new byte[16];
+        for (int i = 0; i < 16; i++)
+            maxToken[i] = (byte) 0xff;
+        return Arrays.asList(new BytesToken(maxToken));
+    }
     @Override
     public long getHeapSizeOf(BytesToken token)
     {

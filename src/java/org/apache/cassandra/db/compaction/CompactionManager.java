@@ -72,9 +72,11 @@ import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.DiskAwareSSTableWriter;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.CompactionMetrics;
@@ -599,13 +601,13 @@ public class CompactionManager implements CompactionManagerMBean
             metrics.finishCompaction(scrubInfo);
         }
 
-        if (scrubber.getNewInOrderSSTable() != null)
-            cfs.addSSTable(scrubber.getNewInOrderSSTable());
+        if (scrubber.getNewInOrderSSTables() != null)
+            cfs.addSSTables(scrubber.getNewInOrderSSTables());
 
-        if (scrubber.getNewSSTable() == null)
+        if (scrubber.getNewSSTables() == null)
             cfs.markObsolete(Collections.singletonList(sstable), OperationType.SCRUB);
         else
-            cfs.replaceCompactedSSTables(Collections.singletonList(sstable), Collections.singletonList(scrubber.getNewSSTable()), OperationType.SCRUB);
+            cfs.replaceCompactedSSTables(Collections.singletonList(sstable), scrubber.getNewSSTables(), OperationType.SCRUB);
     }
 
     /**
@@ -706,20 +708,20 @@ public class CompactionManager implements CompactionManagerMBean
 
             logger.info("Cleaning up {}", sstable);
 
-            File compactionFileLocation = cfs.directories.getDirectoryForCompactedSSTables();
-            if (compactionFileLocation == null)
+            File[] compactionFileLocations = cfs.directories.getDirectoryForCompactedSSTables();
+            if (compactionFileLocations == null)
                 throw new IOException("disk full");
 
             ICompactionScanner scanner = cleanupStrategy.getScanner(sstable, getRateLimiter());
             CleanupInfo ci = new CleanupInfo(sstable, scanner);
 
             metrics.beginCompaction(ci);
-            SSTableWriter writer = createWriter(cfs,
-                                                compactionFileLocation,
+            SSTableWriterInterface writer = createWriter(cfs,
+                                                compactionFileLocations,
                                                 expectedBloomFilterSize,
                                                 sstable.getSSTableMetadata().repairedAt,
                                                 sstable);
-            SSTableReader newSstable = null;
+            Collection<SSTableReader> newSSTables = null;
             try
             {
                 while (scanner.hasNext())
@@ -736,7 +738,7 @@ public class CompactionManager implements CompactionManagerMBean
                         totalkeysWritten++;
                 }
                 if (totalkeysWritten > 0)
-                    newSstable = writer.closeAndOpenReader(sstable.maxDataAge);
+                    newSSTables = writer.closeAndOpenReader(sstable.maxDataAge);
                 else
                     writer.abort();
             }
@@ -753,16 +755,19 @@ public class CompactionManager implements CompactionManagerMBean
             }
 
             List<SSTableReader> results = new ArrayList<SSTableReader>(1);
-            if (newSstable != null)
+            if (newSSTables != null)
             {
-                results.add(newSstable);
+                results.addAll(newSSTables);
 
                 String format = "Cleaned up to %s.  %,d to %,d (~%d%% of original) bytes for %,d keys.  Time: %,dms.";
                 long dTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
                 long startsize = sstable.onDiskLength();
-                long endsize = newSstable.onDiskLength();
+                long endsize = 0;
+                for (SSTableReader newSSTable : newSSTables)
+                    endsize += newSSTable.onDiskLength();
+
                 double ratio = (double) endsize / (double) startsize;
-                logger.info(String.format(format, writer.getFilename(), startsize, endsize, (int) (ratio * 100), totalkeysWritten, dTime));
+                logger.info(String.format(format, writer, startsize, endsize, (int) (ratio * 100), totalkeysWritten, dTime));
             }
 
             // flush to ensure we don't lose the tombstones on a restart, since they are not commitlog'd
@@ -870,19 +875,24 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    public static SSTableWriter createWriter(ColumnFamilyStore cfs,
-                                             File compactionFileLocation,
-                                             int expectedBloomFilterSize,
+    public static SSTableWriterInterface createWriter(ColumnFamilyStore cfs,
+                                             File [] compactionFileLocations,
+                                             long expectedBloomFilterSize,
                                              long repairedAt,
                                              SSTableReader sstable)
     {
-        FileUtils.createDirectory(compactionFileLocation);
-        return new SSTableWriter(cfs.getTempSSTablePath(compactionFileLocation),
+        for (File compactionFileLocation : compactionFileLocations)
+                    FileUtils.createDirectory(compactionFileLocation);
+
+        String [] locations = cfs.getTempSSTablePaths(compactionFileLocations);
+
+
+        return new DiskAwareSSTableWriter(locations,
+                                 sstable.getSSTableLevel(),
                                  expectedBloomFilterSize,
                                  repairedAt,
-                                 cfs.metadata,
-                                 cfs.partitioner,
-                                 new MetadataCollector(Collections.singleton(sstable), cfs.metadata.comparator, sstable.getSSTableLevel()));
+                                 cfs,
+                                 Collections.singleton(sstable));
     }
 
     /**
@@ -994,9 +1004,9 @@ public class CompactionManager implements CompactionManagerMBean
             }
 
             logger.info("Anticompacting {}", sstable);
-            File destination = cfs.directories.getDirectoryForCompactedSSTables();
-            SSTableWriter repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
-            SSTableWriter unRepairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstable);
+            File[] destination = cfs.directories.getDirectoryForCompactedSSTables();
+            SSTableWriterInterface repairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
+            SSTableWriterInterface unRepairedSSTableWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstable);
 
             try (CompactionController controller = new CompactionController(cfs, new HashSet<>(Collections.singleton(sstable)), CFMetaData.DEFAULT_GC_GRACE_SECONDS))
             {
@@ -1025,12 +1035,12 @@ public class CompactionManager implements CompactionManagerMBean
                 }
                 // add repaired table with a non-null timestamp field to be saved in SSTableMetadata#repairedAt
                 if (repairedKeyCount > 0)
-                    anticompactedSSTables.add(repairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
+                    anticompactedSSTables.addAll(repairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
                 else
                     repairedSSTableWriter.abort();
                 // supply null as we keep SSTableMetadata#repairedAt empty if the table isn't repaired
                 if (unrepairedKeyCount > 0)
-                    anticompactedSSTables.add(unRepairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
+                    anticompactedSSTables.addAll(unRepairedSSTableWriter.closeAndOpenReader(sstable.maxDataAge));
                 else
                     unRepairedSSTableWriter.abort();
             }

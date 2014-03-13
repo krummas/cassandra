@@ -180,7 +180,7 @@ public class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
 
         public void run()
         {
-            SSTableWriter writer = null;
+            SSTableWriterInterface writer = null;
             try
             {
                 while (true)

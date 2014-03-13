@@ -19,6 +19,7 @@ package org.apache.cassandra.streaming;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.Channels;
@@ -38,8 +39,10 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.DiskAwareSSTableWriter;
 import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.messages.FileMessageHeader;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -76,7 +79,7 @@ public class StreamReader
      * @return SSTable transferred
      * @throws IOException if reading the remote sstable fails. Will throw an RTE if local write fails.
      */
-    public SSTableWriter read(ReadableByteChannel channel) throws IOException
+    public SSTableWriterInterface read(ReadableByteChannel channel) throws IOException
     {
         logger.info("reading file from {}, repairedAt = {}", session.peer, repairedAt);
         long totalSize = totalSize();
@@ -84,7 +87,7 @@ public class StreamReader
         Pair<String, String> kscf = Schema.instance.getCF(cfId);
         ColumnFamilyStore cfs = Keyspace.open(kscf.left).getColumnFamilyStore(kscf.right);
 
-        SSTableWriter writer = createWriter(cfs, totalSize, repairedAt);
+        SSTableWriterInterface writer = createWriter(cfs, totalSize, repairedAt);
         DataInputStream dis = new DataInputStream(new LZFInputStream(Channels.newInputStream(channel)));
         BytesReadTracker in = new BytesReadTracker(dis);
         try
@@ -108,14 +111,15 @@ public class StreamReader
         }
     }
 
-    protected SSTableWriter createWriter(ColumnFamilyStore cfs, long totalSize, long repairedAt) throws IOException
+    protected SSTableWriterInterface createWriter(ColumnFamilyStore cfs, long totalSize, long repairedAt) throws IOException
     {
-        Directories.DataDirectory localDir = cfs.directories.getCompactionLocation();
-        if (localDir == null)
+        Directories.DataDirectory[] localDirs = cfs.directories.getCompactionLocations();
+        if (localDirs == null)
             throw new IOException("Insufficient disk space to store " + totalSize + " bytes");
-        desc = Descriptor.fromFilename(cfs.getTempSSTablePath(cfs.directories.getLocationForDisk(localDir)));
 
-        return new SSTableWriter(desc.filenameFor(Component.DATA), estimatedKeys, repairedAt);
+        File[] locations = cfs.directories.getLocationsForDisks(localDirs);
+        String [] paths = cfs.getTempSSTablePaths(locations);
+        return new DiskAwareSSTableWriter(paths, 0, estimatedKeys, repairedAt, cfs);
     }
 
     protected void drain(InputStream dis, long bytesRead) throws IOException
@@ -134,7 +138,7 @@ public class StreamReader
         return size;
     }
 
-    protected void writeRow(SSTableWriter writer, DataInput in, ColumnFamilyStore cfs) throws IOException
+    protected void writeRow(SSTableWriterInterface writer, DataInput in, ColumnFamilyStore cfs) throws IOException
     {
         DecoratedKey key = StorageService.getPartitioner().decorateKey(ByteBufferUtil.readWithShortLength(in));
         writer.appendFromStream(key, cfs.metadata, in, inputVersion);

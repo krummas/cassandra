@@ -20,6 +20,9 @@ package org.apache.cassandra.dht;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -33,7 +36,6 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MurmurHash;
 import org.apache.cassandra.utils.ObjectSizes;
-
 /**
  * This class generates a BigIntegerToken using a Murmur3 hash.
  */
@@ -152,7 +154,47 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
 
         return ownerships;
     }
+    public List<LongToken> splitRanges(Collection<Range<LongToken>> localRanges, int parts)
+    {
+        if (localRanges == null || localRanges.size() == 0)
+            return Arrays.asList(new LongToken(MAXIMUM));
+        // figure out how many tokens each part should have:
+        List<LongToken> boundaryTokens = new ArrayList<>(parts);
+        BigInteger allLocalTokens = BigInteger.ZERO;
+        for (Range<LongToken> r : localRanges)
+            allLocalTokens = allLocalTokens.add(rangeWidth(r));
+        BigInteger tokensPerPart = allLocalTokens.divide(BigInteger.valueOf(parts));
+        // find the boundaries
+        Iterator<Range<LongToken>> rangeIterator = localRanges.iterator();
+        Range<LongToken> curRange = rangeIterator.next();
+        BigInteger curRangeWidth = rangeWidth(curRange);
+        BigInteger remainingInPart = tokensPerPart;
+        BigInteger left = BigInteger.valueOf(curRange.left.token);
+        while (boundaryTokens.size() < parts - 1)
+        {
+            while (remainingInPart.compareTo(curRangeWidth) > 0)
+            {
+                remainingInPart = remainingInPart.subtract(curRangeWidth);
+                curRange = rangeIterator.next();
+                curRangeWidth = rangeWidth(curRange);
+                left = BigInteger.valueOf(curRange.left.token);
+            }
+            boundaryTokens.add(new LongToken(left.add(remainingInPart).longValue()));
+            left = left.add(remainingInPart);
+            curRangeWidth = curRangeWidth.subtract(remainingInPart);
 
+        }
+        boundaryTokens.add(new LongToken(MAXIMUM));
+        return boundaryTokens;
+    }
+    private static BigInteger rangeWidth(Range<LongToken> r)
+    {
+        BigInteger left = BigInteger.valueOf(((LongToken)r.left.getToken()).token);
+        BigInteger right = BigInteger.valueOf(((LongToken)r.right.getToken()).token);
+        if (left.equals(right))
+            return right.abs().add(left.abs());
+        return right.subtract(left);
+    }
     public Token.TokenFactory<Long> getTokenFactory()
     {
         return tokenFactory;

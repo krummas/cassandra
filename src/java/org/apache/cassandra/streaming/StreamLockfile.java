@@ -26,7 +26,7 @@ import java.util.*;
 import com.google.common.base.Charsets;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
-import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.SSTableWriterInterface;
 import org.apache.cassandra.io.util.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,15 +61,15 @@ public class StreamLockfile
         this.lockfile = lockfile;
     }
 
-    public void create(Collection<SSTableWriter> sstables)
+    public void create(Collection<SSTableWriterInterface> sstables)
     {
         List<String> sstablePaths = new ArrayList<>(sstables.size());
-        for (SSTableWriter writer : sstables)
+        for (SSTableWriterInterface writer : sstables)
         {
             /* write out the file names *without* the 'tmp-file' flag in the file name.
                this class will not need to clean up tmp files (on restart), CassandraDaemon does that already,
                just make sure we delete the fully-formed SSTRs. */
-            sstablePaths.add(writer.descriptor.asTemporary(false).baseFilename());
+            sstablePaths.add(writer.getDescriptor().asTemporary(false).baseFilename());
         }
 
         try

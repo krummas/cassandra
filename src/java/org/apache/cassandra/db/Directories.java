@@ -275,6 +275,14 @@ public class Directories
         return null;
     }
 
+    public File[] getLocationsForDisks(DataDirectory [] dataDirectories)
+    {
+        File[] files = new File[dataDirectories.length];
+        for (int i = 0; i < dataDirectories.length; i++)
+            files[i] = getLocationForDisk(dataDirectories[i]);
+        return files;
+    }
+
     public Descriptor find(String filename)
     {
         for (File dir : allSSTablePaths())
@@ -285,9 +293,9 @@ public class Directories
         return null;
     }
 
-    public File getDirectoryForCompactedSSTables()
+    public File[] getDirectoryForCompactedSSTables()
     {
-        File path = getCompactionLocationAsFile();
+        File [] path = getCompactionLocationsAsFiles();
 
         // Requesting GC has a chance to free space only if we're using mmap and a non SUN jvm
         if (path == null
@@ -300,15 +308,15 @@ public class Directories
             // Note: GCInspector will do this already, but only sun JVM supports GCInspector so far
             SSTableDeletingTask.rescheduleFailedTasks();
             Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
-            path = getCompactionLocationAsFile();
+            path = getCompactionLocationsAsFiles();
         }
 
         return path;
     }
 
-    public File getCompactionLocationAsFile()
+    public File [] getCompactionLocationsAsFiles()
     {
-        return getLocationForDisk(getCompactionLocation());
+        return getLocationsForDisks(getCompactionLocations());
     }
 
     /**
@@ -316,41 +324,34 @@ public class Directories
      *
      * @throws IOError if all directories are blacklisted.
      */
-    public DataDirectory getCompactionLocation()
+    public DataDirectory [] getCompactionLocations()
     {
-        List<DataDirectory> candidates = new ArrayList<>();
+        DataDirectory [] candidates = new DataDirectory[dataDirectories.length];
 
         // pick directories with enough space and so that resulting sstable dirs aren't blacklisted for writes.
-        for (DataDirectory dataDir : dataDirectories)
+        boolean added = false;
+        for (int i = 0; i < dataDirectories.length; i++)
         {
+            DataDirectory dataDir = dataDirectories[i];
             if (BlacklistedDirectories.isUnwritable(getLocationForDisk(dataDir)))
                 continue;
-            candidates.add(dataDir);
+            candidates[i] = dataDir;
+            added = true;
         }
 
-        if (candidates.isEmpty())
+        if (!added)
             throw new IOError(new IOException("All configured data directories have been blacklisted as unwritable for erroring out"));
 
-        // sort directories by free space, in _descending_ order.
-        Collections.sort(candidates);
+        Arrays.sort(candidates);
 
-        // sort directories by load, in _ascending_ order.
-        Collections.sort(candidates, new Comparator<DataDirectory>()
-        {
-            public int compare(DataDirectory a, DataDirectory b)
-            {
-                return a.currentTasks.get() - b.currentTasks.get();
-            }
-        });
-
-        return candidates.get(0);
+        return candidates;
     }
 
-    public DataDirectory getFlushLocation()
+    public DataDirectory[] getFlushLocation()
     {
         return BlacklistedDirectories.isUnwritable(flushPath)
-               ? getCompactionLocation()
-               : flushDirectory;
+               ? getCompactionLocations()
+               : new DataDirectory[] {flushDirectory};
     }
 
     public static File getSnapshotDirectory(Descriptor desc, String snapshotName)
@@ -388,11 +389,11 @@ public class Directories
             // Load factor of 0.9 we do not want to use the entire disk that is too risky.
             return location.getUsableSpace() - estimatedWorkingSize.get();
         }
-
+        @Override
         public int compareTo(DataDirectory o)
         {
-            // we want to sort by free space in descending order
-            return -1 * Longs.compare(getEstimatedAvailableSpace(), o.getEstimatedAvailableSpace());
+            // we need to sort the data dirs deterministically to avoid mixing data
+            return location.getAbsolutePath().compareTo(o.location.getAbsolutePath());
         }
     }
 

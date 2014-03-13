@@ -71,7 +71,9 @@ public class SchemaLoader
         // if you're messing with low-level sstable stuff, it can be useful to inject the schema directly
         // Schema.instance.load(schemaDefinition());
         for (KSMetaData ksm : schemaDefinition())
+        {
             MigrationManager.announceNewKeyspace(ksm);
+        }
     }
 
     public static void startGossiper()
