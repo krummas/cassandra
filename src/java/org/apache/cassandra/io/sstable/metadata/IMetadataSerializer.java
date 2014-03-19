@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.io.sstable.metadata;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.Map;

@@ -299,6 +299,7 @@ class FastByteOperations
         {
             while (length > 0) {
                 long size = (length > UNSAFE_COPY_THRESHOLD) ? UNSAFE_COPY_THRESHOLD : length;
+                // if src or dst are null, the offsets are absolute base addresses:
                 theUnsafe.copyMemory(src, srcOffset, dst, dstOffset, size);
                 length -= size;
                 srcOffset += size;

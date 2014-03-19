@@ -22,7 +22,6 @@ package org.apache.cassandra.service.paxos;
 
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.UUID;
 import java.nio.ByteBuffer;

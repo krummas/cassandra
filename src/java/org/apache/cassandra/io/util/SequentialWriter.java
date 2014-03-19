@@ -183,7 +183,7 @@ public class SequentialWriter extends OutputStream implements WritableByteChanne
     }
 
     /*
-     * Write at most "length" bytes from "b" starting at position "offset", and
+     * Write at most "length" bytes from "data" starting at position "offset", and
      * return the number of bytes written. caller is responsible for setting
      * isDirty.
      */
@@ -211,7 +211,7 @@ public class SequentialWriter extends OutputStream implements WritableByteChanne
     }
 
     /*
-     * Write at most "length" bytes from "b" starting at position "offset", and
+     * Write at most "length" bytes from "data" starting at position "offset", and
      * return the number of bytes written. caller is responsible for setting
      * isDirty.
      */

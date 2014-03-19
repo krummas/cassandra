@@ -18,19 +18,10 @@
 package org.apache.cassandra.repair.messages;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.UUID;
 
-import org.apache.cassandra.db.TypeSizes;
-import org.apache.cassandra.dht.AbstractBounds;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.utils.UUIDSerializer;
 
 public class AnticompactionRequest extends RepairMessage
