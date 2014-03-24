@@ -194,7 +194,7 @@ public class CompactionTask extends AbstractCompactionTask
                 if (newSSTableSegmentThresholdReached(writer))
                 {
                     // tmp = false because later we want to query it with descriptor from SSTableReader
-                    cachedKeyMap.put(writer.descriptor.asTemporary(false), cachedKeys);
+                    cachedKeyMap.put(writer.descriptor.asType(Descriptor.Type.FINAL), cachedKeys);
                     writer = createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt);
                     writers.add(writer);
                     cachedKeys = new HashMap<>();
@@ -203,7 +203,7 @@ public class CompactionTask extends AbstractCompactionTask
 
             if (writer.getFilePointer() > 0)
             {
-                cachedKeyMap.put(writer.descriptor.asTemporary(false), cachedKeys);
+                cachedKeyMap.put(writer.descriptor.asType(Descriptor.Type.FINAL), cachedKeys);
             }
             else
             {

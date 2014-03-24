@@ -324,7 +324,7 @@ public class SSTableWriter extends SSTable
      */
     public void abort()
     {
-        assert descriptor.temporary;
+        assert descriptor.type.isTemporary;
         FileUtils.closeQuietly(iwriter);
         FileUtils.closeQuietly(dataFile);
 
@@ -437,7 +437,7 @@ public class SSTableWriter extends SSTable
 
     static Descriptor rename(Descriptor tmpdesc, Set<Component> components)
     {
-        Descriptor newdesc = tmpdesc.asTemporary(false);
+        Descriptor newdesc = tmpdesc.asType(Descriptor.Type.FINAL);
         rename(tmpdesc, newdesc, components);
         return newdesc;
     }
