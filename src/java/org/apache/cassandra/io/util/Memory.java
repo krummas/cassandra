@@ -21,7 +21,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import com.sun.jna.Native;
-import com.sun.jna.Pointer;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import sun.misc.Unsafe;
 
@@ -261,6 +260,18 @@ public class Memory
     {
         assert peer != 0 : "Memory was freed";
         assert offset >= 0 && offset < size : "Illegal offset: " + offset + ", size: " + size;
+    }
+
+    public void put(long trgOffset, Memory memory, long srcOffset, long size)
+    {
+        unsafe.copyMemory(memory.peer + srcOffset, peer + trgOffset, size);
+    }
+
+    public Memory copy(long newSize)
+    {
+        Memory copy = Memory.allocate(newSize);
+        copy.put(0, this, 0, Math.min(size(), newSize));
+        return copy;
     }
 
     public void free()

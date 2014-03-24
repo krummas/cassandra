@@ -67,8 +67,7 @@ public class CompressedSequentialWriter extends SequentialWriter
         compressed = new ICompressor.WrappedArray(new byte[compressor.initialCompressedBufferLength(buffer.length)]);
 
         /* Index File (-CompressionInfo.db component) and it's header */
-        metadataWriter = CompressionMetadata.Writer.open(offsetsPath);
-        metadataWriter.writeHeader(parameters);
+        metadataWriter = CompressionMetadata.Writer.open(parameters, offsetsPath);
 
         this.sstableMetadataCollector = sstableMetadataCollector;
         crcMetadata = new DataIntegrityMetadata.ChecksumWriter(out);
@@ -102,8 +101,7 @@ public class CompressedSequentialWriter extends SequentialWriter
     @Override
     protected void flushData()
     {
-        seekToChunkStart();
-
+        seekToChunkStart(); // why is this necessary? seems like it should always be at chunk start in normal operation
 
         int compressedLength;
         try
@@ -122,7 +120,7 @@ public class CompressedSequentialWriter extends SequentialWriter
         try
         {
             // write an offset of the newly written chunk to the index file
-            metadataWriter.writeLong(chunkOffset);
+            metadataWriter.addOffset(chunkOffset);
             chunkCount++;
 
             assert compressedLength <= compressed.buffer.length;
@@ -139,6 +137,12 @@ public class CompressedSequentialWriter extends SequentialWriter
 
         // next chunk should be written right after current + length of the checksum (int)
         chunkOffset += compressedLength + 4;
+    }
+
+    public CompressionMetadata openAfterClose()
+    {
+        assert current == originalSize;
+        return metadataWriter.openAfterClose(current, chunkOffset);
     }
 
     @Override
@@ -246,10 +250,9 @@ public class CompressedSequentialWriter extends SequentialWriter
 
         super.close();
         sstableMetadataCollector.addCompressionRatio(compressedSize, originalSize);
-        metadataWriter.finalizeHeader(current, chunkCount);
         try
         {
-            metadataWriter.close();
+            metadataWriter.close(current, chunkCount);
         }
         catch (IOException e)
         {
