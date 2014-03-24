@@ -23,6 +23,7 @@ import java.nio.ByteOrder;
 import com.sun.jna.Native;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import sun.misc.Unsafe;
+import sun.nio.ch.DirectBuffer;
 
 /**
  * An off-heap region of memory that must be manually free'd when no longer needed.
@@ -144,6 +145,24 @@ public class Memory
         }
     }
 
+    public void setBytes(long memoryOffset, ByteBuffer buffer)
+    {
+        if (buffer == null)
+            throw new NullPointerException();
+        else if (buffer.remaining() == 0)
+            return;
+        checkPosition(memoryOffset + buffer.remaining());
+        if (buffer.hasArray())
+        {
+            setBytes(memoryOffset, buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
+        }
+        else if (buffer instanceof DirectBuffer)
+        {
+            unsafe.copyMemory(((DirectBuffer) buffer).address() + buffer.position(), peer + memoryOffset, buffer.remaining());
+        }
+        else
+            throw new IllegalStateException();
+    }
     /**
      * Transfers count bytes from buffer to Memory
      *
