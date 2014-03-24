@@ -181,6 +181,7 @@ public class Config
     public volatile boolean incremental_backups = false;
     public boolean trickle_fsync = false;
     public int trickle_fsync_interval_in_kb = 10240;
+    public int sstable_preemptive_open_interval_in_mb = 50;
 
     public Long key_cache_size_in_mb = null;
     public volatile int key_cache_save_period = 14400;

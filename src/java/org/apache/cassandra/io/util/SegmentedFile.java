@@ -117,6 +117,12 @@ public abstract class SegmentedFile
          */
         public abstract SegmentedFile complete(String path);
 
+        /**
+         * Called after all potential boundaries have been added to apply this Builder to a concrete file on disk.
+         * @param path The file on disk.
+         */
+        public abstract SegmentedFile openEarly(String path);
+
         public void serializeBounds(DataOutput out) throws IOException
         {
             out.writeUTF(DatabaseDescriptor.getDiskAccessMode().name());

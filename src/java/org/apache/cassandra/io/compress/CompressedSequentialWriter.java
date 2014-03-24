@@ -56,11 +56,10 @@ public class CompressedSequentialWriter extends SequentialWriter
 
     public CompressedSequentialWriter(File file,
                                       String offsetsPath,
-                                      boolean skipIOCache,
                                       CompressionParameters parameters,
                                       MetadataCollector sstableMetadataCollector)
     {
-        super(file, parameters.chunkLength(), skipIOCache);
+        super(file, parameters.chunkLength());
         this.compressor = parameters.sstableCompressor;
 
         // buffer for compression should be the same size as buffer itself
@@ -129,6 +128,7 @@ public class CompressedSequentialWriter extends SequentialWriter
             out.write(compressed.buffer, 0, compressedLength);
             // write corresponding checksum
             crcMetadata.append(compressed.buffer, 0, compressedLength);
+            lastFlushOffset += compressedLength + 4;
         }
         catch (IOException e)
         {
@@ -137,6 +137,11 @@ public class CompressedSequentialWriter extends SequentialWriter
 
         // next chunk should be written right after current + length of the checksum (int)
         chunkOffset += compressedLength + 4;
+    }
+
+    public CompressionMetadata openEarly()
+    {
+        return metadataWriter.openEarly(originalSize, chunkOffset);
     }
 
     public CompressionMetadata openAfterClose()

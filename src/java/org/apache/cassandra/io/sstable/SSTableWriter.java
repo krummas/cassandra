@@ -137,14 +137,13 @@ public class SSTableWriter extends SSTable
         {
             dataFile = SequentialWriter.open(getFilename(),
                                              descriptor.filenameFor(Component.COMPRESSION_INFO),
-                                             !metadata.populateIoCacheOnFlush(),
                                              metadata.compressionParameters(),
                                              sstableMetadataCollector);
             dbuilder = SegmentedFile.getCompressedBuilder((CompressedSequentialWriter) dataFile);
         }
         else
         {
-            dataFile = SequentialWriter.open(new File(getFilename()), !metadata.populateIoCacheOnFlush(), new File(descriptor.filenameFor(Component.CRC)));
+            dataFile = SequentialWriter.open(new File(getFilename()), new File(descriptor.filenameFor(Component.CRC)));
             dbuilder = SegmentedFile.getBuilder(DatabaseDescriptor.getDiskAccessMode());
         }
 
@@ -325,8 +324,15 @@ public class SSTableWriter extends SSTable
     public void abort()
     {
         assert descriptor.type.isTemporary;
-        FileUtils.closeQuietly(iwriter);
-        FileUtils.closeQuietly(dataFile);
+        if (iwriter == null && dataFile == null)
+            return;
+        if (iwriter != null)
+        {
+            FileUtils.closeQuietly(iwriter.indexFile);
+            iwriter.bf.close();
+        }
+        if (dataFile!= null)
+            FileUtils.closeQuietly(dataFile);
 
         Set<Component> components = SSTable.componentsFor(descriptor);
         try
@@ -349,6 +355,50 @@ public class SSTableWriter extends SSTable
         // data retention is done through copying
         first = getMinimalKey(first);
         last = lastWrittenKey = getMinimalKey(last);
+    }
+
+    public SSTableReader openEarly(long maxDataAge)
+    {
+        StatsMetadata sstableMetadata = (StatsMetadata) sstableMetadataCollector.finalizeMetadata(partitioner.getClass().getCanonicalName(),
+                                                  metadata.getBloomFilterFpChance(),
+                                                  repairedAt).get(MetadataType.STATS);
+
+        DecoratedKey exclusiveUpperBoundOfReadableIndex = iwriter.getMaxReadableKey(0);
+        if (exclusiveUpperBoundOfReadableIndex == null)
+            return null;
+
+        Descriptor link = descriptor.asType(Descriptor.Type.TEMPLINK);
+
+        if (!new File(link.filenameFor(Component.PRIMARY_INDEX)).exists())
+        {
+            FileUtils.createHardLink(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)), new File(link.filenameFor(Component.PRIMARY_INDEX)));
+            FileUtils.createHardLink(new File(descriptor.filenameFor(Component.DATA)), new File(link.filenameFor(Component.DATA)));
+        }
+
+        SegmentedFile ifile = iwriter.builder.openEarly(link.filenameFor(Component.PRIMARY_INDEX));
+        SegmentedFile dfile = dbuilder.openEarly(link.filenameFor(Component.DATA));
+        SSTableReader sstable = SSTableReader.internalOpen(descriptor.asType(Descriptor.Type.FINAL),
+                                                           components, metadata,
+                                                           partitioner, ifile,
+                                                           dfile, iwriter.summary.build(partitioner, exclusiveUpperBoundOfReadableIndex),
+                                                           iwriter.bf, maxDataAge, sstableMetadata);
+        sstable.first = getMinimalKey(first);
+        sstable.last = getMinimalKey(exclusiveUpperBoundOfReadableIndex);
+        DecoratedKey inclusiveUpperBoundOfReadableData = iwriter.getMaxReadableKey(1);
+        if (inclusiveUpperBoundOfReadableData == null)
+            return null;
+        int offset = 2;
+        while (true)
+        {
+            RowIndexEntry indexEntry = sstable.getPosition(inclusiveUpperBoundOfReadableData, SSTableReader.Operator.GT);
+            if (indexEntry != null && indexEntry.position <= dataFile.getLastFlushOffset())
+                break;
+            inclusiveUpperBoundOfReadableData = iwriter.getMaxReadableKey(offset++);
+            if (inclusiveUpperBoundOfReadableData == null)
+                return null;
+        }
+        sstable.last = getMinimalKey(inclusiveUpperBoundOfReadableData);
+        return sstable;
     }
 
     public SSTableReader closeAndOpenReader()
@@ -420,7 +470,7 @@ public class SSTableWriter extends SSTable
 
     private static void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components)
     {
-        SequentialWriter out = SequentialWriter.open(new File(desc.filenameFor(Component.STATS)), true);
+        SequentialWriter out = SequentialWriter.open(new File(desc.filenameFor(Component.STATS)));
         try
         {
             desc.getMetadataSerializer().serialize(components, out.stream);
@@ -479,11 +529,16 @@ public class SSTableWriter extends SSTable
 
         IndexWriter(long keyCount)
         {
-            indexFile = SequentialWriter.open(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)),
-                                              !metadata.populateIoCacheOnFlush());
+            indexFile = SequentialWriter.open(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)));
             builder = SegmentedFile.getBuilder(DatabaseDescriptor.getIndexAccessMode());
             summary = new IndexSummaryBuilder(keyCount, metadata.getMinIndexInterval(), Downsampling.BASE_SAMPLING_LEVEL);
             bf = FilterFactory.getFilter(keyCount, metadata.getBloomFilterFpChance(), true);
+        }
+
+        DecoratedKey getMaxReadableKey(int offset)
+        {
+            long maxIndexLength = indexFile.getLastFlushOffset();
+            return summary.getMaxReadableKey(maxIndexLength, offset);
         }
 
         public void append(DecoratedKey key, RowIndexEntry indexEntry)

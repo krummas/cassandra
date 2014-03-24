@@ -1351,6 +1351,11 @@ public class DatabaseDescriptor
         return conf.commitlog_total_space_in_mb;
     }
 
+    public static int getSSTablePreempiveOpenIntervalInMB()
+    {
+        return conf.sstable_preemptive_open_interval_in_mb;
+    }
+
     public static boolean getTrickleFsync()
     {
         return conf.trickle_fsync;

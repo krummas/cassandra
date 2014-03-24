@@ -44,17 +44,24 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
             // only one segment in a standard-io file
         }
 
-        protected CompressionMetadata metadata(String path)
+        protected CompressionMetadata metadata(String path, boolean early)
         {
             if (writer == null)
                 return CompressionMetadata.create(path);
+            else if (early)
+                return writer.openEarly();
             else
                 return writer.openAfterClose();
         }
 
         public SegmentedFile complete(String path)
         {
-            return new CompressedSegmentedFile(path, metadata(path));
+            return new CompressedSegmentedFile(path, metadata(path, false));
+        }
+
+        public SegmentedFile openEarly(String path)
+        {
+            return new CompressedSegmentedFile(path, metadata(path, true));
         }
     }
 

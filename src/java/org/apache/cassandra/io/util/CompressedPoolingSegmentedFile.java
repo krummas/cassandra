@@ -45,7 +45,12 @@ public class CompressedPoolingSegmentedFile extends PoolingSegmentedFile impleme
 
         public SegmentedFile complete(String path)
         {
-            return new CompressedPoolingSegmentedFile(path, metadata(path));
+            return new CompressedPoolingSegmentedFile(path, metadata(path, false));
+        }
+
+        public SegmentedFile openEarly(String path)
+        {
+            return new CompressedPoolingSegmentedFile(path, metadata(path, true));
         }
     }
 

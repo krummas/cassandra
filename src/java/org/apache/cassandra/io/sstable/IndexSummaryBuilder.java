@@ -24,10 +24,10 @@ import java.util.Collections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.cache.RefCountedMemory;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.IPartitioner;
-import org.apache.cassandra.io.util.Memory;
 
 import static org.apache.cassandra.io.sstable.Downsampling.BASE_SAMPLING_LEVEL;
 
@@ -123,12 +123,33 @@ public class IndexSummaryBuilder
 
     public IndexSummary build(IPartitioner partitioner)
     {
+        return build(partitioner, null);
+    }
+
+    public IndexSummary build(IPartitioner partitioner, DecoratedKey exclusiveUpperBound)
+    {
+        assert keys.size() > 0;
+        assert keys.size() == positions.size();
+
+        int length;
+        if (exclusiveUpperBound == null)
+            length = keys.size();
+        else
+            length = Collections.binarySearch(keys, exclusiveUpperBound);
+
+        assert length > 0;
+
+        long offheapSize = this.offheapSize;
+        if (length < keys.size())
+            for (int i = length ; i < keys.size() ; i++)
+                offheapSize -= keys.get(i).key.remaining() + TypeSizes.NATIVE.sizeof(positions.get(i));
+
         // first we write out the position in the *summary* for each key in the summary,
         // then we write out (key, actual index position) pairs
-        Memory memory = Memory.allocate(offheapSize + (keys.size() * 4));
+        RefCountedMemory memory = new RefCountedMemory(offheapSize + (length * 4));
         int idxPosition = 0;
-        int keyPosition = keys.size() * 4;
-        for (int i = 0; i < keys.size(); i++)
+        int keyPosition = length * 4;
+        for (int i = 0; i < length; i++)
         {
             // write the position of the actual entry in the index summary (4 bytes)
             memory.setInt(idxPosition, keyPosition);
@@ -144,8 +165,9 @@ public class IndexSummaryBuilder
             memory.setLong(keyPosition, actualIndexPosition);
             keyPosition += TypeSizes.NATIVE.sizeof(actualIndexPosition);
         }
+        assert keyPosition == offheapSize + (length * 4);
         int sizeAtFullSampling = (int) Math.ceil(keysWritten / (double) minIndexInterval);
-        return new IndexSummary(partitioner, memory, keys.size(), sizeAtFullSampling, minIndexInterval, samplingLevel);
+        return new IndexSummary(partitioner, memory, length, sizeAtFullSampling, minIndexInterval, samplingLevel);
     }
 
     public static int entriesAtSamplingLevel(int samplingLevel, int maxSummarySize)
@@ -208,7 +230,7 @@ public class IndexSummaryBuilder
 
         // Subtract (removedKeyCount * 4) from the new size to account for fewer entries in the first section, which
         // stores the position of the actual entries in the summary.
-        Memory memory = Memory.allocate(newOffHeapSize - (removedKeyCount * 4));
+        RefCountedMemory memory = new RefCountedMemory(newOffHeapSize - (removedKeyCount * 4));
 
         // Copy old entries to our new Memory.
         int idxPosition = 0;

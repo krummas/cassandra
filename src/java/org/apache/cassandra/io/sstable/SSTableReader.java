@@ -192,6 +192,7 @@ public class SSTableReader extends SSTable
     private SSTableReader replacedBy;
     private SSTableReader replaces;
     private SSTableDeletingTask deletingTask;
+    private Runnable runOnClose;
 
     @VisibleForTesting
     public RestorableMeter readMeter;
@@ -229,6 +230,7 @@ public class SSTableReader extends SSTable
                 try
                 {
                     CompactionMetadata metadata = (CompactionMetadata) sstable.descriptor.getMetadataSerializer().deserialize(sstable.descriptor, MetadataType.COMPACTION);
+                    assert metadata != null;
                     if (cardinality == null)
                         cardinality = metadata.cardinalityEstimator;
                     else
@@ -339,7 +341,7 @@ public class SSTableReader extends SSTable
         // special implementation of load to use non-pooled SegmentedFile builders
         SegmentedFile.Builder ibuilder = new BufferedSegmentedFile.Builder();
         SegmentedFile.Builder dbuilder = sstable.compression
-                                       ? new CompressedSegmentedFile.Builder()
+                                       ? new CompressedSegmentedFile.Builder(null)
                                        : new BufferedSegmentedFile.Builder();
         if (!sstable.loadSummary(ibuilder, dbuilder))
             sstable.buildSummary(false, ibuilder, dbuilder, false, Downsampling.BASE_SAMPLING_LEVEL);
@@ -554,13 +556,14 @@ public class SSTableReader extends SSTable
 
         synchronized (replaceLock)
         {
-            boolean closeBf = true, closeSummary = true, closeFiles = true;
+            boolean closeBf = true, closeSummary = true, closeFiles = true, deleteFiles = false;
 
             if (replacedBy != null)
             {
                 closeBf = replacedBy.bf != bf;
                 closeSummary = replacedBy.indexSummary != indexSummary;
                 closeFiles = replacedBy.dfile != dfile;
+                deleteFiles = !dfile.path.equals(replacedBy.dfile.path);
             }
 
             if (replaces != null)
@@ -568,6 +571,7 @@ public class SSTableReader extends SSTable
                 closeBf &= replaces.bf != bf;
                 closeSummary &= replaces.indexSummary != indexSummary;
                 closeFiles &= replaces.dfile != dfile;
+                deleteFiles &= !dfile.path.equals(replaces.dfile.path);
             }
 
             boolean deleteAll = false;
@@ -606,6 +610,8 @@ public class SSTableReader extends SSTable
                 ifile.cleanup();
                 dfile.cleanup();
             }
+            if (runOnClose != null)
+                runOnClose.run();
             if (deleteAll)
             {
                 /**
@@ -618,7 +624,28 @@ public class SSTableReader extends SSTable
                 dropPageCache();
                 deletingTask.schedule();
             }
+            else if (deleteFiles)
+            {
+                StorageService.tasks.submit(new Runnable()
+                {
+                    public void run()
+                    {
+                        FileUtils.deleteWithConfirm(new File(dfile.path));
+                        FileUtils.deleteWithConfirm(new File(ifile.path));
+                    }
+                });
+            }
         }
+    }
+
+    public boolean equals(Object that)
+    {
+        return that instanceof SSTableReader && ((SSTableReader) that).descriptor.equals(this.descriptor);
+    }
+
+    public int hashCode()
+    {
+        return this.descriptor.hashCode();
     }
 
     public String getFilename()
@@ -865,6 +892,53 @@ public class SSTableReader extends SSTable
         }
     }
 
+    public SSTableReader cloneWithNewStart(DecoratedKey newStart, final Runnable runOnClose)
+    {
+        synchronized (replaceLock)
+        {
+            assert replacedBy == null;
+
+            if (newStart.compareTo(this.first) > 0)
+            {
+                if (newStart.compareTo(this.last) > 0)
+                {
+                    this.runOnClose = new Runnable()
+                    {
+                        public void run()
+                        {
+                            CLibrary.trySkipCache(dfile.path, 0, 0);
+                            CLibrary.trySkipCache(ifile.path, 0, 0);
+                            runOnClose.run();
+                        }
+                    };
+                }
+                else
+                {
+                    final long dataStart = getPosition(newStart, Operator.GE).position;
+                    final long indexStart = getIndexScanPosition(newStart);
+                    this.runOnClose = new Runnable()
+                    {
+                        public void run()
+                        {
+                            CLibrary.trySkipCache(dfile.path, 0, dataStart);
+                            CLibrary.trySkipCache(ifile.path, 0, indexStart);
+                            runOnClose.run();
+                        }
+                    };
+                }
+            }
+
+            if (readMeterSyncFuture != null)
+                readMeterSyncFuture.cancel(false);
+            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, indexSummary.readOnlyClone(), bf, maxDataAge, sstableMetadata);
+            replacement.readMeter = this.readMeter;
+            replacement.first = this.last.compareTo(newStart) > 0 ? newStart : this.last;
+            replacement.last = this.last;
+            setReplacedBy(replacement);
+            return replacement;
+        }
+    }
+
     /**
      * Returns a new SSTableReader with the same properties as this SSTableReader except that a new IndexSummary will
      * be built at the target samplingLevel.  This (original) SSTableReader instance will be marked as replaced, have
@@ -993,7 +1067,7 @@ public class SSTableReader extends SSTable
         return getIndexScanPositionFromBinarySearchResult(indexSummary.binarySearch(key), indexSummary);
     }
 
-    public static long getIndexScanPositionFromBinarySearchResult(int binarySearchResult, IndexSummary referencedIndexSummary)
+    private static long getIndexScanPositionFromBinarySearchResult(int binarySearchResult, IndexSummary referencedIndexSummary)
     {
         if (binarySearchResult == -1)
             return -1;
@@ -1214,6 +1288,12 @@ public class SSTableReader extends SSTable
             positions.add(Pair.create(left, right));
         }
         return positions;
+    }
+
+    public void invalidateCacheKey(DecoratedKey key)
+    {
+        KeyCacheKey cacheKey = new KeyCacheKey(metadata.cfId, descriptor, key.key);
+        keyCache.remove(cacheKey);
     }
 
     public void cacheKey(DecoratedKey key, RowIndexEntry info)
@@ -1631,6 +1711,20 @@ public class SSTableReader extends SSTable
     public boolean isRepaired()
     {
         return sstableMetadata.repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE;
+    }
+
+    public SSTableReader getCurrentReplacement()
+    {
+        synchronized (replaceLock)
+        {
+            SSTableReader cur = this, next = replacedBy;
+            while (next != null)
+            {
+                cur = next;
+                next = next.replacedBy;
+            }
+            return cur;
+        }
     }
 
     /**

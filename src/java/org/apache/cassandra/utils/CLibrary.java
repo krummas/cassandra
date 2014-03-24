@@ -18,6 +18,9 @@
 package org.apache.cassandra.utils;
 
 import java.io.FileDescriptor;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
 
 import org.slf4j.Logger;
@@ -136,6 +139,25 @@ public final class CLibrary
                 // OS X allows mlockall to be called, but always returns an error
                 logger.warn("Unknown mlockall error {}", errno(e));
             }
+        }
+    }
+
+    public static void trySkipCache(String path, long offset, long len)
+    {
+        trySkipCache(getfd(path), offset, len);
+    }
+
+    public static void trySkipCache(int fd, long offset, long len)
+    {
+        if (len == 0)
+            trySkipCache(fd, 0, 0);
+
+        while (len > 0)
+        {
+            int sublen = (int) Math.min(Integer.MAX_VALUE, len);
+            trySkipCache(fd, offset, sublen);
+            len -= sublen;
+            offset -= sublen;
         }
     }
 
@@ -278,6 +300,33 @@ public final class CLibrary
         }
 
         return -1;
+    }
+
+    public static int getfd(String path)
+    {
+        RandomAccessFile file = null;
+        try
+        {
+            file = new RandomAccessFile(path, "r");
+            return getfd(file.getFD());
+        }
+        catch (Throwable t)
+        {
+            // ignore
+            return -1;
+        }
+        finally
+        {
+            try
+            {
+                if (file != null)
+                    file.close();
+            }
+            catch (Throwable t)
+            {
+                // ignore
+            }
+        }
     }
 
     /**
