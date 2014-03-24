@@ -1312,29 +1312,6 @@ public class SSTableReader extends SSTable
         keyCache.put(cacheKey, info);
     }
 
-    public void preheat(Map<DecoratedKey, RowIndexEntry> cachedKeys) throws IOException
-    {
-        RandomAccessFile f = new RandomAccessFile(getFilename(), "r");
-
-        try
-        {
-            int fd = CLibrary.getfd(f.getFD());
-
-            for (Map.Entry<DecoratedKey, RowIndexEntry> entry : cachedKeys.entrySet())
-            {
-                cacheKey(entry.getKey(), entry.getValue());
-
-                // add to the cache but don't do actual preheating if we have it disabled in the config
-                if (DatabaseDescriptor.shouldPreheatPageCache() && fd > 0)
-                    CLibrary.preheatPage(fd, entry.getValue().position);
-            }
-        }
-        finally
-        {
-            FileUtils.closeQuietly(f);
-        }
-    }
-
     public RowIndexEntry getCachedPosition(DecoratedKey key, boolean updateStats)
     {
         return getCachedPosition(new KeyCacheKey(metadata.cfId, descriptor, key.key), updateStats);
