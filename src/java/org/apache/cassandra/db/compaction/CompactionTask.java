@@ -34,11 +34,14 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorStatsCollector;
+import org.apache.cassandra.dht.*;
+import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.CloseableIterator;
 
 public class CompactionTask extends AbstractCompactionTask
@@ -94,11 +97,11 @@ public class CompactionTask extends AbstractCompactionTask
      * which are properly serialized.
      * Caller is in charge of marking/unmarking the sstables as compacting.
      */
-    protected void runWith(File sstableDirectory) throws Exception
+    protected void runWith(File[] sstableDirectories) throws Exception
     {
         // The collection of sstables passed may be empty (but not null); even if
         // it is not empty, it may compact down to nothing if all rows are deleted.
-        assert sstables != null && sstableDirectory != null;
+        assert sstables != null && sstableDirectories != null;
 
         if (toCompact.size() == 0)
             return;
@@ -144,7 +147,12 @@ public class CompactionTask extends AbstractCompactionTask
         // we can't preheat until the tracker has been set. This doesn't happen until we tell the cfs to
         // replace the old entries.  Track entries to preheat here until then.
         Map<Descriptor, Map<DecoratedKey, RowIndexEntry>> cachedKeyMap =  new HashMap<>();
-
+        // todo: refactor to use DiskAwareWriter (note that we need to track key cache per sstable)
+        List<Range<Token>> localRanges = Range.normalize(StorageService.instance.getLocalRanges(cfs.keyspace.getName()));
+        int boundaryIndex = 0;
+        List<Token> diskBoundaries = cfs.partitioner.splitRanges(localRanges, sstableDirectories.length);
+        File sstableDirectory = sstableDirectories[boundaryIndex];
+        Token curToken = diskBoundaries.get(boundaryIndex);
         Collection<SSTableReader> sstables = new ArrayList<>();
         Collection<SSTableWriter> writers = new ArrayList<>();
         long minRepairedAt = getMinRepairedAt(actuallyCompact);
@@ -169,6 +177,24 @@ public class CompactionTask extends AbstractCompactionTask
                     throw new CompactionInterruptedException(ci.getCompactionInfo());
 
                 AbstractCompactedRow row = iter.next();
+                while (row.key.compareTo(curToken.maxKeyBound()) > 0)
+                {
+                    boundaryIndex++;
+                    curToken = diskBoundaries.get(boundaryIndex);
+                    sstableDirectory = sstableDirectories[boundaryIndex];
+                    if (writer.getFilePointer() > 0)
+                    {
+                        cachedKeyMap.put(writer.descriptor.asTemporary(false), cachedKeys);
+                    }
+                    else
+                    {
+                        writer.abort();
+                        writers.remove(writer);
+                    }
+                    writer = createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt);
+                    writers.add(writer);
+                    cachedKeys = new HashMap<>();
+                }
                 RowIndexEntry indexEntry = writer.append(row);
                 if (indexEntry == null)
                 {
@@ -213,7 +239,12 @@ public class CompactionTask extends AbstractCompactionTask
 
             long maxAge = getMaxDataAge(toCompact);
             for (SSTableWriter completedWriter : writers)
-                sstables.add(completedWriter.closeAndOpenReader(maxAge));
+            {
+                if (completedWriter.getFilePointer() > 0)
+                    sstables.add(completedWriter.closeAndOpenReader(maxAge));
+                else
+                    writer.abort();
+            }
         }
         catch (Throwable t)
         {

@@ -119,12 +119,15 @@ public class StandaloneScrubber
 
                         if (manifest != null)
                         {
-                            if (scrubber.getNewInOrderSSTable() != null)
-                                manifest.add(scrubber.getNewInOrderSSTable());
+                            if (scrubber.getNewInOrderSSTables() != null)
+                            {
+                                for(SSTableReader reader : scrubber.getNewInOrderSSTables())
+                                    manifest.add(reader);
+                            }
 
-                            List<SSTableReader> added = scrubber.getNewSSTable() == null
+                            Collection<SSTableReader> added = scrubber.getNewSSTables() == null
                                 ? Collections.<SSTableReader>emptyList()
-                                : Collections.singletonList(scrubber.getNewSSTable());
+                                : scrubber.getNewSSTables();
                             manifest.replace(Collections.singletonList(sstable), added);
                         }
 

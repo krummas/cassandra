@@ -118,7 +118,7 @@ public class ScrubTest extends SchemaLoader
         scrubber = new Scrubber(cfs, sstable, true);
         scrubber.scrub();
         scrubber.close();
-        cfs.replaceCompactedSSTables(Collections.singletonList(sstable), Collections.singletonList(scrubber.getNewSSTable()), OperationType.SCRUB);
+        cfs.replaceCompactedSSTables(Collections.singletonList(sstable), scrubber.getNewSSTables(), OperationType.SCRUB);
         assertEquals(1, cfs.getSSTables().size());
 
         // verify that we can read all of the rows, and there is now one less row

@@ -24,6 +24,8 @@ import java.util.Map;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.serializers.TypeSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.ObjectSizes;
 
@@ -52,7 +54,29 @@ public class LocalPartitioner extends AbstractPartitioner<LocalToken>
     {
         return new LocalToken(comparator, ByteBufferUtil.EMPTY_BYTE_BUFFER);
     }
+    public LocalToken getMaximumToken()
+    {
+        return new LocalToken(new AbstractType()
+        {
+            @Override
+            public ByteBuffer fromString(String source) throws MarshalException
+            {
+                return null;
+            }
 
+            @Override
+            public TypeSerializer getSerializer()
+            {
+                return null;
+            }
+
+            @Override
+            public int compare(Object o1, Object o2)
+            {
+                return 1;
+            }
+        }, ByteBufferUtil.EMPTY_BYTE_BUFFER);
+    }
     public LocalToken getToken(ByteBuffer key)
     {
         return new LocalToken(comparator, key);

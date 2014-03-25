@@ -460,8 +460,8 @@ public class DatabaseDescriptor
         /* data file and commit log directories. they get created later, when they're needed. */
         if (conf.commitlog_directory != null && conf.data_file_directories != null && conf.saved_caches_directory != null)
         {
-            if (conf.flush_directory == null)
-                conf.flush_directory = conf.data_file_directories[0];
+            if (conf.flush_directories == null)
+                conf.flush_directories = conf.data_file_directories;
 
             for (String datadir : conf.data_file_directories)
             {
@@ -668,7 +668,8 @@ public class DatabaseDescriptor
 
             FileUtils.createDirectory(conf.saved_caches_directory);
 
-            FileUtils.createDirectory(conf.flush_directory);
+            for (String flushDirectory : conf.flush_directories)
+                FileUtils.createDirectory(flushDirectory);
         }
         catch (ConfigurationException e)
         {
@@ -1519,8 +1520,8 @@ public class DatabaseDescriptor
         return arch.contains("64") || arch.contains("sparcv9");
     }
 
-    public static String getFlushLocation()
+    public static String[] getFlushLocations()
     {
-        return conf.flush_directory;
+        return conf.flush_directories;
     }
 }

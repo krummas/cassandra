@@ -35,7 +35,7 @@ public class Scrubber implements Closeable
 {
     public final ColumnFamilyStore cfs;
     public final SSTableReader sstable;
-    public final File destination;
+    public final File[] destinations;
     public final boolean skipCorrupted;
 
     private final CompactionController controller;
@@ -46,9 +46,9 @@ public class Scrubber implements Closeable
     private final RandomAccessReader indexFile;
     private final ScrubInfo scrubInfo;
 
-    private SSTableWriter writer;
-    private SSTableReader newSstable;
-    private SSTableReader newInOrderSstable;
+    private DiskAwareWriter writer;
+    private Collection<SSTableReader> newSstables;
+    private Collection<SSTableReader> newInOrderSstables;
 
     private int goodRows;
     private int badRows;
@@ -78,8 +78,8 @@ public class Scrubber implements Closeable
         this.skipCorrupted = skipCorrupted;
 
         // Calculate the expected compacted filesize
-        this.destination = cfs.directories.getDirectoryForCompactedSSTables();
-        if (destination == null)
+        this.destinations = cfs.directories.getDirectoriesForCompactedSSTables();
+        if (destinations == null)
             throw new IOException("disk full");
 
         List<SSTableReader> toScrub = Collections.singletonList(sstable);
@@ -114,8 +114,7 @@ public class Scrubber implements Closeable
             }
 
             // TODO errors when creating the writer may leave empty temp files.
-            writer = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, sstable.getSSTableMetadata().repairedAt, sstable);
-
+            writer = new DiskAwareWriter(cfs, destinations, expectedBloomFilterSize, sstable.getSSTableMetadata().repairedAt, sstable);
             DecoratedKey prevKey = null;
 
             while (!dataFile.isEOF())
@@ -241,10 +240,10 @@ public class Scrubber implements Closeable
                 }
             }
 
-            if (writer.getFilePointer() > 0)
+            if (writer.totalKeysWritten() > 0)
             {
                 long repairedAt = badRows > 0 ? ActiveRepairService.UNREPAIRED_SSTABLE : sstable.getSSTableMetadata().repairedAt;
-                newSstable = writer.closeAndOpenReader(sstable.maxDataAge, repairedAt);
+                newSstables = writer.finish(repairedAt);
             }
         }
         catch (Throwable t)
@@ -262,14 +261,14 @@ public class Scrubber implements Closeable
         {
             // out of order rows, but no bad rows found - we can keep our repairedAt time
             long repairedAt = badRows > 0 ? ActiveRepairService.UNREPAIRED_SSTABLE : sstable.getSSTableMetadata().repairedAt;
-            SSTableWriter inOrderWriter = CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt, sstable);
+            DiskAwareWriter inOrderWriter = new DiskAwareWriter(cfs, destinations, expectedBloomFilterSize, repairedAt, sstable);
             for (Row row : outOfOrderRows)
                 inOrderWriter.append(row.key, row.cf);
-            newInOrderSstable = inOrderWriter.closeAndOpenReader(sstable.maxDataAge);
-            outputHandler.warn(String.format("%d out of order rows found while scrubbing %s; Those have been written (in order) to a new sstable (%s)", outOfOrderRows.size(), sstable, newInOrderSstable));
+            newInOrderSstables = inOrderWriter.finish();
+            outputHandler.warn(String.format("%d out of order rows found while scrubbing %s; Those have been written (in order) to new sstables (%s)", outOfOrderRows.size(), sstable, newInOrderSstables));
         }
 
-        if (newSstable == null)
+        if (newSstables == null)
         {
             if (badRows > 0)
                 outputHandler.warn("No valid rows found while scrubbing " + sstable + "; it is marked for deletion now. If you want to attempt manual recovery, you can find a copy in the pre-scrub snapshot");
@@ -299,14 +298,14 @@ public class Scrubber implements Closeable
         outOfOrderRows.add(new Row(key, cf));
     }
 
-    public SSTableReader getNewSSTable()
+    public Collection<SSTableReader> getNewSSTables()
     {
-        return newSstable;
+        return newSstables;
     }
 
-    public SSTableReader getNewInOrderSSTable()
+    public Collection<SSTableReader> getNewInOrderSSTables()
     {
-        return newInOrderSstable;
+        return newInOrderSstables;
     }
 
     private void throwIfFatal(Throwable th)

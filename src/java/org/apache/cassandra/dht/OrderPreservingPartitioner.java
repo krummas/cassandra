@@ -218,4 +218,16 @@ public class OrderPreservingPartitioner extends AbstractPartitioner<StringToken>
     {
         return UTF8Type.instance;
     }
+
+    @Override
+    protected StringToken getMaximumToken()
+    {
+        return new StringToken("")
+        {
+            public int compareTo(Token<String> o)
+            {
+                return 1;
+            }
+        };
+    }
 }

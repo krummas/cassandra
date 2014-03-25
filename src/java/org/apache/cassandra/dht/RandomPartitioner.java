@@ -63,6 +63,23 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
         return MINIMUM;
     }
 
+    public BigInteger totalRangeWidth()
+    {
+        return MAXIMUM.subtract(MINIMUM.token);
+    }
+    public BigInteger minTokenValue()
+    {
+        return MINIMUM.token;
+    }
+    public BigInteger maxTokenValue()
+    {
+        return MAXIMUM;
+    }
+    public BigIntegerToken getMaximumToken()
+    {
+        return new BigIntegerToken(MAXIMUM);
+    }
+
     public BigIntegerToken getRandomToken()
     {
         BigInteger token = FBUtilities.hashToBigInteger(GuidGenerator.guidAsBytes());
@@ -165,5 +182,25 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
     public AbstractType<?> getTokenValidator()
     {
         return IntegerType.instance;
+    }
+
+    public List<BigIntegerToken> splitRanges(List<Range<BigIntegerToken>> localRanges, int parts)
+    {
+        if (localRanges == null || localRanges.size() == 0)
+            return Arrays.asList(new BigIntegerToken(MAXIMUM));
+        List<Pair<BigInteger, BigInteger>> boundaries = new ArrayList<>();
+        for(Range r : localRanges)
+        {
+            BigInteger left = ((BigIntegerToken)r.left.getToken()).token;
+            BigInteger right = ((BigIntegerToken)r.right.getToken()).token;
+            boundaries.add(Pair.create(left, right));
+        }
+        List<BigInteger> splitRanges = rangeSplitHelper(boundaries, parts, this);
+        List<BigIntegerToken> tokenBoundaries = new ArrayList<>(splitRanges.size());
+        for (BigInteger boundary : splitRanges)
+        {
+            tokenBoundaries.add(new BigIntegerToken(boundary));
+        }
+        return tokenBoundaries;
     }
 }

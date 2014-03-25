@@ -20,6 +20,9 @@ package org.apache.cassandra.dht;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -33,6 +36,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MurmurHash;
 import org.apache.cassandra.utils.ObjectSizes;
+import org.apache.cassandra.utils.Pair;
 
 /**
  * This class generates a BigIntegerToken using a Murmur3 hash.
@@ -79,6 +83,20 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
     public LongToken getMinimumToken()
     {
         return MINIMUM;
+    }
+
+    public BigInteger totalRangeWidth()
+    {
+        return BigInteger.valueOf(MAXIMUM).subtract(BigInteger.valueOf(MINIMUM.token));
+    }
+
+    public BigInteger minTokenValue()
+    {
+        return BigInteger.valueOf(MINIMUM.token);
+    }
+    public BigInteger maxTokenValue()
+    {
+        return BigInteger.valueOf(MAXIMUM);
     }
 
     /**
@@ -153,6 +171,25 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return ownerships;
     }
 
+    public List<LongToken> splitRanges(List<Range<LongToken>> localRanges, int parts)
+    {
+        if (localRanges == null || localRanges.size() == 0)
+            return Arrays.asList(new LongToken(MAXIMUM));
+        List<Pair<BigInteger, BigInteger>> boundaries = new ArrayList<>();
+        for(Range r : localRanges)
+        {
+            BigInteger left = BigInteger.valueOf(((LongToken)r.left.getToken()).token);
+            BigInteger right = BigInteger.valueOf(((LongToken)r.right.getToken()).token);
+            boundaries.add(Pair.create(left, right));
+        }
+
+        List<BigInteger> splitRanges = rangeSplitHelper(boundaries, parts, this);
+        List<LongToken> boundaryTokens = new ArrayList<>(parts);
+        for (BigInteger b : splitRanges)
+            boundaryTokens.add(new LongToken(b.longValue()));
+        return boundaryTokens;
+    }
+
     public Token.TokenFactory<Long> getTokenFactory()
     {
         return tokenFactory;
@@ -203,5 +240,9 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
     public AbstractType<?> getTokenValidator()
     {
         return LongType.instance;
+    }
+    protected LongToken getMaximumToken()
+    {
+        return new LongToken(MAXIMUM);
     }
 }
