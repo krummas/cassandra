@@ -92,14 +92,12 @@ public class Directories
     public static final String SECONDARY_INDEX_NAME_SEPARATOR = ".";
 
     public static final DataDirectory[] dataDirectories;
-    public static final DataDirectory flushDirectory;
     static
     {
         String[] locations = DatabaseDescriptor.getAllDataFileLocations();
         dataDirectories = new DataDirectory[locations.length];
         for (int i = 0; i < locations.length; ++i)
             dataDirectories[i] = new DataDirectory(new File(locations[i]));
-        flushDirectory = new DataDirectory(new File(DatabaseDescriptor.getFlushLocation()));
     }
 
 
@@ -178,7 +176,6 @@ public class Directories
 
     private final CFMetaData metadata;
     private final File[] dataPaths;
-    private final File flushPath;
 
     /**
      * Create Directories of given ColumnFamily.
@@ -192,7 +189,6 @@ public class Directories
         if (StorageService.instance.isClientMode())
         {
             dataPaths = null;
-            flushPath = null;
             return;
         }
 
@@ -208,6 +204,7 @@ public class Directories
             // check if old SSTable directory exists
             dataPaths[i] = new File(dataDirectories[i].location, join(metadata.ksName, this.metadata.cfName));
         }
+
         boolean olderDirectoryExists = Iterables.any(Arrays.asList(dataPaths), new Predicate<File>()
         {
             public boolean apply(File file)
@@ -221,8 +218,6 @@ public class Directories
             for (int i = 0; i < dataDirectories.length; ++i)
                 dataPaths[i] = new File(dataDirectories[i].location, join(metadata.ksName, directoryName));
         }
-
-        flushPath = new File(flushDirectory.location, join(metadata.ksName, directoryName));
 
         for (File dir : allSSTablePaths())
         {
@@ -246,7 +241,7 @@ public class Directories
      */
     private Iterable<File> allSSTablePaths()
     {
-        return ImmutableSet.<File>builder().add(dataPaths).add(flushPath).build();
+        return ImmutableSet.<File>builder().add(dataPaths).build();
     }
 
     /**
@@ -256,7 +251,7 @@ public class Directories
      */
     private static Iterable<DataDirectory> allSSTableDirectories()
     {
-        return ImmutableSet.<DataDirectory>builder().add(dataDirectories).add(flushDirectory).build();
+        return ImmutableSet.<DataDirectory>builder().add(dataDirectories).build();
     }
 
     /**
@@ -273,6 +268,20 @@ public class Directories
                 return dir;
         }
         return null;
+    }
+
+    public File[] getLocationsForDisks(DataDirectory[] dataDirectories)
+    {
+        File[] locations = new File[dataDirectories.length];
+        for (File dir : allSSTablePaths())
+        {
+            for (int i = 0; i < dataDirectories.length; i++)
+            {
+                if (dir.getAbsolutePath().startsWith(dataDirectories[i].location.getAbsolutePath()))
+                    locations[i] = dir;
+            }
+        }
+        return locations;
     }
 
     public Descriptor find(String filename)
@@ -311,6 +320,38 @@ public class Directories
         return getLocationForDisk(getCompactionLocation());
     }
 
+    public File[] getDirectoriesForCompactedSSTables()
+    {
+        File[] paths = getCompactionLocationsAsFiles();
+
+        // Requesting GC has a chance to free space only if we're using mmap and a non SUN jvm
+        if (paths == null
+            && (DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap || DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
+            && !FileUtils.isCleanerAvailable())
+        {
+            logger.info("Forcing GC to free up disk space.  Upgrade to the Oracle JVM to avoid this");
+            StorageService.instance.requestGC();
+            // retry after GCing has forced unmap of compacted SSTables so they can be deleted
+            // Note: GCInspector will do this already, but only sun JVM supports GCInspector so far
+            SSTableDeletingTask.rescheduleFailedTasks();
+            Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
+            paths = getCompactionLocationsAsFiles();
+        }
+
+        return paths;
+    }
+
+    public File[] getCompactionLocationsAsFiles()
+    {
+        DataDirectory[] compactionLocations = getCompactionLocations();
+        File[] locations = new File[compactionLocations.length];
+        for (int i = 0; i < compactionLocations.length; i++)
+        {
+            locations[i] = getLocationForDisk(compactionLocations[i]);
+        }
+        return locations;
+    }
+
     /**
      * @return a non-blacklisted directory with the most free space and least current tasks.
      *
@@ -346,11 +387,38 @@ public class Directories
         return candidates.get(0);
     }
 
-    public DataDirectory getFlushLocation()
+    /**
+     * @return an array of directories to put sstables, sorted lexicographically
+     *
+     * @throws IOError if all directories are blacklisted.
+     */
+    public DataDirectory[] getCompactionLocations()
     {
-        return BlacklistedDirectories.isUnwritable(flushPath)
-               ? getCompactionLocation()
-               : flushDirectory;
+        DataDirectory[] candidates = new DataDirectory[dataDirectories.length];
+
+        // pick directories with enough space and so that resulting sstable dirs aren't blacklisted for writes.
+        boolean added = false;
+        for (int i = 0; i < dataDirectories.length; i++)
+        {
+            DataDirectory dataDir = dataDirectories[i];
+            if (BlacklistedDirectories.isUnwritable(getLocationForDisk(dataDir)))
+                continue;
+            candidates[i]= dataDir;
+            added = true;
+        }
+
+        if (!added)
+            throw new IOError(new IOException("All configured data directories have been blacklisted as unwritable for erroring out"));
+
+        Arrays.sort(candidates, new Comparator<DataDirectory>()
+        {
+            @Override
+            public int compare(DataDirectory o1, DataDirectory o2)
+            {
+                return o1.location.compareTo(o2.location);
+            }
+        });
+        return candidates;
     }
 
     public static File getSnapshotDirectory(Descriptor desc, String snapshotName)

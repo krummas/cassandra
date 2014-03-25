@@ -514,7 +514,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber, IFailureDe
         metrics.incomingBytes.inc(headerSize);
         // send back file received message
         handler.sendMessage(new ReceivedMessage(message.header.cfId, message.header.sequenceNumber));
-        receivers.get(message.header.cfId).received(message.sstable);
+        receivers.get(message.header.cfId).received(message.diskAwareWriter);
     }
 
     public void progress(Descriptor desc, ProgressInfo.Direction direction, long bytes, long total)

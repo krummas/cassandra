@@ -31,7 +31,10 @@ import com.google.common.base.Charsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.DiskAwareWriter;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.io.util.FileUtils;
@@ -66,17 +69,22 @@ public class StreamLockfile
         this.lockfile = lockfile;
     }
 
-    public void create(Collection<SSTableWriter> sstables)
+    public void create(Collection<DiskAwareWriter> diskAwareWriters)
     {
-        List<String> sstablePaths = new ArrayList<>(sstables.size());
-        for (SSTableWriter writer : sstables)
+        List<String> sstablePaths = new ArrayList<>(diskAwareWriters.size());
+        for (DiskAwareWriter writer : diskAwareWriters)
         {
             /* write out the file names *without* the 'tmp-file' flag in the file name.
                this class will not need to clean up tmp files (on restart), CassandraDaemon does that already,
                just make sure we delete the fully-formed SSTRs. */
-            sstablePaths.add(writer.descriptor.asType(Descriptor.Type.FINAL).baseFilename());
+            for (SSTableWriter sstableWriter : writer.getWriters())
+            {
+                /* write out the file names *without* the 'tmp-file' flag in the file name.
+                   this class will not need to clean up tmp files (on restart), CassandraDaemon does that already,
+                   just make sure we delete the fully-formed SSTRs. */
+                sstablePaths.add(sstableWriter.descriptor.asType(Descriptor.Type.FINAL).baseFilename());
+            }
         }
-
         try
         {
             Files.write(lockfile.toPath(), sstablePaths, Charsets.UTF_8,

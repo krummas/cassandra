@@ -20,6 +20,9 @@ package org.apache.cassandra.dht;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -33,6 +36,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MurmurHash;
 import org.apache.cassandra.utils.ObjectSizes;
+import org.apache.cassandra.utils.Pair;
 
 /**
  * This class generates a BigIntegerToken using a Murmur3 hash.
@@ -81,6 +85,15 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return MINIMUM;
     }
 
+    public BigInteger totalRangeWidth()
+    {
+        return BigInteger.valueOf(MAXIMUM).subtract(BigInteger.valueOf(MINIMUM.token));
+    }
+
+    public BigInteger minTokenValue()
+    {
+        return BigInteger.valueOf(MINIMUM.token);
+    }
     /**
      * Generate the token of a key.
      * Note that we need to ensure all generated token are strictly bigger than MINIMUM.
@@ -204,4 +217,9 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
     {
         return LongType.instance;
     }
+    public LongToken getMaximumToken()
+    {
+        return new LongToken(MAXIMUM);
+    }
+    protected LongToken tokenForValue(BigInteger value) { return new LongToken(value.longValue()); }
 }

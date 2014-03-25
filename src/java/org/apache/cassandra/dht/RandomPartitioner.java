@@ -63,6 +63,20 @@ public class RandomPartitioner extends AbstractPartitioner<BigIntegerToken>
         return MINIMUM;
     }
 
+    public BigInteger totalRangeWidth()
+    {
+        return MAXIMUM.subtract(MINIMUM.token);
+    }
+    public BigInteger minTokenValue()
+    {
+        return MINIMUM.token;
+    }
+    protected BigIntegerToken tokenForValue(BigInteger value) { return new BigIntegerToken(value); }
+    public BigIntegerToken getMaximumToken()
+    {
+        return new BigIntegerToken(MAXIMUM);
+    }
+
     public BigIntegerToken getRandomToken()
     {
         BigInteger token = FBUtilities.hashToBigInteger(GuidGenerator.guidAsBytes());

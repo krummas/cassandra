@@ -23,6 +23,7 @@ import java.util.*;
 
 import com.google.common.base.Throwables;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.util.FileUtils;
@@ -80,7 +81,19 @@ public class Scrubber implements Closeable
         this.isOffline = isOffline;
 
         // Calculate the expected compacted filesize
-        this.destination = cfs.directories.getDirectoryForCompactedSSTables();
+        boolean scrubbingInDatadir = false;
+        for (String dir : DatabaseDescriptor.getAllDataFileLocations())
+        {
+            File f = new File(dir);
+            if (f.getAbsoluteFile().equals(sstable.descriptor.directory.getAbsoluteFile()))
+                scrubbingInDatadir = true;
+        }
+        if (!scrubbingInDatadir)
+            this.destination = cfs.directories.getDirectoryForCompactedSSTables();
+        else
+            this.destination = sstable.descriptor.directory;
+
+        // TODO: check if disk is full, if so, find other disk
         if (destination == null)
             throw new IOException("disk full");
 

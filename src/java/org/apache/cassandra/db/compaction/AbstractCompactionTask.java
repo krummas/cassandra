@@ -17,7 +17,14 @@
  */
 package org.apache.cassandra.db.compaction;
 
+import java.io.File;
+import java.util.HashSet;
 import java.util.Set;
+
+import com.google.common.collect.Iterables;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
@@ -27,11 +34,12 @@ import org.apache.cassandra.io.util.DiskAwareRunnable;
 
 public abstract class AbstractCompactionTask extends DiskAwareRunnable
 {
+    private static final Logger logger = LoggerFactory.getLogger(AbstractCompactionTask.class);
     protected final ColumnFamilyStore cfs;
     protected Set<SSTableReader> sstables;
     protected boolean isUserDefined;
     protected OperationType compactionType;
-
+    protected final File directory;
     /**
      * @param cfs
      * @param sstables must be marked compacting
@@ -45,13 +53,42 @@ public abstract class AbstractCompactionTask extends DiskAwareRunnable
 
         // enforce contract that caller should mark sstables compacting
         Set<SSTableReader> compacting = cfs.getDataTracker().getCompacting();
-        for (SSTableReader sstable : sstables)
-            assert compacting.contains(sstable) : sstable.getFilename() + " is not correctly marked compacting";
+        Set<File> directories = new HashSet<>();
+        if (!Iterables.isEmpty(sstables))
+        {
+
+            for (SSTableReader sstable : sstables)
+            {
+                directories.add(sstable.descriptor.directory);
+                assert compacting.contains(sstable) : sstable.getFilename() + " is not correctly marked compacting";
+            }
+        }
+        if (directories.size() == 1)
+            directory = directories.iterator().next();
+        else if (directories.size() == 0)
+            directory = cfs.directories.getDirectoryForCompactedSSTables();
+        else
+        {
+            logger.warn("Compaction contains sstables from different directories - you should run nodetool <TODO> to ensure the data is placed correctly on the disks. Placing compaction result on disk with most space.");
+            File maxAvail = null;
+            for (File dir : directories)
+            {
+                if (maxAvail == null || maxAvail.getFreeSpace() < dir.getFreeSpace())
+                {
+                    if (cfs.directories.getLocationForDisk(new Directories.DataDirectory(dir)) != null)
+                        maxAvail = dir;
+                }
+            }
+            if (maxAvail == null)
+                directory = cfs.directories.getDirectoryForCompactedSSTables();
+            else
+                directory = maxAvail;
+        }
     }
 
     protected Directories.DataDirectory getWriteableLocation()
     {
-        return cfs.directories.getCompactionLocation();
+        return new Directories.DataDirectory(directory);
     }
 
     /**

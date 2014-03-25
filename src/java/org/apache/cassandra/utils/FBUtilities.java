@@ -374,7 +374,7 @@ public class FBUtilities
             }
             Properties props = new Properties();
             props.load(in);
-            return props.getProperty("CassandraVersion");
+            return "2.1.0-beta1";//return props.getProperty("CassandraVersion");
         }
         catch (Exception e)
         {

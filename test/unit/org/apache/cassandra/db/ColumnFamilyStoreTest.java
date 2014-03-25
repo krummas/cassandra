@@ -1660,7 +1660,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         ByteBuffer key = bytes("key");
 
         // 1st sstable
-        SSTableSimpleWriter writer = new SSTableSimpleWriter(dir.getDirectoryForCompactedSSTables(), cfmeta, StorageService.getPartitioner());
+        SSTableSimpleWriter writer = new SSTableSimpleWriter(dir.getDirectoriesForCompactedSSTables()[0], cfmeta, StorageService.getPartitioner());
         writer.newRow(key);
         writer.addColumn(bytes("col"), bytes("val"), 1);
         writer.close();
@@ -1672,7 +1672,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         final SSTableReader sstable1 = SSTableReader.open(sstableToOpen.getKey());
 
         // simulate incomplete compaction
-        writer = new SSTableSimpleWriter(dir.getDirectoryForCompactedSSTables(),
+        writer = new SSTableSimpleWriter(dir.getDirectoriesForCompactedSSTables()[0],
                                          cfmeta, StorageService.getPartitioner())
         {
             protected SSTableWriter getWriter()
@@ -1727,7 +1727,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
 
         // Write SSTable generation 3 that has ancestors 1 and 2
         final Set<Integer> ancestors = Sets.newHashSet(1, 2);
-        SSTableSimpleWriter writer = new SSTableSimpleWriter(dir.getDirectoryForCompactedSSTables(),
+        SSTableSimpleWriter writer = new SSTableSimpleWriter(dir.getDirectoriesForCompactedSSTables()[0],
                                                 cfmeta, StorageService.getPartitioner())
         {
             protected SSTableWriter getWriter()
@@ -1794,13 +1794,13 @@ public class ColumnFamilyStoreTest extends SchemaLoader
 
         ByteBuffer key = bytes("key");
 
-        SSTableSimpleWriter writer = new SSTableSimpleWriter(dir.getDirectoryForCompactedSSTables(),
+        SSTableSimpleWriter writer = new SSTableSimpleWriter(dir.getDirectoriesForCompactedSSTables()[0],
                                                               cfmeta, StorageService.getPartitioner());
         writer.newRow(key);
         writer.addColumn(bytes("col"), bytes("val"), 1);
         writer.close();
 
-        writer = new SSTableSimpleWriter(dir.getDirectoryForCompactedSSTables(),
+        writer = new SSTableSimpleWriter(dir.getDirectoriesForCompactedSSTables()[0],
                                          cfmeta, StorageService.getPartitioner());
         writer.newRow(key);
         writer.addColumn(bytes("col"), bytes("val"), 1);

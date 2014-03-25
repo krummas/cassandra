@@ -18,6 +18,7 @@
 package org.apache.cassandra.dht;
 
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -47,6 +48,7 @@ public interface IPartitioner<T extends Token>
      * Not legal to assign to a node or key.  (But legal to use in range scans.)
      */
     public T getMinimumToken();
+    public T getMaximumToken();
 
     /**
      * @return a Token that can be used to route a given key
@@ -87,4 +89,6 @@ public interface IPartitioner<T extends Token>
     public AbstractType<?> getTokenValidator();
 
     public <R extends RingPosition> R minValue(Class<R> klass);
+
+    public List<T> splitRanges(int parts);
 }

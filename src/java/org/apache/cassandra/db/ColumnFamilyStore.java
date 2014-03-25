@@ -86,6 +86,20 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                                           new LinkedBlockingQueue<Runnable>(),
                                                                                           new NamedThreadFactory("MemtableFlushWriter"),
                                                                                           "internal");
+
+    private static final ExecutorService [] perDiskflushExecutors = new JMXEnabledThreadPoolExecutor[DatabaseDescriptor.getAllDataFileLocations().length];
+    static {
+        for (int i = 0; i < DatabaseDescriptor.getAllDataFileLocations().length; i++)
+        {
+            perDiskflushExecutors[i] = new JMXEnabledThreadPoolExecutor(1,
+                                                                        StageManager.KEEPALIVE,
+                                                                        TimeUnit.SECONDS,
+                                                                        new LinkedBlockingQueue<Runnable>(),
+                                                                        new NamedThreadFactory("PerDiskMemtableFlushWriter_"+i),
+                                                                        "internal");
+        }
+    }
+
     // post-flush executor is single threaded to provide guarantee that any flush Future on a CF will never return until prior flushes have completed
     public static final ExecutorService postFlushExecutor = new JMXEnabledThreadPoolExecutor(1,
                                                                                              StageManager.KEEPALIVE,
@@ -1047,9 +1061,27 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
             for (final Memtable memtable : memtables)
             {
+                List<Future<SSTableReader>> futures = new ArrayList<>();
                 // flush the memtable
-                MoreExecutors.sameThreadExecutor().execute(memtable.flushRunnable());
+                List<Memtable.FlushRunnable> flushRunnables = memtable.flushRunnables();
+                for (int i = 0; i < flushRunnables.size(); i++)
+                    futures.add(perDiskflushExecutors[i].submit(flushRunnables.get(i)));
 
+                List<SSTableReader> flushedSSTables = new ArrayList<>(futures.size());
+                for (Future<SSTableReader> f : futures)
+                {
+                    try
+                    {
+                        SSTableReader reader = f.get();
+                        if(reader != null)
+                            flushedSSTables.add(reader);
+                    }
+                    catch (ExecutionException|InterruptedException e)
+                    {
+                        throw new RuntimeException(e);
+                    }
+                }
+                replaceFlushed(memtable, flushedSSTables);
                 // issue a read barrier for reclaiming the memory, and offload the wait to another thread
                 final OpOrder.Barrier readBarrier = readOrdering.newBarrier();
                 readBarrier.issue();
@@ -1362,7 +1394,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         data.markObsolete(sstables, compactionType);
     }
 
-    void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    void replaceFlushed(Memtable memtable, Collection<SSTableReader> sstable)
     {
         compactionStrategy.replaceFlushed(memtable, sstable);
     }
