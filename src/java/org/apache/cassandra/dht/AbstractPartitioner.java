@@ -36,6 +36,18 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
             return (R)minToken.minKeyBound();
     }
 
+
+    /**
+     * Split the given range, where each split contains the same number of tokens.
+     *
+     * for example, say the node owns the ranges 0-10 and 20-30, and you have 4 disks (parts):
+     * total owned number of tokens is 20, each part should have 20/4=5 tokens, meaning boundaries will be
+     * 5, 10, 25, 30 (or, last boundary is actually maxToken)
+     *
+     * @param localRanges the ranges owned by this node, normalized (@see Range#normalize())
+     * @param parts the number of parts to split the range in
+     * @return a list with the boundaries for the parts, last boundary will be max token.
+     */
     public List<T> splitRanges(List<Range<T>> localRanges, int parts)
     {
         return Arrays.asList(getMaximumToken());
