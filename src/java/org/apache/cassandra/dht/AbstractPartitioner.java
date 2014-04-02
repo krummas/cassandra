@@ -44,6 +44,10 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
      * total owned number of tokens is 20, each part should have 20/4=5 tokens, meaning boundaries will be
      * 5, 10, 25, 30 (or, last boundary is actually maxToken)
      *
+     * TODO: Default implementation returns a list with only one entry, the max token, this makes the
+     * sstablewriter only write tokens to the first disk. It should probably instead make it possible to
+     * spread out the tokens over the disks based on disk space available
+     *
      * @param localRanges the ranges owned by this node, normalized (@see Range#normalize())
      * @param parts the number of parts to split the range in
      * @return a list with the boundaries for the parts, last boundary will be max token.
@@ -53,6 +57,14 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
         return Arrays.asList(getMaximumToken());
     }
 
+    /**
+     * Generic helper for splitting ranges of BigIntegers, uses the given partitioner to figure out max/min tokens for that partitioner.
+     *
+     * @param ranges
+     * @param parts
+     * @param partitioner
+     * @return a list of boundaries, the last item in this list is always the maximum token for the given partitioner.
+     */
     public static List<BigInteger> rangeSplitHelper(List<Pair<BigInteger, BigInteger>> ranges, int parts, AbstractPartitioner<? extends Token> partitioner)
     {
         List<BigInteger> boundaryTokens = new ArrayList<>(parts);
@@ -86,6 +98,13 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
         return boundaryTokens;
     }
 
+    /**
+     * "Width" of the given range. If left == right, we cover the whole range and use the given partitioner to figure
+     * out how big that is.
+     * @param range
+     * @param partitioner
+     * @return
+     */
     public static BigInteger width(Pair<BigInteger, BigInteger> range, AbstractPartitioner<? extends Token> partitioner)
     {
         if (range.left.equals(range.right))

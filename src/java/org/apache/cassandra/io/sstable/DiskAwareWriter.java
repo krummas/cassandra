@@ -160,6 +160,7 @@ public class DiskAwareWriter
     public long appendFromStream(DecoratedKey key, CFMetaData metadata, DataInput in, Descriptor.Version inputVersion) throws IOException
     {
         maybeSwitchWriter(key);
+        totalKeysWritten++;
         return writer.appendFromStream(key, metadata, in, inputVersion);
     }
 

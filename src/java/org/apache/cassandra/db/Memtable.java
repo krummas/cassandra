@@ -226,6 +226,11 @@ public class Memtable
         return builder.toString();
     }
 
+    /**
+     * Creates the flush runnables, one runnable per flush directory
+     *
+     * @return
+     */
     public List<FlushRunnable> flushRunnables()
     {
         // todo: don't recalc for every flush..

@@ -171,6 +171,15 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return ownerships;
     }
 
+    /**
+     * Split the given ranges
+     *
+     * Converts the LongToken ranges to BigInteger ones and then back again to be
+     * able to use AbstractPartitioner#splitRanges
+     * @param localRanges the ranges owned by this node, normalized (@see Range#normalize())
+     * @param parts the number of parts to split the range in
+     * @return
+     */
     public List<LongToken> splitRanges(List<Range<LongToken>> localRanges, int parts)
     {
         if (localRanges == null || localRanges.size() == 0)
