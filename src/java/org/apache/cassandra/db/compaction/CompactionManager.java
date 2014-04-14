@@ -67,6 +67,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.OnDiskAtom;
+import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionInfo.Holder;
 import org.apache.cassandra.db.index.SecondaryIndexBuilder;
@@ -74,6 +75,7 @@ import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.DiskAwareWriter;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
@@ -435,6 +437,98 @@ public class CompactionManager implements CompactionManagerMBean
         SSTableReader.releaseReferences(sstables);
         cfs.getDataTracker().unmarkCompacting(sstables);
         logger.info(String.format("Completed anticompaction successfully"));
+    }
+
+    public AllSSTableOpStatus rebalanceData(final ColumnFamilyStore cfs) throws ExecutionException, InterruptedException
+    {
+        final Iterable<SSTableReader> sstables = cfs.markAllCompacting();
+        if (sstables == null)
+        {
+            logger.info("Aborting data rebalancing of {}.{} after failing to interrupt other compaction operations", cfs.keyspace.getName(), cfs.name);
+            return AllSSTableOpStatus.ABORTED;
+        }
+        if (Iterables.isEmpty(sstables))
+        {
+            logger.info("No sstables to rebalance for {}.{}", cfs.keyspace.getName(), cfs.name);
+            return AllSSTableOpStatus.SUCCESSFUL;
+        }
+
+        Runnable runnable = new UnmarkingRunnable(cfs, sstables)
+        {
+            protected void runMayThrow() throws IOException
+            {
+                // Sort the column families in order of SSTable size, so cleanup of smaller CFs
+                // can free up space for larger ones
+                List<SSTableReader> sortedSSTables = Lists.newArrayList(sstables);
+                Collections.sort(sortedSSTables, SSTableReader.sstableComparator);
+
+                doRebalanceCompaction(cfs, sortedSSTables);
+            }
+        };
+        executor.submit(runnable).get();
+        return AllSSTableOpStatus.SUCCESSFUL;
+    }
+
+    private void doRebalanceCompaction(ColumnFamilyStore cfs, List<SSTableReader> sstables)
+    {
+        List<Token> boundaries = cfs.partitioner.splitRanges(DatabaseDescriptor.getAllDataFileLocations().length);
+        File [] dirs = cfs.directories.getDirectoriesForCompactedSSTables();
+        if (boundaries == null || boundaries.size() == 1 || dirs.length == 1)
+        {
+            logger.info("Nothing to rebalance.");
+            return;
+        }
+
+        for (SSTableReader sstable : sstables)
+        {
+            boolean inCorrectPlace = false;
+            for (int i = 0; i < dirs.length; i++)
+            {
+                if (sstable.descriptor.directory.getAbsolutePath().startsWith(dirs[i].getAbsolutePath()))
+                {
+                    RowPosition lowerBound = (i == 0 ? cfs.partitioner.getMinimumToken().minKeyBound() : boundaries.get(i - 1).maxKeyBound());
+                    RowPosition upperBound = boundaries.get(i).maxKeyBound();
+                    if (sstable.first.compareTo(lowerBound) > 0 && sstable.last.compareTo(upperBound) < 0)
+                        inCorrectPlace = true;
+
+                    break;
+                }
+            }
+            if (inCorrectPlace)
+            {
+                logger.info("{} already balanced", sstable);
+                continue;
+            }
+
+            logger.info("Rebalancing data in {}", sstable);
+            DiskAwareWriter writer = new DiskAwareWriter(cfs,
+                                                         cfs.directories.getCompactionLocationsAsFiles(),
+                                                         SSTableReader.getApproximateKeyCount(Arrays.asList(sstable)),
+                                                         sstable.getSSTableMetadata().repairedAt,
+                                                         sstable);
+            try (CompactionController controller = new CompactionController(cfs, new HashSet<>(Collections.singleton(sstable)), CFMetaData.DEFAULT_GC_GRACE_SECONDS))
+            {
+                AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
+                List<ICompactionScanner> scanners = strategy.getScanners(Arrays.asList(sstable));
+                CompactionIterable ci = new CompactionIterable(OperationType.REBALANCE, scanners, controller);
+
+                try (CloseableIterator<AbstractCompactedRow> iter = ci.iterator())
+                {
+                    while(iter.hasNext())
+                    {
+                        AbstractCompactedRow row = iter.next();
+                        writer.append(row);
+                    }
+                }
+            }
+            catch (Throwable e)
+            {
+                writer.abort();
+            }
+            List<SSTableReader> newSSTables = writer.finish();
+            logger.info("Rebalanced {} to {}", sstable, newSSTables);
+            cfs.replaceCompactedSSTables(Arrays.asList(sstable), newSSTables, OperationType.REBALANCE);
+        }
     }
 
     public void performMaximal(final ColumnFamilyStore cfStore) throws InterruptedException, ExecutionException

@@ -1388,6 +1388,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return CompactionManager.instance.performSSTableRewrite(ColumnFamilyStore.this, excludeCurrentVersion);
     }
 
+    public CompactionManager.AllSSTableOpStatus rebalanceData() throws ExecutionException, InterruptedException
+    {
+        return CompactionManager.instance.rebalanceData(this);
+    }
+
     public void markObsolete(Collection<SSTableReader> sstables, OperationType compactionType)
     {
         assert !sstables.isEmpty();

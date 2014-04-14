@@ -254,6 +254,7 @@ public interface StorageServiceMBean extends NotificationEmitter
      */
     public CompactionManager.AllSSTableOpStatus upgradeSSTables(String keyspaceName, boolean excludeCurrentVersion, String... columnFamilies) throws IOException, ExecutionException, InterruptedException;
 
+    public CompactionManager.AllSSTableOpStatus rebalanceData(String keyspace, String[] cfnames) throws IOException, ExecutionException, InterruptedException;
     /**
      * Flush all memtables for the given column families, or all columnfamilies for the given keyspace
      * if none are explicitly listed.

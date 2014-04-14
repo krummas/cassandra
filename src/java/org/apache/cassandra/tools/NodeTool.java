@@ -78,6 +78,7 @@ public class NodeTool
                 CfStats.class,
                 CfHistograms.class,
                 Cleanup.class,
+                RebalanceData.class,
                 ClearSnapshot.class,
                 Compact.class,
                 Scrub.class,
@@ -2288,4 +2289,31 @@ public class NodeTool
         }
     }
 
+    @Command(name = "rebalancedata", description = "Rebalances all data on the local disks, run this after adding/removing data directories")
+    public static class RebalanceData extends NodeToolCmd
+    {
+        @Arguments(usage = "[<keyspace> <cfnames>...]", description = "The keyspace followed by one or many column families")
+        private List<String> args = new ArrayList<>();
+
+        @Override
+        public void execute(NodeProbe probe)
+        {
+            List<String> keyspaces = parseOptionalKeyspace(args, probe);
+            String[] cfnames = parseOptionalColumnFamilies(args);
+
+            for (String keyspace : keyspaces)
+            {
+                if (Keyspace.SYSTEM_KS.equals(keyspace))
+                    continue;
+
+                try
+                {
+                    probe.forceDataRebalance(System.out, keyspace, cfnames);
+                } catch (Exception e)
+                {
+                    throw new RuntimeException("Error occurred during rebalancedata", e);
+                }
+            }
+        }
+    }
 }
