@@ -142,7 +142,7 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
         assert strategy.getLevelSize(1) > 0;
 
         // get LeveledScanner for level 1 sstables
-        Collection<SSTableReader> sstables = strategy.manifest.getLevel(1);
+        Collection<SSTableReader> sstables = strategy.manifests.manifests().get(0).getLevel(1);
         List<ICompactionScanner> scanners = strategy.getScanners(sstables);
         assertEquals(1, scanners.size()); // should be one per level
         ICompactionScanner scanner = scanners.get(0);
@@ -186,16 +186,16 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
         for (SSTableReader s : cfs.getSSTables())
         {
             assertTrue(s.getSSTableLevel() != 6);
-            strategy.manifest.remove(s);
+            strategy.manifests.manifests().get(0).remove(s);
             s.descriptor.getMetadataSerializer().mutateLevel(s.descriptor, 6);
             s.reloadSSTableMetadata();
-            strategy.manifest.add(s);
+            strategy.manifests.manifests().get(0).add(s);
         }
         // verify that all sstables in the changed set is level 6
         for (SSTableReader s : cfs.getSSTables())
             assertEquals(6, s.getSSTableLevel());
 
-        int[] levels = strategy.manifest.getAllLevelSize();
+        int[] levels = strategy.manifests.manifests().get(0).getAllLevelSize();
         // verify that the manifest has correct amount of sstables
         assertEquals(cfs.getSSTables().size(), levels[6]);
     }
@@ -236,52 +236,52 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
             assertFalse(sstable.isRepaired());
         }
         int sstableCount = 0;
-        for (List<SSTableReader> level : strategy.manifest.generations)
+        for (List<SSTableReader> level : strategy.manifests.manifests().get(0).generations)
             sstableCount += level.size();
 
         assertEquals(sstableCount, cfs.getSSTables().size());
 
-        assertFalse(strategy.manifest.hasRepairedData());
-        assertTrue(strategy.manifest.unrepairedL0.size() == 0);
+        assertFalse(strategy.manifests.manifests().get(0).hasRepairedData());
+        assertTrue(strategy.manifests.manifests().get(0).unrepairedL0.size() == 0);
 
-        SSTableReader sstable1 = strategy.manifest.generations[2].get(0);
-        SSTableReader sstable2 = strategy.manifest.generations[1].get(0);
+        SSTableReader sstable1 = strategy.manifests.manifests().get(0).generations[2].get(0);
+        SSTableReader sstable2 = strategy.manifests.manifests().get(0).generations[1].get(0);
 
         // "repair" an sstable:
-        strategy.manifest.remove(sstable1);
+        strategy.manifests.manifests().get(0).remove(sstable1);
         sstable1.descriptor.getMetadataSerializer().mutateRepairedAt(sstable1.descriptor, System.currentTimeMillis());
         sstable1.reloadSSTableMetadata();
         assertTrue(sstable1.isRepaired());
 
         // make sure adding a repaired sstable makes the manifest contain only repaired data;
-        strategy.manifest.add(sstable1);
-        assertTrue(strategy.manifest.hasRepairedData());
-        assertTrue(strategy.manifest.generations[2].contains(sstable1));
-        assertFalse(strategy.manifest.generations[1].contains(sstable2));
-        assertTrue(strategy.manifest.unrepairedL0.contains(sstable2));
+        strategy.manifests.manifests().get(0).add(sstable1);
+        assertTrue(strategy.manifests.manifests().get(0).hasRepairedData());
+        assertTrue(strategy.manifests.manifests().get(0).generations[2].contains(sstable1));
+        assertFalse(strategy.manifests.manifests().get(0).generations[1].contains(sstable2));
+        assertTrue(strategy.manifests.manifests().get(0).unrepairedL0.contains(sstable2));
         sstableCount = 0;
-        for (int i = 0; i < strategy.manifest.generations.length; i++)
+        for (int i = 0; i < strategy.manifests.manifests().get(0).generations.length; i++)
         {
-            sstableCount += strategy.manifest.generations[i].size();
+            sstableCount += strategy.manifests.manifests().get(0).generations[i].size();
             if (i != 2)
-                assertEquals(strategy.manifest.generations[i].size(), 0);
+                assertEquals(strategy.manifests.manifests().get(0).generations[i].size(), 0);
             else
-                assertEquals(strategy.manifest.generations[i].size(), 1);
+                assertEquals(strategy.manifests.manifests().get(0).generations[i].size(), 1);
         }
         assertEquals(1, sstableCount);
 
         // make sure adding an unrepaired sstable puts it in unrepairedL0:
-        strategy.manifest.remove(sstable2);
-        strategy.manifest.add(sstable2);
-        assertTrue(strategy.manifest.unrepairedL0.contains(sstable2));
-        assertEquals(strategy.manifest.unrepairedL0.size(), cfs.getSSTables().size() - 1);
+        strategy.manifests.manifests().get(0).remove(sstable2);
+        strategy.manifests.manifests().get(0).add(sstable2);
+        assertTrue(strategy.manifests.manifests().get(0).unrepairedL0.contains(sstable2));
+        assertEquals(strategy.manifests.manifests().get(0).unrepairedL0.size(), cfs.getSSTables().size() - 1);
 
         // make sure repairing an sstable takes it away from unrepairedL0 and puts it in the correct level:
-        strategy.manifest.remove(sstable2);
+        strategy.manifests.manifests().get(0).remove(sstable2);
         sstable2.descriptor.getMetadataSerializer().mutateRepairedAt(sstable2.descriptor, System.currentTimeMillis());
         sstable2.reloadSSTableMetadata();
-        strategy.manifest.add(sstable2);
-        assertFalse(strategy.manifest.unrepairedL0.contains(sstable2));
-        assertTrue(strategy.manifest.generations[1].contains(sstable2));
+        strategy.manifests.manifests().get(0).add(sstable2);
+        assertFalse(strategy.manifests.manifests().get(0).unrepairedL0.contains(sstable2));
+        assertTrue(strategy.manifests.manifests().get(0).generations[1].contains(sstable2));
     }
 }

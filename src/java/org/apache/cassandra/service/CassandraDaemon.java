@@ -298,17 +298,6 @@ public class CassandraDaemon
             throw new RuntimeException(e);
         }
 
-        // enable auto compaction
-        for (Keyspace keyspace : Keyspace.all())
-        {
-            for (ColumnFamilyStore cfs : keyspace.getColumnFamilyStores())
-            {
-                for (final ColumnFamilyStore store : cfs.concatWithIndexes())
-                {
-                    store.enableAutoCompaction();
-                }
-            }
-        }
         // start compactions in five minutes (if no flushes have occurred by then to do so)
         Runnable runnable = new Runnable()
         {
@@ -361,6 +350,18 @@ public class CassandraDaemon
 
         if (!FBUtilities.getBroadcastAddress().equals(InetAddress.getLoopbackAddress()))
             waitForGossipToSettle();
+
+        // enable auto compaction after gossip has settled etc
+        for (Keyspace keyspace : Keyspace.all())
+        {
+            for (ColumnFamilyStore cfs : keyspace.getColumnFamilyStores())
+            {
+                for (final ColumnFamilyStore store : cfs.concatWithIndexes())
+                {
+                    store.enableAutoCompaction();
+                }
+            }
+        }
 
         // Thift
         InetAddress rpcAddr = DatabaseDescriptor.getRpcAddress();

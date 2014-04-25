@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.io.sstable;
 
+import java.io.DataInput;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -28,7 +30,9 @@ import java.util.Set;
 import com.google.common.base.Function;
 import com.google.common.base.Functions;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DataTracker;
 import org.apache.cassandra.db.DecoratedKey;
@@ -130,7 +134,11 @@ public class SSTableRewriter
         }
         return index;
     }
-
+    public long appendFromStream(DecoratedKey decoratedKey, CFMetaData metadata, DataInput in, Descriptor.Version version) throws IOException
+    {
+        maybeReopenEarly(decoratedKey);
+        return writer.appendFromStream(decoratedKey, metadata, in, version);
+    }
     // attempts to append the row, if fails resets the writer position
     public RowIndexEntry tryAppend(AbstractCompactedRow row)
     {

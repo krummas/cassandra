@@ -37,8 +37,9 @@ import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.DiskAwareWriter;
+import org.apache.cassandra.io.sstable.VnodeAwareWriter;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.messages.FileMessageHeader;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -75,14 +76,14 @@ public class StreamReader
      * @return SSTable transferred
      * @throws IOException if reading the remote sstable fails. Will throw an RTE if local write fails.
      */
-    public DiskAwareWriter read(ReadableByteChannel channel) throws IOException
+    public VnodeAwareWriter read(ReadableByteChannel channel) throws IOException
     {
         logger.info("reading file from {}, repairedAt = {}", session.peer, repairedAt);
         long totalSize = totalSize();
 
         Pair<String, String> kscf = Schema.instance.getCF(cfId);
         ColumnFamilyStore cfs = Keyspace.open(kscf.left).getColumnFamilyStore(kscf.right);
-        DiskAwareWriter writer = createWriter(cfs, estimatedKeys, repairedAt);
+        VnodeAwareWriter writer = createWriter(cfs, estimatedKeys, repairedAt);
         DataInputStream dis = new DataInputStream(new LZFInputStream(Channels.newInputStream(channel)));
         BytesReadTracker in = new BytesReadTracker(dis);
         try
@@ -106,12 +107,12 @@ public class StreamReader
         }
     }
 
-    protected DiskAwareWriter createWriter(ColumnFamilyStore cfs, long estimatedKeys, long repairedAt) throws IOException
+    protected VnodeAwareWriter createWriter(ColumnFamilyStore cfs, long estimatedKeys, long repairedAt) throws IOException
     {
         File[] localDirs = cfs.directories.getDirectoriesForCompactedSSTables();
         if (localDirs == null)
             throw new IOException("Insufficient disk space to store " + totalSize() + " bytes");
-        return new DiskAwareWriter(cfs, localDirs, estimatedKeys, repairedAt, null);
+        return new VnodeAwareWriter(cfs, localDirs, estimatedKeys, repairedAt, OperationType.UNKNOWN, null);
 
     }
 
@@ -131,7 +132,7 @@ public class StreamReader
         return size;
     }
 
-    protected Descriptor writeRow(DiskAwareWriter writer, DataInput in, ColumnFamilyStore cfs) throws IOException
+    protected Descriptor writeRow(VnodeAwareWriter writer, DataInput in, ColumnFamilyStore cfs) throws IOException
     {
         DecoratedKey key = StorageService.getPartitioner().decorateKey(ByteBufferUtil.readWithShortLength(in));
         writer.appendFromStream(key, cfs.metadata, in, inputVersion);

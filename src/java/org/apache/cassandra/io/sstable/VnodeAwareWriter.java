@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 import org.apache.cassandra.config.CFMetaData;
@@ -32,31 +33,35 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.compaction.AbstractCompactedRow;
+import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.service.StorageService;
 
-public class DiskAwareWriter
+public class VnodeAwareWriter
 {
     private final File[] compactionFileLocations;
     private final ColumnFamilyStore cfs;
     private final long expectedKeyCount;
     private final SSTableReader sstable;
     private final long repairedAt;
+    private final List<SSTableWriter> writers;
     private int boundaryIndex;
-    private SSTableWriter writer;
+    private int vnodeIndex;
+    private final SSTableRewriter writer;
     private List<Token> diskBoundaries;
-    private final List<SSTableWriter> writers = new ArrayList<>();
-    private int totalKeysWritten;
-    private int markKeysWritten;
+    private final List<Token> vnodeBoundaries;
 
-    public DiskAwareWriter(ColumnFamilyStore cfs, File[] compactionFileLocations, long expectedKeyCount, long repairedAt, SSTableReader sstable)
+    public VnodeAwareWriter(ColumnFamilyStore cfs, File[] compactionFileLocations, long expectedKeyCount, long repairedAt, OperationType rewriteType, SSTableReader sstable)
     {
         boundaryIndex = 0;
+        vnodeIndex = 0;
+        this.cfs = cfs;
+        vnodeBoundaries = createVnodeBoundaries(Range.sort(StorageService.instance.getLocalRanges(cfs.keyspace.getName())));
         diskBoundaries = cfs.partitioner.splitRanges(compactionFileLocations.length);
-        if (diskBoundaries == null)
+        if (diskBoundaries == null || vnodeBoundaries.size() == 0)
         {
             diskBoundaries = Arrays.asList(cfs.partitioner.getMaximumToken());
             this.compactionFileLocations = new File[] { cfs.directories.getDirectoryForCompactedSSTables() };
@@ -65,50 +70,73 @@ public class DiskAwareWriter
         {
             this.compactionFileLocations = compactionFileLocations;
         }
-        this.cfs = cfs;
         this.expectedKeyCount = expectedKeyCount;
         this.sstable = sstable;
         this.repairedAt = repairedAt;
-        writer = createWriter(cfs,
-                              compactionFileLocations[boundaryIndex],
-                              expectedKeyCount,
-                              repairedAt,
-                              sstable);
+        this.writers = new ArrayList<>();
+        writer = new SSTableRewriter(cfs, new HashSet<>(Collections.singleton(sstable)), sstable.maxDataAge, rewriteType, false);
+        SSTableWriter sstableWriter = createWriter(cfs,
+                                                 compactionFileLocations[boundaryIndex],
+                                                 expectedKeyCount,
+                                                 repairedAt,
+                                                 sstable);
+        writer.switchWriter(sstableWriter);
+        writers.add(sstableWriter);
+    }
+
+    /**
+     * everything from partitioner minToken up to first token of the second vnode goes in the first sstable
+     *
+     * everything from first token of the last sstable to partitioner maxToken goes in last sstable.
+     * @param localRanges
+     * @return
+     */
+    private List<Token> createVnodeBoundaries(List<Range<Token>> localRanges)
+    {
+        List<Token> results = new ArrayList<>();
+        for (int i = 1; i < localRanges.size() - 1; i++)
+        {
+            Range<Token> r = localRanges.get(i);
+            results.add(r.left);
+
+        }
+        results.add(cfs.partitioner.getMaximumToken());
+        return results;
     }
 
     public RowIndexEntry append(AbstractCompactedRow row)
     {
         maybeSwitchWriter(row.key);
-        RowIndexEntry rie = writer.append(row);
-        if (rie != null)
-            totalKeysWritten++;
-        return rie;
+        return writer.append(row);
 
     }
 
     private void maybeSwitchWriter(DecoratedKey key)
     {
         if (diskBoundaries == null) return;
-        while (key.compareTo(diskBoundaries.get(boundaryIndex).maxKeyBound()) > 0)
+
+        // find the vnode containing the key:
+        while (key.compareTo(vnodeBoundaries.get(vnodeIndex).minKeyBound()) > 0)
         {
-            boundaryIndex++;
-            if (writer.getFilePointer() > 0)
-                writers.add(writer);
-            else
-                writer.abort();
-            writer = createWriter(cfs,
-                                  compactionFileLocations[boundaryIndex],
-                                  expectedKeyCount,
-                                  repairedAt,
-                                  sstable);
+            vnodeIndex++;
+            // find the disk containing the vnode:
+            while (vnodeBoundaries.get(vnodeIndex).compareTo(diskBoundaries.get(boundaryIndex)) > 0)
+            {
+                boundaryIndex++;
+            }
+            SSTableWriter sstableWriter = createWriter(cfs,
+                                                       compactionFileLocations[boundaryIndex],
+                                                       expectedKeyCount,
+                                                       repairedAt,
+                                                       sstable);
+            writer.switchWriter(sstableWriter);
+            writers.add(sstableWriter);
         }
     }
+
     public List<SSTableWriter> getWriters()
     {
-        List<SSTableWriter> retWriters = new ArrayList<>(writers);
-        if (writer.getFilePointer() > 0)
-            retWriters.add(writer);
-        return retWriters;
+        return writers;
     }
 
     public List<SSTableReader> finish()
@@ -118,57 +146,18 @@ public class DiskAwareWriter
 
     public List<SSTableReader> finish(long overriddenRepairedAt)
     {
-        List<SSTableReader> readers = new ArrayList<>();
-        if (writer.getFilePointer() > 0)
-            writers.add(writer);
-        else
-            writer.abort();
-
-        for (SSTableWriter w : writers)
-        {
-            long maxDataAge = System.currentTimeMillis();
-            if (sstable != null)
-                maxDataAge = sstable.maxDataAge;
-            readers.add(w.closeAndOpenReader(maxDataAge, overriddenRepairedAt));
-        }
-        return readers;
+        writer.finish(overriddenRepairedAt);
+        return writer.finished();
     }
 
     public void abort()
     {
         writer.abort();
-        for(SSTableWriter writer : writers)
-            writer.abort();
-    }
-
-    public int totalKeysWritten()
-    {
-        return totalKeysWritten;
-    }
-
-    public void append(DecoratedKey key, ColumnFamily cf)
-    {
-        maybeSwitchWriter(key);
-        writer.append(key, cf);
-        totalKeysWritten++;
-    }
-
-    public void mark()
-    {
-        writer.mark();
-        markKeysWritten = totalKeysWritten;
-    }
-
-    public void resetAndTruncate()
-    {
-        writer.resetAndTruncate();
-        totalKeysWritten = markKeysWritten;
     }
 
     public long appendFromStream(DecoratedKey key, CFMetaData metadata, DataInput in, Descriptor.Version inputVersion) throws IOException
     {
         maybeSwitchWriter(key);
-        totalKeysWritten++;
         return writer.appendFromStream(key, metadata, in, inputVersion);
     }
 
@@ -189,12 +178,15 @@ public class DiskAwareWriter
         FileUtils.createDirectory(compactionFileLocation);
         if (sstable != null)
         {
+            int sstableLevel = 0;
+            if (sstable.descriptor.directory.equals(compactionFileLocation))
+                sstableLevel = sstable.getSSTableLevel();
             return new SSTableWriter(cfs.getTempSSTablePath(compactionFileLocation),
-                    expectedBloomFilterSize,
-                    repairedAt,
-                    cfs.metadata,
-                    cfs.partitioner,
-                    new MetadataCollector(Collections.singleton(sstable), cfs.metadata.comparator, sstable.getSSTableLevel()));
+                                     expectedBloomFilterSize,
+                                     repairedAt,
+                                     cfs.metadata,
+                                     cfs.partitioner,
+                                     new MetadataCollector(Collections.singleton(sstable), cfs.metadata.comparator, sstableLevel));
         }
         else
         {
@@ -202,18 +194,8 @@ public class DiskAwareWriter
         }
     }
 
-    public int getTotalKeysWritten()
-    {
-        return totalKeysWritten;
-    }
-
     public Descriptor currentDesc()
     {
-        return writer.descriptor;
-    }
-
-    public long getCurrentSSTableSize()
-    {
-        return writer.getOnDiskFilePointer();
+        return writer.currentWriter().descriptor;
     }
 }

@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 
-import org.apache.cassandra.io.sstable.DiskAwareWriter;
+import org.apache.cassandra.io.sstable.VnodeAwareWriter;
 import org.apache.cassandra.io.util.DataOutputStreamAndChannel;
 import org.apache.cassandra.streaming.StreamReader;
 import org.apache.cassandra.streaming.StreamSession;
@@ -60,19 +60,19 @@ public class IncomingFileMessage extends StreamMessage
     };
 
     public FileMessageHeader header;
-    public DiskAwareWriter diskAwareWriter;
+    public VnodeAwareWriter vnodeAwareWriter;
 
-    public IncomingFileMessage(DiskAwareWriter diskAwareWriter, FileMessageHeader header)
+    public IncomingFileMessage(VnodeAwareWriter vnodeAwareWriter, FileMessageHeader header)
     {
         super(Type.FILE);
         this.header = header;
-        this.diskAwareWriter = diskAwareWriter;
+        this.vnodeAwareWriter = vnodeAwareWriter;
     }
 
     @Override
     public String toString()
     {
-        return "File (" + header + ", file: " + diskAwareWriter + ")";
+        return "File (" + header + ", file: " + vnodeAwareWriter + ")";
     }
 }
 

@@ -32,9 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.DiskAwareWriter;
+import org.apache.cassandra.io.sstable.VnodeAwareWriter;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.io.util.FileUtils;
@@ -69,10 +68,10 @@ public class StreamLockfile
         this.lockfile = lockfile;
     }
 
-    public void create(Collection<DiskAwareWriter> diskAwareWriters)
+    public void create(Collection<VnodeAwareWriter> vnodeAwareWriters)
     {
-        List<String> sstablePaths = new ArrayList<>(diskAwareWriters.size());
-        for (DiskAwareWriter writer : diskAwareWriters)
+        List<String> sstablePaths = new ArrayList<>(vnodeAwareWriters.size());
+        for (VnodeAwareWriter writer : vnodeAwareWriters)
         {
             /* write out the file names *without* the 'tmp-file' flag in the file name.
                this class will not need to clean up tmp files (on restart), CassandraDaemon does that already,

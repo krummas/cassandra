@@ -920,6 +920,19 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         FBUtilities.waitOnFuture(forceFlush());
     }
 
+    public List<SSTableReader> getSSTablesForVnode(Range<Token> r)
+    {
+        // todo: range needs to include all tokens up to the next vnode start token, not just the tokens we own right now
+        // todo: optimize, can sort and not iterate over all sstables
+        List<SSTableReader> sstables = new ArrayList<>();
+        for (SSTableReader sstable : getSSTables())
+        {
+            if (r.contains(sstable.first.token))
+                sstables.add(sstable);
+        }
+        return sstables;
+    }
+
     /**
      * Both synchronises custom secondary indexes and provides ordering guarantees for futures on switchMemtable/flush
      * etc, which expect to be able to wait until the flush (and all prior flushes) requested have completed.
@@ -1063,24 +1076,41 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             {
                 List<Future<SSTableReader>> futures = new ArrayList<>();
                 // flush the memtable
-                List<Memtable.FlushRunnable> flushRunnables = memtable.flushRunnables();
+                List<List<Memtable.FlushRunnable>> flushRunnables = memtable.flushRunnables();
                 for (int i = 0; i < flushRunnables.size(); i++)
-                    futures.add(perDiskflushExecutors[i].submit(flushRunnables.get(i)));
+                {
+                    for (Memtable.FlushRunnable fr : flushRunnables.get(i))
+                        futures.add(perDiskflushExecutors[i].submit(fr));
+                }
 
                 List<SSTableReader> flushedSSTables = new ArrayList<>(futures.size());
+                long totalBytesOnDisk = 0;
+                long maxBytesOnDisk = 0;
+                long minBytesOnDisk = Long.MAX_VALUE;
                 for (Future<SSTableReader> f : futures)
                 {
                     try
                     {
                         SSTableReader reader = f.get();
                         if(reader != null)
+                        {
+                            long size = reader.bytesOnDisk();
+                            totalBytesOnDisk += size;
+                            if (size > maxBytesOnDisk)
+                                maxBytesOnDisk = size;
+                            if (size < minBytesOnDisk)
+                                minBytesOnDisk = size;
                             flushedSSTables.add(reader);
+                        }
                     }
                     catch (ExecutionException|InterruptedException e)
                     {
                         throw new RuntimeException(e);
                     }
                 }
+
+                logger.info("Flushed to {} sstables ({} bytes), biggest {} bytes, smallest {} bytes", flushedSSTables.size(), totalBytesOnDisk, maxBytesOnDisk, minBytesOnDisk);
+
                 replaceFlushed(memtable, flushedSSTables);
                 // issue a read barrier for reclaiming the memory, and offload the wait to another thread
                 final OpOrder.Barrier readBarrier = readOrdering.newBarrier();

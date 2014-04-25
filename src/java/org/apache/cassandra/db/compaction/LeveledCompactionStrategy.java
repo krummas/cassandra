@@ -45,7 +45,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
     private static final String SSTABLE_SIZE_OPTION = "sstable_size_in_mb";
 
     @VisibleForTesting
-    final LeveledManifest manifest;
+    LeveledManifestWrapper manifests;
     private final int maxSSTableSizeInMB;
 
     public LeveledCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
@@ -71,8 +71,8 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         }
         maxSSTableSizeInMB = configuredMaxSSTableSize;
 
-        manifest = LeveledManifest.create(cfs, this.maxSSTableSizeInMB, cfs.getSSTables(), localOptions);
-        logger.debug("Created {}", manifest);
+        manifests = new LeveledManifestWrapper(cfs, this.maxSSTableSizeInMB, localOptions);
+        logger.debug("Created {}", manifests);
     }
 
     @Override
@@ -93,12 +93,12 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
 
     public int getLevelSize(int i)
     {
-        return manifest.getLevelSize(i);
+        return manifests.getLevelSize(i);
     }
 
     public int[] getAllLevelSize()
     {
-        return manifest.getAllLevelSize();
+        return manifests.getAllLevelSize();
     }
 
     /**
@@ -120,7 +120,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         while (true)
         {
             OperationType op;
-            LeveledManifest.CompactionCandidate candidate = manifest.getCompactionCandidates();
+            LeveledManifest.CompactionCandidate candidate = manifests.getCompactionCandidates();
             if (candidate == null)
             {
                 // if there is no sstable to compact in standard way, try compacting based on droppable tombstone ratio
@@ -172,7 +172,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
 
     public int getEstimatedRemainingTasks()
     {
-        return manifest.getEstimatedTasks();
+        return manifests.getEstimatedTasks();
     }
 
     public void handleNotification(INotification notification, Object sender)
@@ -180,16 +180,16 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         if (notification instanceof SSTableAddedNotification)
         {
             SSTableAddedNotification flushedNotification = (SSTableAddedNotification) notification;
-            manifest.add(flushedNotification.added);
+            manifests.add(flushedNotification.added);
         }
         else if (notification instanceof SSTableListChangedNotification)
         {
             SSTableListChangedNotification listChangedNotification = (SSTableListChangedNotification) notification;
-            manifest.replace(listChangedNotification.removed, listChangedNotification.added);
+            manifests.replace(listChangedNotification.removed, listChangedNotification.added);
         }
         else if (notification instanceof SSTableRepairStatusChanged)
         {
-            manifest.repairStatusChanged(((SSTableRepairStatusChanged) notification).sstable);
+            manifests.repairStatusChanged(((SSTableRepairStatusChanged) notification).sstable);
         }
     }
 
@@ -203,7 +203,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         Multimap<Integer, SSTableReader> byLevel = ArrayListMultimap.create();
         for (SSTableReader sstable : sstables)
         {
-            if (manifest.hasRepairedData() && !sstable.isRepaired())
+            if (manifests.hasRepairedData(sstable) && !sstable.isRepaired())
                 byLevel.get(0).add(sstable);
             else
                 byLevel.get(sstable.getSSTableLevel()).add(sstable);
@@ -341,29 +341,32 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
 
     private SSTableReader findDroppableSSTable(final int gcBefore)
     {
-        level:
-        for (int i = manifest.getLevelCount(); i >= 0; i--)
+        for (LeveledManifest manifest : manifests.manifests())
         {
-            // sort sstables by droppable ratio in descending order
-            SortedSet<SSTableReader> sstables = manifest.getLevelSorted(i, new Comparator<SSTableReader>()
+            level:
+            for (int i = manifest.getLevelCount(); i >= 0; i--)
             {
-                public int compare(SSTableReader o1, SSTableReader o2)
+                // sort sstables by droppable ratio in descending order
+                SortedSet<SSTableReader> sstables = manifest.getLevelSorted(i, new Comparator<SSTableReader>()
                 {
-                    double r1 = o1.getEstimatedDroppableTombstoneRatio(gcBefore);
-                    double r2 = o2.getEstimatedDroppableTombstoneRatio(gcBefore);
-                    return -1 * Doubles.compare(r1, r2);
-                }
-            });
-            if (sstables.isEmpty())
-                continue;
+                    public int compare(SSTableReader o1, SSTableReader o2)
+                    {
+                        double r1 = o1.getEstimatedDroppableTombstoneRatio(gcBefore);
+                        double r2 = o2.getEstimatedDroppableTombstoneRatio(gcBefore);
+                        return -1 * Doubles.compare(r1, r2);
+                    }
+                });
+                if (sstables.isEmpty())
+                    continue;
 
-            Set<SSTableReader> compacting = cfs.getDataTracker().getCompacting();
-            for (SSTableReader sstable : sstables)
-            {
-                if (sstable.getEstimatedDroppableTombstoneRatio(gcBefore) <= tombstoneThreshold)
-                    continue level;
-                else if (!compacting.contains(sstable) && !sstable.isMarkedSuspect() && worthDroppingTombstones(sstable, gcBefore))
-                    return sstable;
+                Set<SSTableReader> compacting = cfs.getDataTracker().getCompacting();
+                for (SSTableReader sstable : sstables)
+                {
+                    if (sstable.getEstimatedDroppableTombstoneRatio(gcBefore) <= tombstoneThreshold)
+                        continue level;
+                    else if (!compacting.contains(sstable) && !sstable.isMarkedSuspect() && worthDroppingTombstones(sstable, gcBefore))
+                        return sstable;
+                }
             }
         }
         return null;

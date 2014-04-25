@@ -20,6 +20,8 @@ package org.apache.cassandra.db;
 import java.io.File;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -231,27 +233,36 @@ public class Memtable
      *
      * @return
      */
-    public List<FlushRunnable> flushRunnables()
+    public List<List<FlushRunnable>> flushRunnables()
     {
         // todo: don't recalc for every flush..
-        List<Range<Token>> localRanges = Range.normalize(StorageService.instance.getLocalRanges(cfs.keyspace.getName()));
+        List<Range<Token>> localRanges = Range.sort(StorageService.instance.getLocalRanges(cfs.keyspace.getName()));
         Directories.DataDirectory[] locations = cfs.directories.getCompactionLocations();
         List<Token> boundaries = cfs.partitioner.splitRanges(locations.length);
         List<FlushRunnable> runnables = new ArrayList<>();
         ReplayPosition pos = lastReplayPosition.get();
-        if (boundaries == null)
+        if (boundaries == null || localRanges.size() == 0)
         {
             runnables.add(new FlushRunnable(pos, cfs.directories.getCompactionLocation()));
-            return runnables;
+            return Arrays.asList(runnables);
         }
-        runnables.add(new FlushRunnable(pos, cfs.partitioner.getMinimumToken().minKeyBound(), boundaries.get(0).maxKeyBound(), locations[0]));
-        for (int i = 1; i < boundaries.size(); i++)
+        int boundaryIndex = 0;
+        List<List<FlushRunnable>> curList = new ArrayList<>();
+        for (int i = 0; i < localRanges.size(); i++)
         {
-            RowPosition start = boundaries.get(i-1).minKeyBound();
-            RowPosition end = boundaries.get(i).maxKeyBound();
-            runnables.add(new FlushRunnable(lastReplayPosition.get(), start, end, locations[i]));
+            Range<Token> r = localRanges.get(i);
+            while (r.left.compareTo(boundaries.get(boundaryIndex)) > 0)
+            {
+                boundaryIndex++;
+                curList.add(runnables);
+                runnables = new ArrayList<>();
+            }
+            RowPosition start = (i == 0) ? cfs.partitioner.getMinimumToken().minKeyBound() : r.left.minKeyBound();
+            RowPosition end = (i == localRanges.size() - 1) ? cfs.partitioner.getMaximumToken().maxKeyBound() : localRanges.get(i + 1).left.minKeyBound();
+            runnables.add(new FlushRunnable(lastReplayPosition.get(), start, end, locations[boundaryIndex]));
         }
-        return runnables;
+        curList.add(runnables);
+        return curList;
     }
 
     public String toString()
@@ -376,7 +387,7 @@ public class Memtable
         private SSTableReader writeSortedContents(ReplayPosition context, File sstableDirectory)
         throws ExecutionException, InterruptedException
         {
-            logger.info("Writing {}", Memtable.this.toString());
+            logger.debug("Writing {}", Memtable.this.toString());
 
             SSTableReader ssTable;
             // errors when creating the writer that may leave empty temp files.
@@ -410,14 +421,14 @@ public class Memtable
 
                     // temp sstables should contain non-repaired data.
                     ssTable = writer.closeAndOpenReader();
-                    logger.info(String.format("Completed flushing %s (%d bytes) for commitlog position %s",
+                    logger.debug(String.format("Completed flushing %s (%d bytes) for commitlog position %s",
                                               ssTable.getFilename(), new File(ssTable.getFilename()).length(), context));
                 }
                 else
                 {
                     writer.abort();
                     ssTable = null;
-                    logger.info("Completed flushing; nothing needed to be retained.  Commitlog position was {}",
+                    logger.debug("Completed flushing; nothing needed to be retained.  Commitlog position was {}",
                                 context);
                 }
 
