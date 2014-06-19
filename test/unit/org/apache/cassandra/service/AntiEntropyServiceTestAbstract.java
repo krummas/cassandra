@@ -25,6 +25,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -42,7 +44,6 @@ import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertEquals;
@@ -54,7 +55,6 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
 
     public String keyspaceName;
     public String cfname;
-    public RepairJobDesc desc;
     public ColumnFamilyStore store;
     public InetAddress LOCAL, REMOTE;
 
@@ -102,9 +102,10 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
 
         local_range = StorageService.instance.getPrimaryRangesForEndpoint(keyspaceName, LOCAL).iterator().next();
 
-        desc = new RepairJobDesc(UUID.randomUUID(), UUID.randomUUID(), keyspaceName, cfname, local_range);
         // Set a fake session corresponding to this fake request
-        ActiveRepairService.instance.submitArtificialRepairSession(desc);
+        Set<InetAddress> neighbours = ActiveRepairService.getNeighbors(keyspaceName, local_range, null, null);
+        ListeningExecutorService executor = MoreExecutors.sameThreadExecutor();
+        aes.submitRepairSession(UUID.randomUUID(), local_range, keyspaceName, false, neighbours, ActiveRepairService.UNREPAIRED_SSTABLE, executor, cfname);
     }
 
     @After
@@ -120,7 +121,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         Set<InetAddress> expected = addTokens(1 + Keyspace.open(keyspaceName).getReplicationStrategy().getReplicationFactor());
         expected.remove(FBUtilities.getBroadcastAddress());
         Collection<Range<Token>> ranges = StorageService.instance.getLocalRanges(keyspaceName);
-        Set<InetAddress> neighbors = new HashSet<InetAddress>();
+        Set<InetAddress> neighbors = new HashSet<>();
         for (Range<Token> range : ranges)
         {
             neighbors.addAll(ActiveRepairService.getNeighbors(keyspaceName, range, null, null));
@@ -136,14 +137,14 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         // generate rf*2 nodes, and ensure that only neighbors specified by the ARS are returned
         addTokens(2 * Keyspace.open(keyspaceName).getReplicationStrategy().getReplicationFactor());
         AbstractReplicationStrategy ars = Keyspace.open(keyspaceName).getReplicationStrategy();
-        Set<InetAddress> expected = new HashSet<InetAddress>();
+        Set<InetAddress> expected = new HashSet<>();
         for (Range<Token> replicaRange : ars.getAddressRanges().get(FBUtilities.getBroadcastAddress()))
         {
             expected.addAll(ars.getRangeAddresses(tmd.cloneOnlyTokenMap()).get(replicaRange));
         }
         expected.remove(FBUtilities.getBroadcastAddress());
         Collection<Range<Token>> ranges = StorageService.instance.getLocalRanges(keyspaceName);
-        Set<InetAddress> neighbors = new HashSet<InetAddress>();
+        Set<InetAddress> neighbors = new HashSet<>();
         for (Range<Token> range : ranges)
         {
             neighbors.addAll(ActiveRepairService.getNeighbors(keyspaceName, range, null, null));
@@ -165,7 +166,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         expected = Sets.intersection(expected, localEndpoints);
 
         Collection<Range<Token>> ranges = StorageService.instance.getLocalRanges(keyspaceName);
-        Set<InetAddress> neighbors = new HashSet<InetAddress>();
+        Set<InetAddress> neighbors = new HashSet<>();
         for (Range<Token> range : ranges)
         {
             neighbors.addAll(ActiveRepairService.getNeighbors(keyspaceName, range, Arrays.asList(DatabaseDescriptor.getLocalDataCenter()), null));
@@ -181,7 +182,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         // generate rf*2 nodes, and ensure that only neighbors specified by the ARS are returned
         addTokens(2 * Keyspace.open(keyspaceName).getReplicationStrategy().getReplicationFactor());
         AbstractReplicationStrategy ars = Keyspace.open(keyspaceName).getReplicationStrategy();
-        Set<InetAddress> expected = new HashSet<InetAddress>();
+        Set<InetAddress> expected = new HashSet<>();
         for (Range<Token> replicaRange : ars.getAddressRanges().get(FBUtilities.getBroadcastAddress()))
         {
             expected.addAll(ars.getRangeAddresses(tmd.cloneOnlyTokenMap()).get(replicaRange));
@@ -193,7 +194,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         expected = Sets.intersection(expected, localEndpoints);
         
         Collection<Range<Token>> ranges = StorageService.instance.getLocalRanges(keyspaceName);
-        Set<InetAddress> neighbors = new HashSet<InetAddress>();
+        Set<InetAddress> neighbors = new HashSet<>();
         for (Range<Token> range : ranges)
         {
             neighbors.addAll(ActiveRepairService.getNeighbors(keyspaceName, range, Arrays.asList(DatabaseDescriptor.getLocalDataCenter()), null));
@@ -233,7 +234,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
     Set<InetAddress> addTokens(int max) throws Throwable
     {
         TokenMetadata tmd = StorageService.instance.getTokenMetadata();
-        Set<InetAddress> endpoints = new HashSet<InetAddress>();
+        Set<InetAddress> endpoints = new HashSet<>();
         for (int i = 1; i <= max; i++)
         {
             InetAddress endpoint = InetAddress.getByName("127.0.0." + i);

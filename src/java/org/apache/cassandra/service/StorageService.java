@@ -46,19 +46,14 @@ import ch.qos.logback.core.Appender;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.collect.*;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.Uninterruptibles;
-
+import com.google.common.util.concurrent.*;
 import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.auth.Auth;
-import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
-import org.apache.cassandra.concurrent.Stage;
-import org.apache.cassandra.concurrent.StageManager;
+import org.apache.cassandra.concurrent.*;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.KSMetaData;
@@ -82,8 +77,10 @@ import org.apache.cassandra.net.AsyncOneResponse;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.ResponseVerbHandler;
-import org.apache.cassandra.repair.RepairFuture;
 import org.apache.cassandra.repair.RepairMessageVerbHandler;
+import org.apache.cassandra.repair.messages.RepairOption;
+import org.apache.cassandra.repair.RepairResult;
+import org.apache.cassandra.repair.RepairSession;
 import org.apache.cassandra.service.paxos.CommitVerbHandler;
 import org.apache.cassandra.service.paxos.PrepareVerbHandler;
 import org.apache.cassandra.service.paxos.ProposeVerbHandler;
@@ -2551,103 +2548,123 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         sendNotification(jmxNotification);
     }
 
-    public int forceRepairAsync(String keyspace, boolean isSequential, Collection<String> dataCenters, Collection<String> hosts, boolean primaryRange, boolean fullRepair, String... columnFamilies) throws IOException
+    public int repairAsync(String keyspace, Map<String, String> repairSpec)
     {
-        Collection<Range<Token>> ranges = primaryRange ? getLocalPrimaryRanges(keyspace) : getLocalRanges(keyspace);
-
-        return forceRepairAsync(keyspace, isSequential, dataCenters, hosts, ranges, fullRepair, columnFamilies);
-    }
-
-    public int forceRepairAsync(String keyspace, boolean isSequential, Collection<String> dataCenters, Collection<String> hosts, Collection<Range<Token>> ranges, boolean fullRepair, String... columnFamilies)
-    {
-        if (Keyspace.SYSTEM_KS.equals(keyspace) || ranges.isEmpty())
-            return 0;
-
-        int cmd = nextRepairCommand.incrementAndGet();
-        if (ranges.size() > 0)
+        RepairOption option = RepairOption.parse(repairSpec, getPartitioner());
+        // if ranges are not specified
+        if (option.getRanges().isEmpty())
         {
-            new Thread(createRepairTask(cmd, keyspace, ranges, isSequential, dataCenters, hosts, fullRepair, columnFamilies)).start();
+            option.getRanges().addAll(option.isPrimaryRange() ? getLocalPrimaryRanges(keyspace) : getLocalRanges(keyspace));
         }
-        return cmd;
+        return forceRepairAsync(keyspace, option);
     }
 
-    public int forceRepairAsync(String keyspace, boolean isSequential, boolean isLocal, boolean primaryRange, boolean fullRepair, String... columnFamilies)
+    public int forceRepairAsync(String keyspace,
+                                boolean isSequential,
+                                Collection<String> dataCenters,
+                                Collection<String> hosts,
+                                boolean primaryRange,
+                                boolean fullRepair,
+                                String... columnFamilies)
     {
         Collection<Range<Token>> ranges = primaryRange ? getLocalPrimaryRanges(keyspace) : getLocalRanges(keyspace);
-        return forceRepairAsync(keyspace, isSequential, isLocal, ranges, fullRepair, columnFamilies);
+        RepairOption options = new RepairOption(isSequential, primaryRange, !fullRepair, 1, ranges);
+        if (dataCenters != null)
+        {
+            options.getDataCenters().addAll(dataCenters);
+        }
+        if (hosts != null)
+        {
+            options.getHosts().addAll(hosts);
+        }
+        if (columnFamilies != null)
+        {
+            for (String columnFamily : columnFamilies)
+            {
+                options.getColumnFamilies().add(columnFamily);
+            }
+        }
+        return forceRepairAsync(keyspace, options);
     }
 
-    public int forceRepairAsync(final String keyspace, final boolean isSequential, final boolean isLocal, final Collection<Range<Token>> ranges, final boolean fullRepair, final String... columnFamilies)
-    {
-        if (Keyspace.SYSTEM_KS.equals(keyspace) || ranges.isEmpty())
-            return 0;
-
-        int cmd = nextRepairCommand.incrementAndGet();
-        new Thread(createRepairTask(cmd, keyspace, ranges, isSequential, isLocal, fullRepair, columnFamilies)).start();
-        return cmd;
-    }
-
-    public int forceRepairRangeAsync(String beginToken, String endToken, String keyspaceName, boolean isSequential, Collection<String> dataCenters, Collection<String> hosts, boolean fullRepair, String... columnFamilies) throws IOException
-    {
-        Token parsedBeginToken = getPartitioner().getTokenFactory().fromString(beginToken);
-        Token parsedEndToken = getPartitioner().getTokenFactory().fromString(endToken);
-
-        logger.info("starting user-requested repair of range ({}, {}] for keyspace {} and column families {}",
-                    parsedBeginToken, parsedEndToken, keyspaceName, columnFamilies);
-        return forceRepairAsync(keyspaceName, isSequential, dataCenters, hosts, Collections.singleton(new Range<>(parsedBeginToken, parsedEndToken)), fullRepair, columnFamilies);
-    }
-
-    public int forceRepairRangeAsync(String beginToken, String endToken, String keyspaceName, boolean isSequential, boolean isLocal, boolean fullRepair, String... columnFamilies)
-    {
-        Token parsedBeginToken = getPartitioner().getTokenFactory().fromString(beginToken);
-        Token parsedEndToken = getPartitioner().getTokenFactory().fromString(endToken);
-
-        logger.info("starting user-requested repair of range ({}, {}] for keyspace {} and column families {}",
-                    parsedBeginToken, parsedEndToken, keyspaceName, columnFamilies);
-        return forceRepairAsync(keyspaceName, isSequential, isLocal, Collections.singleton(new Range<>(parsedBeginToken, parsedEndToken)), fullRepair, columnFamilies);
-    }
-
-    private FutureTask<Object> createRepairTask(int cmd,
-                                                String keyspace,
-                                                Collection<Range<Token>> ranges,
-                                                boolean isSequential,
-                                                boolean isLocal,
-                                                boolean fullRepair,
-                                                String... columnFamilies)
+    public int forceRepairAsync(String keyspace,
+                                boolean isSequential,
+                                boolean isLocal,
+                                boolean primaryRange,
+                                boolean fullRepair,
+                                String... columnFamilies)
     {
         Set<String> dataCenters = null;
         if (isLocal)
         {
             dataCenters = Sets.newHashSet(DatabaseDescriptor.getLocalDataCenter());
         }
-        return createRepairTask(cmd, keyspace, ranges, isSequential, dataCenters, null, fullRepair, columnFamilies);
+        return forceRepairAsync(keyspace, isSequential, dataCenters, null, primaryRange, fullRepair, columnFamilies);
     }
 
-    private FutureTask<Object> createRepairTask(final int cmd,
-                                                final String keyspace,
-                                                final Collection<Range<Token>> ranges,
-                                                final boolean isSequential,
-                                                final Collection<String> dataCenters,
-                                                final Collection<String> hosts,
-                                                final boolean fullRepair,
-                                                final String... columnFamilies)
+    public int forceRepairRangeAsync(String beginToken,
+                                     String endToken,
+                                     String keyspaceName,
+                                     boolean isSequential,
+                                     Collection<String> dataCenters,
+                                     Collection<String> hosts,
+                                     boolean fullRepair,
+                                     String... columnFamilies)
+    {
+        Token parsedBeginToken = getPartitioner().getTokenFactory().fromString(beginToken);
+        Token parsedEndToken = getPartitioner().getTokenFactory().fromString(endToken);
+        Set<Range<Token>> ranges = new HashSet<>(1);
+        ranges.add(new Range<>(parsedBeginToken, parsedEndToken));
+        RepairOption options = new RepairOption(isSequential, false, !fullRepair, 1, ranges);
+        options.getDataCenters().addAll(dataCenters);
+        if (hosts != null)
+        {
+            options.getHosts().addAll(hosts);
+        }
+        if (columnFamilies != null)
+        {
+            for (String columnFamily : columnFamilies)
+            {
+                options.getColumnFamilies().add(columnFamily);
+            }
+        }
+
+        logger.info("starting user-requested repair of range ({}, {}] for keyspace {} and column families {}",
+                    parsedBeginToken, parsedEndToken, keyspaceName, columnFamilies);
+        return forceRepairAsync(keyspaceName, options);
+    }
+
+    public int forceRepairRangeAsync(String beginToken, String endToken, String keyspaceName, boolean isSequential, boolean isLocal, boolean fullRepair, String... columnFamilies)
+    {
+        Set<String> dataCenters = null;
+        if (isLocal)
+        {
+            dataCenters = Sets.newHashSet(DatabaseDescriptor.getLocalDataCenter());
+        }
+        return forceRepairRangeAsync(beginToken, endToken, keyspaceName, isSequential, dataCenters, null, fullRepair, columnFamilies);
+    }
+
+    public int forceRepairAsync(String keyspace, RepairOption options)
+    {
+        if (Keyspace.SYSTEM_KS.equals(keyspace) || options.getRanges().isEmpty())
+            return 0;
+
+        int cmd = nextRepairCommand.incrementAndGet();
+        new Thread(createRepairTask(cmd, keyspace, options)).start();
+        return cmd;
+    }
+
+    private FutureTask<Object> createRepairTask(final int cmd, final String keyspace, final RepairOption options)
     {
         return new FutureTask<>(new WrappedRunnable()
         {
             protected void runMayThrow() throws Exception
             {
-                String message = String.format("Starting repair command #%d, repairing %d ranges for keyspace %s (seq=%b, full=%b)", cmd, ranges.size(), keyspace, isSequential, fullRepair);
+                String message = String.format("Starting repair command #%d, repairing keyspace %s with %s", cmd, keyspace, options);
                 logger.info(message);
                 sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.STARTED.ordinal()});
 
-                if (isSequential && !fullRepair)
-                {
-                    message = "It is not possible to mix sequential repair and incremental repairs.";
-                    logger.error(message);
-                    sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
-                    return;
-                }
-                if (dataCenters != null && !dataCenters.contains(DatabaseDescriptor.getLocalDataCenter()))
+                if (!options.getDataCenters().isEmpty() && options.getDataCenters().contains(DatabaseDescriptor.getLocalDataCenter()))
                 {
                     message = String.format("Cancelling repair command #%d (the local data center must be part of the repair)", cmd);
                     logger.error(message);
@@ -2655,13 +2672,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     return;
                 }
 
-                Set<InetAddress> allNeighbors = new HashSet<>();
+                final Set<InetAddress> allNeighbors = new HashSet<>();
                 Map<Range, Set<InetAddress>> rangeToNeighbors = new HashMap<>();
-                for (Range<Token> range : ranges)
+                for (Range<Token> range : options.getRanges())
                 {
                     try
                     {
-                        Set<InetAddress> neighbors = ActiveRepairService.getNeighbors(keyspace, range, dataCenters, hosts);
+                        Set<InetAddress> neighbors = ActiveRepairService.getNeighbors(keyspace, range, options.getDataCenters(), options.getHosts());
                         rangeToNeighbors.put(range, neighbors);
                         allNeighbors.addAll(neighbors);
                     }
@@ -2675,6 +2692,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
                 // Validate columnfamilies
                 List<ColumnFamilyStore> columnFamilyStores = new ArrayList<>();
+                String[] columnFamilies = options.getColumnFamilies().toArray(new String[options.getColumnFamilies().size()]);
                 try
                 {
                     Iterables.addAll(columnFamilyStores, getValidColumnFamilies(false, false, keyspace, columnFamilies));
@@ -2685,12 +2703,14 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     return;
                 }
 
-                UUID parentSession = null;
-                if (!fullRepair)
+                final UUID parentSession;
+                long repairedAt = ActiveRepairService.UNREPAIRED_SSTABLE;
+                if (options.isIncremental())
                 {
                     try
                     {
-                        parentSession = ActiveRepairService.instance.prepareForRepair(allNeighbors, ranges, columnFamilyStores);
+                        parentSession = ActiveRepairService.instance.prepareForRepair(allNeighbors, options.getRanges(), columnFamilyStores);
+                        repairedAt = ActiveRepairService.instance.getParentRepairSession(parentSession).repairedAt;
                     }
                     catch (Throwable t)
                     {
@@ -2698,57 +2718,78 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                         return;
                     }
                 }
+                else
+                {
+                    parentSession = null;
+                }
 
-                List<RepairFuture> futures = new ArrayList<>(ranges.size());
+                // Set up RepairJob executor for this repair command.
+                final ListeningExecutorService executor = MoreExecutors.listeningDecorator(new JMXConfigurableThreadPoolExecutor(options.getJobThreads(),
+                                                                                                                           Integer.MAX_VALUE,
+                                                                                                                           TimeUnit.SECONDS,
+                                                                                                                           new LinkedBlockingQueue<Runnable>(),
+                                                                                                                           new NamedThreadFactory("Repair#" + cmd),
+                                                                                                                           "internal"));
+
+                List<ListenableFuture<?>> futures = new ArrayList<>(options.getRanges().size());
                 String[] cfnames = new String[columnFamilyStores.size()];
                 for (int i = 0; i < columnFamilyStores.size(); i++)
                 {
                     cfnames[i] = columnFamilyStores.get(i).name;
                 }
-                for (Range<Token> range : ranges)
+                for (Range<Token> range : options.getRanges())
                 {
-                    RepairFuture future = ActiveRepairService.instance.submitRepairSession(parentSession, range, keyspace, isSequential, rangeToNeighbors.get(range), cfnames);
-                    if (future == null)
+                    final RepairSession session = ActiveRepairService.instance.submitRepairSession(parentSession,
+                                                                      range,
+                                                                      keyspace,
+                                                                      options.isSequential(),
+                                                                      rangeToNeighbors.get(range),
+                                                                      repairedAt,
+                                                                      executor,
+                                                                      cfnames);
+                    if (session == null)
                         continue;
-                    futures.add(future);
-                    // wait for a session to be done with its differencing before starting the next one
-                    try
+                    // After repair session completes, notify client its result
+                    Futures.addCallback(session, new FutureCallback<List<RepairResult>>()
                     {
-                        future.session.differencingDone.await();
-                    }
-                    catch (InterruptedException e)
-                    {
-                        message = "Interrupted while waiting for the differencing of repair session " + future.session + " to be done. Repair may be imprecise.";
-                        logger.error(message, e);
-                        sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
-                    }
+                        public void onSuccess(List<RepairResult> results)
+                        {
+                            String message = String.format("Repair session %s for range %s finished", session.getId(), session.getRange().toString());
+                            logger.info(message);
+                            sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_SUCCESS.ordinal()});
+                        }
+
+                        public void onFailure(Throwable t)
+                        {
+                            String message = String.format("Repair session %s for range %s failed with error %s", session.getId(), session.getRange().toString(), t.getMessage());
+                            logger.error(message, t);
+                            sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
+                        }
+                    });
+                    futures.add(session);
                 }
 
-                for (RepairFuture future : futures)
+                // After all repair sessions completes(successful or not),
+                // run anticompaction if necessary and send finish notice back to client
+                Futures.allAsList(futures).addListener(new Runnable()
                 {
-                    try
+                    public void run()
                     {
-                        future.get();
-                        message = String.format("Repair session %s for range %s finished", future.session.getId(), future.session.getRange().toString());
-                        logger.info(message);
-                        sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_SUCCESS.ordinal()});
+                        if (options.isIncremental())
+                        {
+                            try
+                            {
+                                ActiveRepairService.instance.finishParentSession(parentSession, allNeighbors);
+                            }
+                            catch (Exception e)
+                            {
+                                logger.error("Error in incremental repair", e);
+                            }
+                        }
+                        sendNotification("repair", String.format("Repair command #%d finished", cmd), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
+                        executor.shutdownNow();
                     }
-                    catch (ExecutionException e)
-                    {
-                        message = String.format("Repair session %s for range %s failed with error %s", future.session.getId(), future.session.getRange().toString(), e.getCause().getMessage());
-                        logger.error(message, e);
-                        sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
-                    }
-                    catch (Exception e)
-                    {
-                        message = String.format("Repair session %s for range %s failed with error %s", future.session.getId(), future.session.getRange().toString(), e.getMessage());
-                        logger.error(message, e);
-                        sendNotification("repair", message, new int[]{cmd, ActiveRepairService.Status.SESSION_FAILED.ordinal()});
-                    }
-                }
-                if (!fullRepair)
-                    ActiveRepairService.instance.finishParentSession(parentSession, allNeighbors);
-                sendNotification("repair", String.format("Repair command #%d finished", cmd), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
+                }, MoreExecutors.sameThreadExecutor());
             }
         }, null);
     }
