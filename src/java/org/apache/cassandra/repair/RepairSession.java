@@ -99,7 +99,7 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
     private final ConcurrentMap<Pair<RepairJobDesc, NodePair>, RemoteSyncTask> syncingTasks = new ConcurrentHashMap<>();
 
     // Tasks(snapshot, validate request, differencing, ...) are run on taskExecutor
-    private final ListeningExecutorService taskExecutor = MoreExecutors.listeningDecorator(Executors.newCachedThreadPool(new NamedThreadFactory("RepairJobTask")));
+    private static final ListeningExecutorService taskExecutor = MoreExecutors.listeningDecorator(Executors.newCachedThreadPool(new NamedThreadFactory("RepairJobTask")));
 
     private volatile boolean terminated = false;
 
@@ -253,7 +253,6 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
                 // this repair session is completed
                 logger.info(String.format("[repair #%s] session completed successfully", getId()));
                 set(results);
-                taskExecutor.shutdown();
                 // mark this session as terminated
                 terminate();
             }
@@ -281,7 +280,6 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
     public void forceShutdown(Throwable reason)
     {
         setException(reason);
-        taskExecutor.shutdownNow();
         terminate();
     }
 

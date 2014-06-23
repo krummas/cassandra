@@ -143,7 +143,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
             public void onSuccess(List<SyncStat> stats)
             {
                 logger.info(String.format("[repair #%s] %s is fully synced", session.getId(), desc.columnFamily));
-                set(new RepairResult(desc, stats));
+                RepairJob.this.set(new RepairResult(desc, stats));
             }
 
             /**
@@ -152,7 +152,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
             public void onFailure(Throwable t)
             {
                 logger.warn(String.format("[repair #%s] %s sync failed", session.getId(), desc.columnFamily));
-                setException(t);
+                RepairJob.this.setException(t);
             }
         }, taskExecutor);
 
