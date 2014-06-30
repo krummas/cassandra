@@ -186,8 +186,8 @@ public class DirectoriesTest
     public void testDiskFailurePolicy_best_effort()
     {
         DiskFailurePolicy origPolicy = DatabaseDescriptor.getDiskFailurePolicy();
-        
-        try 
+
+        try
         {
             DatabaseDescriptor.setDiskFailurePolicy(DiskFailurePolicy.best_effort);
             

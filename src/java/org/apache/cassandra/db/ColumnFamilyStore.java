@@ -86,6 +86,20 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                                           new LinkedBlockingQueue<Runnable>(),
                                                                                           new NamedThreadFactory("MemtableFlushWriter"),
                                                                                           "internal");
+
+    private static final ExecutorService [] perDiskflushExecutors = new JMXEnabledThreadPoolExecutor[DatabaseDescriptor.getAllDataFileLocations().length];
+    static {
+        for (int i = 0; i < DatabaseDescriptor.getAllDataFileLocations().length; i++)
+        {
+            perDiskflushExecutors[i] = new JMXEnabledThreadPoolExecutor(1,
+                                                                        StageManager.KEEPALIVE,
+                                                                        TimeUnit.SECONDS,
+                                                                        new LinkedBlockingQueue<Runnable>(),
+                                                                        new NamedThreadFactory("PerDiskMemtableFlushWriter_"+i),
+                                                                        "internal");
+        }
+    }
+
     // post-flush executor is single threaded to provide guarantee that any flush Future on a CF will never return until prior flushes have completed
     public static final ExecutorService postFlushExecutor = new JMXEnabledThreadPoolExecutor(1,
                                                                                              StageManager.KEEPALIVE,
@@ -298,7 +312,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         // compaction strategy should be created after the CFS has been prepared
         this.compactionStrategy = metadata.createCompactionStrategyInstance(this);
-        this.compactionStrategy.startup();
+        // note that we don't startup() the compaction strategy here since we need to know the local ranges for it (or, for LCS atleast)
 
         if (maxCompactionThreshold.value() <= 0 || minCompactionThreshold.value() <=0)
         {
@@ -1050,9 +1064,43 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
             for (final Memtable memtable : memtables)
             {
+                List<Future<SSTableReader>> futures = new ArrayList<>();
                 // flush the memtable
-                MoreExecutors.sameThreadExecutor().execute(memtable.flushRunnable());
+                List<Memtable.FlushRunnable> flushRunnables = memtable.flushRunnables();
+                for (int i = 0; i < flushRunnables.size(); i++)
+                {
+                    futures.add(perDiskflushExecutors[i].submit(flushRunnables.get(i)));
+                }
 
+                List<SSTableReader> flushedSSTables = new ArrayList<>(futures.size());
+                long totalBytesOnDisk = 0;
+                long maxBytesOnDisk = 0;
+                long minBytesOnDisk = Long.MAX_VALUE;
+                for (Future<SSTableReader> f : futures)
+                {
+                    try
+                    {
+                        SSTableReader reader = f.get();
+                        if(reader != null)
+                        {
+                            long size = reader.bytesOnDisk();
+                            totalBytesOnDisk += size;
+                            if (size > maxBytesOnDisk)
+                                maxBytesOnDisk = size;
+                            if (size < minBytesOnDisk)
+                                minBytesOnDisk = size;
+                            flushedSSTables.add(reader);
+                        }
+                    }
+                    catch (ExecutionException|InterruptedException e)
+                    {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                logger.info("Flushed to {} ({} sstables, {} bytes), biggest {} bytes, smallest {} bytes", flushedSSTables, flushedSSTables.size(), totalBytesOnDisk, maxBytesOnDisk, minBytesOnDisk);
+
+                replaceFlushed(memtable, flushedSSTables);
                 // issue a read barrier for reclaiming the memory, and offload the wait to another thread
                 final OpOrder.Barrier readBarrier = readOrdering.newBarrier();
                 readBarrier.issue();
@@ -1360,15 +1408,20 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return CompactionManager.instance.performSSTableRewrite(ColumnFamilyStore.this, excludeCurrentVersion);
     }
 
+    public CompactionManager.AllSSTableOpStatus rebalanceData() throws ExecutionException, InterruptedException
+    {
+        return CompactionManager.instance.rebalanceData(this);
+    }
+
     public void markObsolete(Collection<SSTableReader> sstables, OperationType compactionType)
     {
         assert !sstables.isEmpty();
         data.markObsolete(sstables, compactionType);
     }
 
-    void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    void replaceFlushed(Memtable memtable, Collection<SSTableReader> sstables)
     {
-        compactionStrategy.replaceFlushed(memtable, sstable);
+        compactionStrategy.replaceFlushed(memtable, sstables);
     }
 
     public boolean isValid()

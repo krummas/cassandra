@@ -30,28 +30,18 @@ public abstract class DiskAwareRunnable extends WrappedRunnable
     protected void runMayThrow() throws Exception
     {
         long writeSize;
-        Directories.DataDirectory directory;
+        Directories.DataDirectory[] directories;
         while (true)
         {
             writeSize = getExpectedWriteSize();
-            directory = getDirectories().getWriteableLocation();
-            if (directory != null || !reduceScopeForLimitedSpace())
+            directories = getDirectories().getWritableLocations();
+            if (directories != null || !reduceScopeForLimitedSpace())
                 break;
         }
-        if (directory == null)
+        if (directories == null)
             throw new RuntimeException("Insufficient disk space to write " + writeSize + " bytes");
 
-        directory.currentTasks.incrementAndGet();
-        directory.estimatedWorkingSize.addAndGet(writeSize);
-        try
-        {
-            runWith(getDirectories().getLocationForDisk(directory));
-        }
-        finally
-        {
-            directory.estimatedWorkingSize.addAndGet(-1 * writeSize);
-            directory.currentTasks.decrementAndGet();
-        }
+        runWith(getDirectories().getLocationsForDisks(directories));
     }
 
     /**
@@ -64,7 +54,7 @@ public abstract class DiskAwareRunnable extends WrappedRunnable
      * Executes this task on given {@code sstableDirectory}.
      * @param sstableDirectory sstable directory to work on
      */
-    protected abstract void runWith(File sstableDirectory) throws Exception;
+    protected abstract void runWith(File[] sstableDirectory) throws Exception;
 
     /**
      * Get expected write size to determine which disk to use for this task.

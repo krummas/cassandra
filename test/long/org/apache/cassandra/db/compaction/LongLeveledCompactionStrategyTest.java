@@ -114,7 +114,7 @@ public class LongLeveledCompactionStrategyTest
         }
 
         // Assert all SSTables are lined up correctly.
-        LeveledManifest manifest = lcs.manifest;
+        LeveledManifest manifest = lcs.manifests.manifests().get(0);
         int levels = manifest.getLevelCount();
         for (int level = 0; level < levels; level++)
         {

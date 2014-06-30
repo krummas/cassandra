@@ -142,6 +142,14 @@ public class TTLExpiryTest
                    ByteBufferUtil.EMPTY_BYTE_BUFFER,
                    timestamp);
         rm.apply();
+        // we need to have the sstables overlapping to get them compacted together:
+        rm = new Mutation(KEYSPACE1, Util.dk("ttl").getKey());
+        rm.add("Standard1", Util.cellname("col311"),
+                   ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                   timestamp, 1);
+        rm.apply();
+
+
         cfs.forceBlockingFlush();
         Thread.sleep(2000); // wait for ttl to expire
         assertEquals(4, cfs.getSSTables().size());

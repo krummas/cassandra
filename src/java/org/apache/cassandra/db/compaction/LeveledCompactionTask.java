@@ -51,4 +51,11 @@ public class LeveledCompactionTask extends CompactionTask
     {
         return level;
     }
+
+    @Override
+    protected boolean shouldWritePerVNode()
+    {
+        // LCS level0 needs to keep big files
+        return level > 0;
+    }
 }

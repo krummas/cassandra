@@ -19,6 +19,9 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorStatsCollector;
@@ -27,11 +30,11 @@ import org.apache.cassandra.io.util.DiskAwareRunnable;
 
 public abstract class AbstractCompactionTask extends DiskAwareRunnable
 {
+    private static final Logger logger = LoggerFactory.getLogger(AbstractCompactionTask.class);
     protected final ColumnFamilyStore cfs;
     protected Set<SSTableReader> sstables;
     protected boolean isUserDefined;
     protected OperationType compactionType;
-
     /**
      * @param cfs
      * @param sstables must be marked compacting

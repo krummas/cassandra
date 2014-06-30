@@ -82,6 +82,15 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
         return MINIMUM;
     }
 
+    public BigInteger totalRangeWidth()
+    {
+        return BigInteger.valueOf(MAXIMUM).subtract(BigInteger.valueOf(MINIMUM.token));
+    }
+
+    public BigInteger minTokenValue()
+    {
+        return BigInteger.valueOf(MINIMUM.token);
+    }
     /**
      * Generate the token of a key.
      * Note that we need to ensure all generated token are strictly bigger than MINIMUM.
@@ -204,5 +213,16 @@ public class Murmur3Partitioner extends AbstractPartitioner<LongToken>
     public AbstractType<?> getTokenValidator()
     {
         return LongType.instance;
+    }
+    public LongToken getMaximumToken()
+    {
+        return new LongToken(MAXIMUM);
+    }
+    protected LongToken tokenForValue(BigInteger value) { return new LongToken(value.longValue()); }
+
+    @Override
+    public boolean supportsSplitting()
+    {
+        return true;
     }
 }

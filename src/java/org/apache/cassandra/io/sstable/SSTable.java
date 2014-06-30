@@ -65,6 +65,7 @@ public abstract class SSTable
     public final IPartitioner partitioner;
     public final boolean compression;
 
+    public DecoratedKey originalFirst;
     public DecoratedKey first;
     public DecoratedKey last;
 

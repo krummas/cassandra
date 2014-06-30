@@ -226,5 +226,11 @@ public class KeyCollisionTest
         {
             return IntegerType.instance;
         }
+
+        @Override
+        public BigIntegerToken getMaximumToken()
+        {
+            return new BigIntegerToken(BigInteger.valueOf(2).pow(127));
+        }
     }
 }

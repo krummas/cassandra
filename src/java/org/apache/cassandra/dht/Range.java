@@ -381,6 +381,22 @@ public class Range<T extends RingPosition> extends AbstractBounds<T> implements 
         return isWrapAround(left, right);
     }
 
+    public static <T extends RingPosition> List<Range<T>> sort(Collection<Range<T>> ranges)
+    {
+        List<Range<T>> output = new ArrayList<>(ranges.size());
+        for (Range<T> r : ranges)
+            output.addAll(r.unwrap());
+        // sort by left
+        Collections.sort(output, new Comparator<Range<T>>()
+        {
+            public int compare(Range<T> b1, Range<T> b2)
+            {
+                return b1.left.compareTo(b2.left);
+            }
+        });
+        return output;
+    }
+
     /**
      * @return A copy of the given list of with all ranges unwrapped, sorted by left bound and with overlapping bounds merged.
      */

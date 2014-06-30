@@ -19,7 +19,10 @@ package org.apache.cassandra.db.compaction;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,7 @@ import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorSt
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.VnodeAwareWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.CloseableIterator;
@@ -98,7 +102,7 @@ public class CompactionTask extends AbstractCompactionTask
      * which are properly serialized.
      * Caller is in charge of marking/unmarking the sstables as compacting.
      */
-    protected void runWith(File sstableDirectory) throws Exception
+    protected void runWith(File[] sstableDirectory) throws Exception
     {
         // The collection of sstables passed may be empty (but not null); even if
         // it is not empty, it may compact down to nothing if all rows are deleted.
@@ -132,7 +136,11 @@ public class CompactionTask extends AbstractCompactionTask
         // new sstables from flush can be added during a compaction, but only the compaction can remove them,
         // so in our single-threaded compaction world this is a valid way of determining if we're compacting
         // all the sstables (that existed when we started)
-        logger.info("Compacting {}", sstables);
+        StringBuilder compactingInfo = new StringBuilder();
+        for (SSTableReader s : sstables)
+            compactingInfo.append(s.getFilename()).append(" (level=").append(s.getSSTableLevel()).append("), ");
+
+        logger.info("Compacting {} into level {}", compactingInfo.toString(), getLevel());
 
         long start = System.nanoTime();
         long totalKeysWritten = 0;
@@ -149,10 +157,10 @@ public class CompactionTask extends AbstractCompactionTask
         // replace the old entries.  Track entries to preheat here until then.
         long minRepairedAt = getMinRepairedAt(actuallyCompact);
         // we only need the age of the data that we're actually retaining
-        long maxAge = getMaxDataAge(actuallyCompact);
         if (collector != null)
             collector.beginCompaction(ci);
-        SSTableRewriter writer = new SSTableRewriter(cfs, sstables, maxAge, compactionType, offline);
+        //SSTableRewriter writer = new SSTableRewriter(cfs, sstables, maxAge, compactionType, offline);
+        VnodeAwareWriter writer = new VnodeAwareWriter(cfs, sstableDirectory, shouldWritePerVNode(), keysPerSSTable, minRepairedAt, compactionType, getLevel(), sstables);
         try
         {
             if (!iter.hasNext())
@@ -164,7 +172,6 @@ public class CompactionTask extends AbstractCompactionTask
                 return;
             }
 
-            writer.switchWriter(createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt));
             while (iter.hasNext())
             {
                 if (ci.isStopRequested())
@@ -176,7 +183,7 @@ public class CompactionTask extends AbstractCompactionTask
                     totalKeysWritten++;
                     if (newSSTableSegmentThresholdReached(writer.currentWriter()))
                     {
-                        writer.switchWriter(createCompactionWriter(sstableDirectory, keysPerSSTable, minRepairedAt));
+                        writer.switchWriter();
                     }
                 }
             }
@@ -246,10 +253,15 @@ public class CompactionTask extends AbstractCompactionTask
         }
 
         SystemKeyspace.updateCompactionHistory(cfs.keyspace.getName(), cfs.name, System.currentTimeMillis(), startsize, endsize, mergedRows);
-        logger.info(String.format("Compacted %d sstables to [%s].  %,d bytes to %,d (~%d%% of original) in %,dms = %fMB/s.  %,d total partitions merged to %,d.  Partition merge counts were {%s}",
-                                  oldSStables.size(), newSSTableNames.toString(), startsize, endsize, (int) (ratio * 100), dTime, mbps, totalSourceRows, totalKeysWritten, mergeSummary.toString()));
+        logger.info(String.format("Compacted %d sstables to %d sstables: [%s].  %,d bytes to %,d (~%d%% of original) in %,dms = %fMB/s.  %,d total partitions merged to %,d.  Partition merge counts were {%s}",
+                                  oldSStables.size(), newSStables.size(), newSSTableNames.toString(), startsize, endsize, (int) (ratio * 100), dTime, mbps, totalSourceRows, totalKeysWritten, mergeSummary.toString()));
         logger.debug(String.format("CF Total Bytes Compacted: %,d", CompactionTask.addToTotalBytesCompacted(endsize)));
         logger.debug("Actual #keys: {}, Estimated #keys:{}, Err%: {}", totalKeysWritten, estimatedTotalKeys, ((double)(totalKeysWritten - estimatedTotalKeys)/totalKeysWritten));
+    }
+
+    protected boolean shouldWritePerVNode()
+    {
+        return true;
     }
 
     private long getMinRepairedAt(Set<SSTableReader> actuallyCompact)
@@ -262,19 +274,9 @@ public class CompactionTask extends AbstractCompactionTask
         return minRepairedAt;
     }
 
-    private SSTableWriter createCompactionWriter(File sstableDirectory, long keysPerSSTable, long repairedAt)
-    {
-        return new SSTableWriter(cfs.getTempSSTablePath(sstableDirectory),
-                                 keysPerSSTable,
-                                 repairedAt,
-                                 cfs.metadata,
-                                 cfs.partitioner,
-                                 new MetadataCollector(sstables, cfs.metadata.comparator, getLevel()));
-    }
-
     protected int getLevel()
     {
-        return 0;
+        return 1;
     }
 
     protected CompactionController getCompactionController(Set<SSTableReader> toCompact)

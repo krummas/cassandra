@@ -43,6 +43,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.service.MigrationManager;
+import org.apache.cassandra.tools.NodeTool;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class SchemaLoader
@@ -308,6 +309,7 @@ public class SchemaLoader
                                       CFMetaData... cfmetas) throws ConfigurationException
     {
         createKeyspace(keyspaceName, true, true, strategy, options, cfmetas);
+
     }
 
     public static void createKeyspace(String keyspaceName,
@@ -320,6 +322,10 @@ public class SchemaLoader
         KSMetaData ksm = durable ? KSMetaData.testMetadata(keyspaceName, strategy, options, cfmetas)
                                  : KSMetaData.testMetadataNotDurable(keyspaceName, strategy, options, cfmetas);
         MigrationManager.announceNewKeyspace(ksm, announceLocally);
+        for (ColumnFamilyStore cfs : Keyspace.open(keyspaceName).getColumnFamilyStores())
+        {
+            cfs.getCompactionStrategy().startup();
+        }
     }
 
     private static ColumnDefinition integerColumn(String ksName, String cfName)

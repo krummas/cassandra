@@ -795,7 +795,10 @@ public class SSTableReader extends SSTable
                 RowIndexEntry indexEntry = metadata.comparator.rowIndexEntrySerializer().deserialize(primaryIndex, descriptor.version);
                 DecoratedKey decoratedKey = partitioner.decorateKey(key);
                 if (first == null)
+                {
                     first = decoratedKey;
+                    originalFirst = first;
+                }
                 last = decoratedKey;
 
                 if (recreateBloomFilter)
@@ -819,6 +822,7 @@ public class SSTableReader extends SSTable
         }
 
         first = getMinimalKey(first);
+        originalFirst = first;
         last = getMinimalKey(last);
     }
 
@@ -844,6 +848,7 @@ public class SSTableReader extends SSTable
             iStream = new DataInputStream(new FileInputStream(summariesFile));
             indexSummary = IndexSummary.serializer.deserialize(iStream, partitioner, descriptor.version.hasSamplingLevel, metadata.getMinIndexInterval(), metadata.getMaxIndexInterval());
             first = partitioner.decorateKey(ByteBufferUtil.readWithLength(iStream));
+            originalFirst = first;
             last = partitioner.decorateKey(ByteBufferUtil.readWithLength(iStream));
             ibuilder.deserializeBounds(iStream);
             dbuilder.deserializeBounds(iStream);
@@ -957,6 +962,7 @@ public class SSTableReader extends SSTable
                 readMeterSyncFuture.cancel(false);
             SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, indexSummary.readOnlyClone(), bf, maxDataAge, sstableMetadata, isOpenEarly);
             replacement.readMeter = this.readMeter;
+            replacement.originalFirst = this.originalFirst;
             replacement.first = this.last.compareTo(newStart) > 0 ? newStart : this.last;
             replacement.last = this.last;
             setReplacedBy(replacement);
@@ -1021,6 +1027,7 @@ public class SSTableReader extends SSTable
             SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, newSummary, bf, maxDataAge, sstableMetadata, isOpenEarly);
             replacement.readMeter = this.readMeter;
             replacement.first = this.first;
+            replacement.originalFirst = this.first;
             replacement.last = this.last;
             setReplacedBy(replacement);
             return replacement;
@@ -1171,6 +1178,12 @@ public class SSTableReader extends SSTable
         return Math.max(1, estimatedKeys);
     }
 
+    public boolean intersects(SSTableReader otherReader)
+    {
+        Range<RowPosition> thisRange = new Range<RowPosition>(first.getToken().minKeyBound(), last.getToken().maxKeyBound(), partitioner);
+        Range<RowPosition> otherRange = new Range<RowPosition>(otherReader.first.getToken().minKeyBound(), otherReader.last.getToken().maxKeyBound(), otherReader.partitioner);
+        return thisRange.intersects(otherRange);
+    }
     /**
      * Returns the number of entries in the IndexSummary.  At full sampling, this is approximately 1/INDEX_INTERVALth of
      * the keys in this SSTable.

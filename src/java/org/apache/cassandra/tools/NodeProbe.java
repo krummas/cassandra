@@ -201,6 +201,12 @@ public class NodeProbe implements AutoCloseable
         return ssProxy.upgradeSSTables(keyspaceName, excludeCurrentVersion, columnFamilies);
     }
 
+    public CompactionManager.AllSSTableOpStatus rebalanceData(String keyspace, String[] cfnames) throws IOException, ExecutionException, InterruptedException
+    {
+        return ssProxy.rebalanceData(keyspace, cfnames);
+    }
+
+
     public void forceKeyspaceCleanup(PrintStream out, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
         switch (forceKeyspaceCleanup(keyspaceName, columnFamilies))
@@ -230,6 +236,17 @@ public class NodeProbe implements AutoCloseable
             case ABORTED:
                 failed = true;
                 out.println("Aborted upgrading sstables for atleast one table in keyspace "+keyspaceName+", check server logs for more information.");
+                break;
+        }
+    }
+
+    public void forceDataRebalance(PrintStream out, String keyspace, String[] cfnames) throws IOException, ExecutionException, InterruptedException
+    {
+        switch (rebalanceData(keyspace, cfnames))
+        {
+            case ABORTED:
+                failed = true;
+                out.println("Aborted rebalancing sstables for atleast one column family in keyspace "+keyspace+", check server logs for more information.");
                 break;
         }
     }

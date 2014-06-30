@@ -180,6 +180,8 @@ public class SizeTieredCompactionStrategyTest
             DecoratedKey key = Util.dk(String.valueOf(r));
             Mutation rm = new Mutation(ksname, key.getKey());
             rm.add(cfname, Util.cellname("column"), value, 0);
+            rm = new Mutation(ksname, Util.dk("x").getKey()); // to get overlap
+            rm.add(cfname, Util.cellname("column"), value, 0);
             rm.apply();
             cfs.forceBlockingFlush();
         }

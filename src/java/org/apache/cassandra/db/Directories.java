@@ -49,8 +49,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.io.FSError;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTable;
+import org.apache.cassandra.io.sstable.SSTableDeletingTask;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
@@ -200,6 +203,7 @@ public class Directories
             // check if old SSTable directory exists
             dataPaths[i] = new File(dataDirectories[i].location, join(metadata.ksName, this.metadata.cfName));
         }
+
         boolean olderDirectoryExists = Iterables.any(Arrays.asList(dataPaths), new Predicate<File>()
         {
             public boolean apply(File file)
@@ -245,6 +249,22 @@ public class Directories
         return null;
     }
 
+    public File[] getLocationsForDisks(DataDirectory[] dataDirectories)
+    {
+        List<File> locations = new ArrayList<>();
+        for (File dir : dataPaths)
+        {
+            for (DataDirectory dataDirectory : dataDirectories)
+            {
+                if (dir.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+                    locations.add(dir);
+            }
+        }
+        if (locations.size() > 0)
+            return locations.toArray(new File[0]);
+        return null;
+    }
+
     public Descriptor find(String filename)
     {
         for (File dir : dataPaths)
@@ -281,6 +301,39 @@ public class Directories
         return getLocationForDisk(getWriteableLocation());
     }
 
+    public File[] getDirectoriesForCompactedSSTables()
+    {
+        File[] paths = getCompactionLocationsAsFiles();
+
+        // Requesting GC has a chance to free space only if we're using mmap and a non SUN jvm
+        if (paths == null
+            && (DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap || DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
+            && !FileUtils.isCleanerAvailable())
+        {
+            logger.info("Forcing GC to free up disk space.  Upgrade to the Oracle JVM to avoid this");
+            StorageService.instance.requestGC();
+            // retry after GCing has forced unmap of compacted SSTables so they can be deleted
+            // Note: GCInspector will do this already, but only sun JVM supports GCInspector so far
+            SSTableDeletingTask.rescheduleFailedTasks();
+            Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS);
+            paths = getCompactionLocationsAsFiles();
+        }
+
+        return paths;
+    }
+
+    private File[] getCompactionLocationsAsFiles()
+    {
+        DataDirectory[] compactionLocations = getWritableLocations();
+        List<File> locations = new ArrayList<>();
+        for (DataDirectory compactionLocation : compactionLocations)
+            locations.add(getLocationForDisk(compactionLocation));
+
+        if (locations.size() > 0)
+            return locations.toArray(new File[0]);
+        return null;
+    }
+
     /**
      * @return a non-blacklisted directory with the most free space and least current tasks.
      *
@@ -314,6 +367,40 @@ public class Directories
         });
 
         return candidates.get(0);
+    }
+
+    /**
+     * @return an array of directories to put sstables, sorted lexicographically
+     *
+     * @throws IOError if all directories are blacklisted.
+     */
+    public DataDirectory[] getWritableLocations()
+    {
+        DataDirectory[] candidates = new DataDirectory[dataDirectories.length];
+
+        // pick directories with enough space and so that resulting sstable dirs aren't blacklisted for writes.
+        boolean added = false;
+        for (int i = 0; i < dataDirectories.length; i++)
+        {
+            DataDirectory dataDir = dataDirectories[i];
+            if (BlacklistedDirectories.isUnwritable(getLocationForDisk(dataDir)))
+                continue;
+            candidates[i]= dataDir;
+            added = true;
+        }
+
+        if (!added)
+            throw new IOError(new IOException("All configured data directories have been blacklisted as unwritable for erroring out"));
+
+        Arrays.sort(candidates, new Comparator<DataDirectory>()
+        {
+            @Override
+            public int compare(DataDirectory o1, DataDirectory o2)
+            {
+                return o1.location.compareTo(o2.location);
+            }
+        });
+        return candidates;
     }
 
     public static File getSnapshotDirectory(Descriptor desc, String snapshotName)

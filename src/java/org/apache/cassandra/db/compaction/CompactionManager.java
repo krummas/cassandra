@@ -67,6 +67,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.OnDiskAtom;
+import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionInfo.Holder;
 import org.apache.cassandra.db.index.SecondaryIndexBuilder;
@@ -74,6 +75,7 @@ import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.VnodeAwareWriter;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
@@ -438,6 +440,94 @@ public class CompactionManager implements CompactionManagerMBean
         logger.info(String.format("Completed anticompaction successfully"));
     }
 
+    public AllSSTableOpStatus rebalanceData(final ColumnFamilyStore cfs) throws ExecutionException, InterruptedException
+    {
+        final List<Token> boundaries = cfs.partitioner.splitRanges(DatabaseDescriptor.getAllDataFileLocations().length);
+        final List<Range<Token>> vnodeBoundaries = Range.sort(StorageService.instance.getLocalRanges(cfs.keyspace.getName()));
+        final File [] dirs = cfs.directories.getDirectoriesForCompactedSSTables();
+        if (boundaries == null || boundaries.size() == 1 || dirs.length == 1)
+        {
+            logger.info("Nothing to rebalance.");
+            return AllSSTableOpStatus.SUCCESSFUL;
+        }
+
+        return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
+        {
+            @Override
+            public Iterable<SSTableReader> filterSSTables(Iterable<SSTableReader> input)
+            {
+                return input;
+            }
+
+            @Override
+            public void execute(SSTableReader input) throws IOException
+            {
+                rebalanceOne(cfs, input, boundaries, vnodeBoundaries, dirs);
+            }
+        });
+    }
+
+    private void rebalanceOne(ColumnFamilyStore cfs, SSTableReader sstable, List<Token> diskBoundaries, List<Range<Token>> vnodeBoundaries, File[] dirs)
+    {
+        boolean inCorrectPlace = false;
+        for (Range<Token> r : vnodeBoundaries)
+        {
+            if (r.contains(sstable.first.getToken()) && r.contains(sstable.last.getToken()))
+            {
+                // the sstable is fully contained in a vnode, make sure it is on the right disk:
+                for (int i = 0; i < dirs.length; i++)
+                {
+                    if (sstable.descriptor.directory.getAbsolutePath().startsWith(dirs[i].getAbsolutePath()))
+                    {
+                        RowPosition lowerBound = (i == 0 ? cfs.partitioner.getMinimumToken().minKeyBound() : diskBoundaries.get(i - 1).maxKeyBound());
+                        RowPosition upperBound = diskBoundaries.get(i).maxKeyBound();
+                        if (sstable.first.compareTo(lowerBound) > 0 && sstable.first.compareTo(upperBound) < 0)
+                            inCorrectPlace = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (inCorrectPlace)
+        {
+            logger.info("{} already balanced", sstable);
+            return;
+        }
+
+        logger.info("Rebalancing data in {}", sstable);
+        VnodeAwareWriter writer = new VnodeAwareWriter(cfs,
+                                                     cfs.directories.getDirectoriesForCompactedSSTables(),
+                                                     true,
+                                                     SSTableReader.getApproximateKeyCount(Arrays.asList(sstable)),
+                                                     sstable.getSSTableMetadata().repairedAt,
+                                                     OperationType.REBALANCE,
+                                                     sstable.getSSTableLevel(),
+                                                     Sets.newHashSet(sstable));
+        try (CompactionController controller = new CompactionController(cfs, new HashSet<>(Collections.singleton(sstable)), CFMetaData.DEFAULT_GC_GRACE_SECONDS))
+        {
+            AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
+            List<ICompactionScanner> scanners = strategy.getScanners(Arrays.asList(sstable));
+            CompactionIterable ci = new CompactionIterable(OperationType.REBALANCE, scanners, controller);
+
+            try (CloseableIterator<AbstractCompactedRow> iter = ci.iterator())
+            {
+                while (iter.hasNext())
+                {
+                    AbstractCompactedRow row = iter.next();
+                    writer.append(row);
+                }
+            }
+        }
+        catch (Throwable e)
+        {
+            writer.abort();
+        }
+        List<SSTableReader> newSSTables = writer.finish();
+        logger.info("Rebalanced {} to {}", sstable, newSSTables);
+    }
+
     public void performMaximal(final ColumnFamilyStore cfStore) throws InterruptedException, ExecutionException
     {
         submitMaximal(cfStore, getDefaultGcBefore(cfStore)).get();
@@ -674,7 +764,7 @@ public class CompactionManager implements CompactionManagerMBean
 
         logger.info("Cleaning up {}", sstable);
 
-        File compactionFileLocation = cfs.directories.getDirectoryForNewSSTables();
+        File compactionFileLocation = sstable.descriptor.directory;
         if (compactionFileLocation == null)
             throw new IOException("disk full");
 
@@ -978,7 +1068,7 @@ public class CompactionManager implements CompactionManagerMBean
             Set<SSTableReader> sstableAsSet = new HashSet<>();
             sstableAsSet.add(sstable);
 
-            File destination = cfs.directories.getDirectoryForNewSSTables();
+            File destination = sstable.descriptor.directory;
             SSTableRewriter repairedSSTableWriter = new SSTableRewriter(cfs, sstableAsSet, sstable.maxDataAge, OperationType.ANTICOMPACTION, false);
             SSTableRewriter unRepairedSSTableWriter = new SSTableRewriter(cfs, sstableAsSet, sstable.maxDataAge, OperationType.ANTICOMPACTION, false);
 

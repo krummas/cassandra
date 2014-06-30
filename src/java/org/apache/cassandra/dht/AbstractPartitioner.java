@@ -17,6 +17,13 @@
  */
 package org.apache.cassandra.dht;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
+
 public abstract class AbstractPartitioner<T extends Token> implements IPartitioner<T>
 {
     public <R extends RingPosition> R minValue(Class<R> klass)
@@ -27,4 +34,62 @@ public abstract class AbstractPartitioner<T extends Token> implements IPartition
         else
             return (R)minToken.minKeyBound();
     }
+
+
+    /**
+     * Split the partitioner total range
+     *
+     * @param parts the number of parts to split the range in
+     * @return a list with the boundaries for the parts, last boundary will be max token.
+     */
+    public List<T> splitRanges(int parts)
+    {
+        if (supportsSplitting() && DatabaseDescriptor.getNumTokens() > 1 && parts > 0)
+        {
+            if(parts == 1)
+                return Arrays.asList(getMaximumToken());
+
+            List<BigInteger> boundaries = new ArrayList<>(parts);
+            BigInteger partWidth = totalRangeWidth().divide(BigInteger.valueOf(parts));
+            boundaries.add(minTokenValue().add(partWidth));
+            for (int i = 1; i < parts - 1; i++)
+            {
+                boundaries.add(boundaries.get(i - 1).add(partWidth));
+            }
+            List<T> tokenBoundaries = new ArrayList<>(parts);
+            for (BigInteger boundary : boundaries)
+            {
+                tokenBoundaries.add(tokenForValue(boundary));
+            }
+            tokenBoundaries.add(getMaximumToken());
+            return tokenBoundaries;
+        }
+        return null;
+    }
+
+    protected BigInteger totalRangeWidth()
+    {
+        throw new UnsupportedOperationException("Range width not implemented for "+this.getClass().getName());
+    }
+
+    protected BigInteger minTokenValue()
+    {
+        throw new UnsupportedOperationException("Min not implemented for "+this.getClass().getName());
+    }
+
+    protected T tokenForValue(BigInteger value)
+    {
+        return null;
+    }
+
+    public T getMaximumToken()
+    {
+        throw new UnsupportedOperationException("Max token not implemented for "+this.getClass().getName());
+    }
+
+    public boolean supportsSplitting()
+    {
+        return false;
+    }
+
 }

@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.io.sstable;
 
+import java.io.DataInput;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -28,7 +30,9 @@ import java.util.Set;
 import com.google.common.base.Function;
 import com.google.common.base.Functions;
 
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DataTracker;
 import org.apache.cassandra.db.DecoratedKey;
@@ -83,13 +87,19 @@ public class SSTableRewriter
     private SSTableWriter writer;
     private Map<DecoratedKey, RowIndexEntry> cachedKeys = new HashMap<>();
 
+    /**
+     * Note that the rewriting set is mutated when moving starts etc, make sure you replace the right readers after using this!
+     */
     public SSTableRewriter(ColumnFamilyStore cfs, Set<SSTableReader> rewriting, long maxAge, OperationType rewriteType, boolean isOffline)
     {
         this.rewriting = rewriting;
-        for (SSTableReader sstable : rewriting)
+        if (rewriting != null)
         {
-            originalStarts.put(sstable.descriptor, sstable.first);
-            fileDescriptors.put(sstable.descriptor, CLibrary.getfd(sstable.getFilename()));
+            for (SSTableReader sstable : rewriting)
+            {
+                originalStarts.put(sstable.descriptor, sstable.first);
+                fileDescriptors.put(sstable.descriptor, CLibrary.getfd(sstable.getFilename()));
+            }
         }
         this.dataTracker = cfs.getDataTracker();
         this.cfs = cfs;
@@ -132,6 +142,11 @@ public class SSTableRewriter
         return index;
     }
 
+    public long appendFromStream(DecoratedKey decoratedKey, CFMetaData metadata, DataInput in, Descriptor.Version version) throws IOException
+    {
+        // we do not reopen early from streams
+        return writer.appendFromStream(decoratedKey, metadata, in, version);
+    }
     // attempts to append the row, if fails resets the writer position
     public RowIndexEntry tryAppend(AbstractCompactedRow row)
     {
@@ -284,11 +299,21 @@ public class SSTableRewriter
             writer = newWriter;
             return;
         }
-        // tmp = false because later we want to query it with descriptor from SSTableReader
-        SSTableReader reader = writer.closeAndOpenReader(maxAge);
-        finished.add(reader);
-        replaceReader(currentlyOpenedEarly, reader);
-        moveStarts(reader, Functions.constant(reader.last), false);
+        if(writer.getFilePointer() == 0)
+        {
+            writer.abort();
+        }
+        else
+        {
+            // tmp = false because later we want to query it with descriptor from SSTableReader
+            SSTableReader reader = writer.closeAndOpenReader(maxAge);
+            finished.add(reader);
+            if (rewriting != null)
+            {
+                replaceReader(currentlyOpenedEarly, reader);
+                moveStarts(reader, Functions.constant(reader.last), false);
+            }
+        }
         currentlyOpenedEarly = null;
         currentlyOpenedEarlyAt = 0;
         writer = newWriter;
@@ -314,8 +339,11 @@ public class SSTableRewriter
                                     writer.closeAndOpenReader(maxAge) :
                                     writer.closeAndOpenReader(maxAge, repairedAt);
             finished.add(reader);
-            replaceReader(currentlyOpenedEarly, reader);
-            moveStarts(reader, Functions.constant(reader.last), false);
+            if (rewriting != null)
+            {
+                replaceReader(currentlyOpenedEarly, reader);
+                moveStarts(reader, Functions.constant(reader.last), false);
+            }
         }
         else
         {
@@ -325,9 +353,12 @@ public class SSTableRewriter
 
         if (!isOffline)
         {
-            dataTracker.unmarkCompacting(finished);
-            if (cleanupOldReaders)
-                dataTracker.markCompactedSSTablesReplaced(rewriting, finished, rewriteType);
+            if (rewriting != null)
+            {
+                dataTracker.unmarkCompacting(finished);
+                if (cleanupOldReaders)
+                    dataTracker.markCompactedSSTablesReplaced(rewriting, finished, rewriteType);
+            }
         }
         else if (cleanupOldReaders)
         {

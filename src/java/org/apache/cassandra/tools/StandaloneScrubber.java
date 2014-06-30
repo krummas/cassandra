@@ -95,11 +95,17 @@ public class StandaloneScrubber
 
             LeveledManifest manifest = null;
             // If leveled, load the manifest
-            if (cfs.getCompactionStrategy() instanceof LeveledCompactionStrategy)
-            {
-                int maxSizeInMB = (int)((cfs.getCompactionStrategy().getMaxSSTableBytes()) / (1024L * 1024L));
-                manifest = LeveledManifest.create(cfs, maxSizeInMB, sstables);
-            }
+            // todo: we need to know our token ranges etc here
+//            if (cfs.getCompactionStrategy() instanceof LeveledCompactionStrategy)
+//            {
+//                int maxSizeInMB = (int)((cfs.getCompactionStrategy().getMaxSSTableBytes()) / (1024L * 1024L));
+//                manifest = new LeveledManifest(cfs, maxSizeInMB);
+//                for (SSTableReader r : sstables)
+//                    if (r.getSSTableLevel() > 0)
+//                    {
+//                        manifest.add(r);
+//                    }
+//            }
 
             if (!options.manifestCheckOnly)
             {
@@ -129,10 +135,6 @@ public class StandaloneScrubber
                 }
             }
 
-            // Check (and repair) manifest
-            if (manifest != null)
-                checkManifest(manifest);
-
             SSTableDeletingTask.waitForDeletions();
             System.exit(0); // We need that to stop non daemonized threads
         }
@@ -143,13 +145,6 @@ public class StandaloneScrubber
                 e.printStackTrace(System.err);
             System.exit(1);
         }
-    }
-
-    private static void checkManifest(LeveledManifest manifest)
-    {
-        System.out.println(String.format("Checking leveled manifest"));
-        for (int i = 1; i <= manifest.getLevelCount(); ++i)
-            manifest.repairOverlappingSSTables(i);
     }
 
     private static class Options

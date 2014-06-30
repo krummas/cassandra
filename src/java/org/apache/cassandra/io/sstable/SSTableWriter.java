@@ -179,7 +179,10 @@ public class SSTableWriter extends SSTable
         lastWrittenKey = decoratedKey;
         last = lastWrittenKey;
         if (first == null)
+        {
             first = lastWrittenKey;
+            originalFirst = first;
+        }
 
         if (logger.isTraceEnabled())
             logger.trace("wrote {} at {}", decoratedKey, dataPosition);
@@ -364,6 +367,7 @@ public class SSTableWriter extends SSTable
         // currently we only maintain references to first/last/lastWrittenKey from the data provided; all other
         // data retention is done through copying
         first = getMinimalKey(first);
+        originalFirst = first;
         last = lastWrittenKey = getMinimalKey(last);
     }
 
@@ -397,6 +401,7 @@ public class SSTableWriter extends SSTable
 
         // now it's open, find the ACTUAL last readable key (i.e. for which the data file has also been flushed)
         sstable.first = getMinimalKey(first);
+        sstable.originalFirst = originalFirst;
         sstable.last = getMinimalKey(exclusiveUpperBoundOfReadableIndex);
         DecoratedKey inclusiveUpperBoundOfReadableData = iwriter.getMaxReadableKey(1);
         if (inclusiveUpperBoundOfReadableData == null)
@@ -446,6 +451,7 @@ public class SSTableWriter extends SSTable
                                                            sstableMetadata,
                                                            false);
         sstable.first = getMinimalKey(first);
+        sstable.originalFirst = sstable.first;
         sstable.last = getMinimalKey(last);
         // try to save the summaries to disk
         sstable.saveSummary(iwriter.builder, dbuilder);
