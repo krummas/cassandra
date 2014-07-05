@@ -170,6 +170,49 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         return new LeveledCompactionTask(cfs, sstables, level, gcBefore, maxSSTableBytes);
     }
 
+    /**
+     * Leveled compaction strategy has guarantees the data contained within each level so we
+     * have to make sure we only create groups of SSTables with members from the same level.
+     * This way we won't end up creating invalid sstables during anti-compaction.
+     * @param ssTablesToGroup
+     * @return Groups of sstables from the same level
+     */
+    @Override
+    public Collection<Collection<SSTableReader>> groupSSTables(Collection<SSTableReader> ssTablesToGroup)
+    {
+        Map<Integer,Collection<SSTableReader>> sstablesByLevel = new HashMap();
+        for (SSTableReader sstable : ssTablesToGroup)
+        {
+            Integer level = sstable.getSSTableLevel();
+            if (!sstablesByLevel.containsKey(level))
+            {
+                sstablesByLevel.put(level,new ArrayList<SSTableReader>());
+            }
+            sstablesByLevel.get(level).add(sstable);
+        }
+
+        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList();
+
+        for (Collection<SSTableReader> levelOfSSTables : sstablesByLevel.values())
+        {
+            Iterator<SSTableReader> tableIterator = levelOfSSTables.iterator();
+            Collection<SSTableReader> currGroup = new ArrayList();
+            while (tableIterator.hasNext())
+            {
+                currGroup.add(tableIterator.next());
+                if (currGroup.size() == groupSize)
+                {
+                    groupedSSTables.add(currGroup);
+                    currGroup = new ArrayList<SSTableReader>();
+                }
+            }
+            if (currGroup.size() != 0)
+                groupedSSTables.add(currGroup);
+        }
+        return groupedSSTables;
+
+    }
+
     public int getEstimatedRemainingTasks()
     {
         return manifest.getEstimatedTasks();

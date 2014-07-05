@@ -113,4 +113,81 @@ public class AntiCompactionTest
         assertEquals(repairedKeys, 4);
         assertEquals(nonRepairedKeys, 6);
     }
+
+
+    public void generateSStable(ColumnFamilyStore store, String Suffix)
+    {
+    long timestamp = System.currentTimeMillis();
+    for (int i = 0; i < 10; i++)
+        {
+            DecoratedKey key = Util.dk(Integer.toString(i) + "-" + Suffix);
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+            for (int j = 0; j < 10; j++)
+                rm.add("Standard1", Util.cellname(Integer.toString(j)),
+                        ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                        timestamp,
+                        0);
+            rm.apply();
+        }
+        store.forceBlockingFlush();
+    }
+
+    @Test
+    public void antiCompactTenSTC() throws InterruptedException, ExecutionException, IOException{
+        antiCompactTen("SizeTieredCompactionStrategy");
+    }
+
+    @Test
+    public void antiCompactTenLC() throws InterruptedException, ExecutionException, IOException{
+        antiCompactTen("LeveledCompactionStrategy");
+    }
+
+    public void antiCompactTen(String compactionStrategy) throws InterruptedException, ExecutionException, IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF);
+        store.setCompactionStrategyClass(compactionStrategy);
+        store.disableAutoCompaction();
+
+        for (int table =0; table < 10; table++)
+        {
+            generateSStable(store,Integer.toString(table));
+        }
+        Collection<SSTableReader> sstables = store.getUnrepairedSSTables();
+        assertEquals(store.getSSTables().size(), sstables.size());
+
+        Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("4".getBytes()));
+        List<Range<Token>> ranges = Arrays.asList(range);
+
+        SSTableReader.acquireReferences(sstables);
+        long repairedAt = 1000;
+        CompactionManager.instance.performAnticompaction(store, ranges, sstables, repairedAt);
+        /*
+        Anticompaction will be anti-compacting 10 SSTables but will be doing this two at a time
+        so there will be no net change in the number of sstables
+         */
+        assertEquals(10, store.getSSTables().size());
+        int repairedKeys = 0;
+        int nonRepairedKeys = 0;
+        for (SSTableReader sstable : store.getSSTables())
+        {
+            SSTableScanner scanner = sstable.getScanner();
+            while (scanner.hasNext())
+            {
+                SSTableIdentityIterator row = (SSTableIdentityIterator) scanner.next();
+                if (sstable.isRepaired())
+                {
+                    assertTrue(range.contains(row.getKey().getToken()));
+                    repairedKeys++;
+                }
+                else
+                {
+                    assertFalse(range.contains(row.getKey().getToken()));
+                    nonRepairedKeys++;
+                }
+            }
+        }
+        assertEquals(repairedKeys, 40);
+        assertEquals(nonRepairedKeys, 60);
+    }
 }

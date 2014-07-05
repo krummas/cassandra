@@ -430,7 +430,7 @@ public class CompactionManager implements CompactionManagerMBean
         cfs.getDataTracker().notifySSTableRepairedStatusChanged(mutatedRepairStatuses);
         cfs.getDataTracker().unmarkCompacting(Sets.union(nonAnticompacting, mutatedRepairStatuses));
         if (!sstables.isEmpty())
-            doAntiCompaction(cfs, ranges, sstables, repairedAt, new numericGrouper(2));
+            doAntiCompaction(cfs, ranges, sstables, repairedAt);
         SSTableReader.releaseReferences(sstables);
         cfs.getDataTracker().unmarkCompacting(sstables);
         logger.info(String.format("Completed anticompaction successfully"));
@@ -944,37 +944,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    private interface SSTableGrouper{
-        public Collection<Collection<SSTableReader>> groupSSTables(Collection<SSTableReader> ssTablesToGroup);
-    }
 
-    /**
-     * Naive algortihm for grouping SSTables together, Groups according to a desired group size
-     */
-    private class numericGrouper implements SSTableGrouper{
-        private int groupSize;
-
-        public numericGrouper( int groupSize){
-            this.groupSize=groupSize;
-        }
-
-        @Override
-        public Collection<Collection<SSTableReader>> groupSSTables(Collection<SSTableReader> ssTablesToGroup) {
-            Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList();
-            Iterator<SSTableReader> tableIterator = ssTablesToGroup.iterator();
-            Collection<SSTableReader> currGroup = new ArrayList();
-            while (tableIterator.hasNext()){
-                currGroup.add(tableIterator.next());
-                if (currGroup.size() == groupSize){
-                    groupedSSTables.add(currGroup);
-                    currGroup=new ArrayList<SSTableReader>();
-                }
-            }
-            if (currGroup.size() != 0)
-                groupedSSTables.add(currGroup);
-        return groupedSSTables;
-        }
-    }
 
     /**
      * Splits up an sstable into two new sstables. The first of the new tables will store repaired ranges, the second
@@ -986,7 +956,7 @@ public class CompactionManager implements CompactionManagerMBean
      * the {@link org.apache.cassandra.io.sstable.metadata.StatsMetadata#repairedAt} field.
      */
     private Collection<SSTableReader> doAntiCompaction(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
-                                                       Collection<SSTableReader> repairedSSTables, long repairedAt, SSTableGrouper grouper)
+                                                       Collection<SSTableReader> repairedSSTables, long repairedAt)
     {
         List<SSTableReader> anticompactedSSTables = new ArrayList<>();
         int repairedKeyCount = 0;
@@ -995,9 +965,10 @@ public class CompactionManager implements CompactionManagerMBean
         logger.info("Performing anticompaction on {} sstables", repairedSSTables.size());
 
         //Group SSTables
-        Collection<Collection<SSTableReader>> groupedSSTables = grouper.groupSSTables(repairedSSTables);
+        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTables(repairedSSTables);
         // iterate over sstables to check if the repaired / unrepaired ranges intersect them.
-        for (Collection<SSTableReader> sstableGroup : groupedSSTables){
+        for (Collection<SSTableReader> sstableGroup : groupedSSTables)
+        {
             AntiCompactionResults results =  antiCompactGroup(cfs, ranges, sstableGroup, repairedAt);
             anticompactedSSTables.addAll(results.anticompactedSSTables);
             repairedKeyCount += results.repairedKeyCount;
@@ -1029,9 +1000,11 @@ public class CompactionManager implements CompactionManagerMBean
 
         // check that compaction hasn't stolen any sstables used in previous repair sessions
         // if we need to skip the anticompaction, it will be carried out by the next repair
-        for (Iterator<SSTableReader> i = repairedSSTables.iterator(); i.hasNext();) {
+        for (Iterator<SSTableReader> i = repairedSSTables.iterator(); i.hasNext();)
+        {
             SSTableReader sstable = i.next();
-            if (!new File(sstable.getFilename()).exists()) {
+            if (!new File(sstable.getFilename()).exists())
+            {
                 logger.info("Skipping anticompaction for {}, required sstable was compacted and is no longer available.", sstable);
                 i.remove();
                 continue;
