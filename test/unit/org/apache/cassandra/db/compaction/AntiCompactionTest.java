@@ -27,6 +27,7 @@ import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.junit.BeforeClass;
+import org.junit.After;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
@@ -51,14 +52,23 @@ public class AntiCompactionTest
     private static final String KEYSPACE1 = "AntiCompactionTest";
     private static final String CF = "Standard1";
 
+
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
-                                    SimpleStrategy.class,
-                                    KSMetaData.optsWithRF(1),
-                                    SchemaLoader.standardCFMD(KEYSPACE1, CF));
+                SimpleStrategy.class,
+                KSMetaData.optsWithRF(1),
+                SchemaLoader.standardCFMD(KEYSPACE1, CF));
+    }
+
+    @After
+    public void truncateCF()
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF);
+        store.truncateBlocking();
     }
 
     @Test
