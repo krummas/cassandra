@@ -182,7 +182,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
     }
 
     /**
-     * Leveled compaction strategy has guarantees the data contained within each level so we
+     * Leveled compaction strategy has guarantees on the data contained within each level so we
      * have to make sure we only create groups of SSTables with members from the same level.
      * This way we won't end up creating invalid sstables during anti-compaction.
      * @param ssTablesToGroup
