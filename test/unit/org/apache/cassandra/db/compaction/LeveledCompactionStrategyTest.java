@@ -18,7 +18,12 @@
 package org.apache.cassandra.db.compaction;
 
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.After;
 import org.junit.Before;
@@ -99,10 +104,10 @@ public class LeveledCompactionStrategyTest
         for (int r = 0; r < rows; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            Mutation rm = new Mutation(ksname, key.getKey());
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
             for (int c = 0; c < columns; c++)
             {
-                rm.add(cfname, Util.cellname("column" + c), value, 0);
+                rm.add(CF_STANDARDDLEVELED, Util.cellname("column" + c), value, 0);
             }
             rm.apply();
             cfs.forceBlockingFlush();
