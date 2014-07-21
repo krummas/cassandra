@@ -848,6 +848,37 @@ public class CompactionManager implements CompactionManagerMBean
                                  new MetadataCollector(Collections.singleton(sstable), cfs.metadata.comparator, sstable.getSSTableLevel()));
     }
 
+    public static SSTableWriter createWriterForAntiCompaction(ColumnFamilyStore cfs,
+                                             File compactionFileLocation,
+                                             int expectedBloomFilterSize,
+                                             long repairedAt,
+                                             Collection<SSTableReader> sstables)
+    {
+        FileUtils.createDirectory(compactionFileLocation);
+        int minLevel = Integer.MAX_VALUE;
+        // if all sstables have the same level, we can compact them together without creating overlap during anticompaction
+        // note that we only anticompact from unrepaired sstables, which is not leveled, but we still keep original level
+        // after first migration to be able to drop the sstables back in their original place in the repaired sstable manifest
+        for (SSTableReader sstable : sstables)
+        {
+            if (minLevel == Integer.MAX_VALUE)
+                minLevel = sstable.getSSTableLevel();
+
+            if (minLevel != sstable.getSSTableLevel())
+            {
+                minLevel = 0;
+                break;
+            }
+        }
+        return new SSTableWriter(cfs.getTempSSTablePath(compactionFileLocation),
+                                 expectedBloomFilterSize,
+                                 repairedAt,
+                                 cfs.metadata,
+                                 cfs.partitioner,
+                                 new MetadataCollector(sstables, cfs.metadata.comparator, minLevel));
+    }
+
+
     /**
      * Performs a readonly "compaction" of all sstables in order to validate complete rows,
      * but without writing the merge result
@@ -969,7 +1000,7 @@ public class CompactionManager implements CompactionManagerMBean
         logger.info("Performing anticompaction on {} sstables", repairedSSTables.size());
 
         //Group SSTables
-        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTables(repairedSSTables);
+        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(repairedSSTables, 2);
         // iterate over sstables to check if the repaired / unrepaired ranges intersect them.
         for (Collection<SSTableReader> sstableGroup : groupedSSTables)
         {
@@ -987,24 +1018,23 @@ public class CompactionManager implements CompactionManagerMBean
         return anticompactedSSTables;
     }
 
-    private class AntiCompactionResults
+    private static class AntiCompactionResults
     {
-       public long repairedKeyCount=0;
-       public long unrepairedKeyCount=0;
-       public List<SSTableReader> anticompactedSSTables = new ArrayList<>();
+        public long repairedKeyCount = 0;
+        public long unrepairedKeyCount = 0;
+        public List<SSTableReader> anticompactedSSTables = new ArrayList<>();
     }
 
     private AntiCompactionResults antiCompactGroup(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
-                             Collection<SSTableReader> repairedSSTables, long repairedAt)
+                             Collection<SSTableReader> anticompactionGroup, long repairedAt)
     {
         AntiCompactionResults results = new AntiCompactionResults();
 
-        long groupMaxDataAge=-1;
-        SSTableReader firstSSTable = null;
+        long groupMaxDataAge = -1;
 
         // check that compaction hasn't stolen any sstables used in previous repair sessions
         // if we need to skip the anticompaction, it will be carried out by the next repair
-        for (Iterator<SSTableReader> i = repairedSSTables.iterator(); i.hasNext();)
+        for (Iterator<SSTableReader> i = anticompactionGroup.iterator(); i.hasNext();)
         {
             SSTableReader sstable = i.next();
             if (!new File(sstable.getFilename()).exists())
@@ -1014,35 +1044,31 @@ public class CompactionManager implements CompactionManagerMBean
                 continue;
             }
             if (groupMaxDataAge < sstable.maxDataAge)
-                groupMaxDataAge=sstable.maxDataAge;
-            if (firstSSTable == null)
-                firstSSTable= sstable;
+                groupMaxDataAge = sstable.maxDataAge;
         }
 
-        if (repairedSSTables.size() == 0)
+        if (anticompactionGroup.size() == 0)
         {
             logger.info("No valid anticompactions for this group, All sstables were compacted and are no longer available");
             return results;
         }
 
-        logger.info("Anticompacting {}", repairedSSTables);
-        Set<SSTableReader> sstableAsSet = new HashSet<>();
-        sstableAsSet.addAll(repairedSSTables);
+        logger.info("Anticompacting {}", anticompactionGroup);
+        Set<SSTableReader> sstableAsSet = new HashSet<>(anticompactionGroup);
 
         File destination = cfs.directories.getDirectoryForNewSSTables();
         SSTableRewriter repairedSSTableWriter = new SSTableRewriter(cfs, sstableAsSet, groupMaxDataAge, OperationType.ANTICOMPACTION, false);
         SSTableRewriter unRepairedSSTableWriter = new SSTableRewriter(cfs, sstableAsSet, groupMaxDataAge, OperationType.ANTICOMPACTION, false);
 
         AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
-        List<ICompactionScanner> scanners = strategy.getScanners(repairedSSTables);
+        List<ICompactionScanner> scanners = strategy.getScanners(anticompactionGroup);
 
-        int expectedBloomFilterSize = Math.max(cfs.metadata.getMinIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(repairedSSTables)));
-
+        int expectedBloomFilterSize = Math.max(cfs.metadata.getMinIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(anticompactionGroup)));
 
         try (CompactionController controller = new CompactionController(cfs, sstableAsSet, CFMetaData.DEFAULT_GC_GRACE_SECONDS))
         {
-            repairedSSTableWriter.switchWriter(CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, repairedAt,firstSSTable ));
-            unRepairedSSTableWriter.switchWriter(CompactionManager.createWriter(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE,firstSSTable));
+            repairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, repairedAt, sstableAsSet));
+            unRepairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstableAsSet));
 
             CompactionIterable ci = new CompactionIterable(OperationType.ANTICOMPACTION, scanners, controller);
 
@@ -1075,7 +1101,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
         catch (Throwable e)
         {
-            logger.error("Error anticompacting " + repairedSSTables, e);
+            logger.error("Error anticompacting " + anticompactionGroup, e);
             repairedSSTableWriter.abort();
             unRepairedSSTableWriter.abort();
         }

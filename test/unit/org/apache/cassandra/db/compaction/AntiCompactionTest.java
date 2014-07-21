@@ -42,6 +42,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableScanner;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import static junit.framework.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
@@ -159,7 +160,7 @@ public class AntiCompactionTest
         store.setCompactionStrategyClass(compactionStrategy);
         store.disableAutoCompaction();
 
-        for (int table =0; table < 10; table++)
+        for (int table = 0; table < 10; table++)
         {
             generateSStable(store,Integer.toString(table));
         }
@@ -188,11 +189,13 @@ public class AntiCompactionTest
                 if (sstable.isRepaired())
                 {
                     assertTrue(range.contains(row.getKey().getToken()));
+                    assertEquals(repairedAt, sstable.getSSTableMetadata().repairedAt);
                     repairedKeys++;
                 }
                 else
                 {
                     assertFalse(range.contains(row.getKey().getToken()));
+                    assertEquals(ActiveRepairService.UNREPAIRED_SSTABLE, sstable.getSSTableMetadata().repairedAt);
                     nonRepairedKeys++;
                 }
             }

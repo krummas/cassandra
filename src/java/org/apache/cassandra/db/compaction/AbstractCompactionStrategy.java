@@ -407,20 +407,24 @@ public abstract class AbstractCompactionStrategy
      * as a group. If a given compaction strategy creates sstables which
      * cannot be merged due to some constraint it must override this method.
      */
-    protected int groupSize = 2;
-    public Collection<Collection<SSTableReader>> groupSSTables(Collection<SSTableReader> ssTablesToGroup)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup, int groupSize)
     {
-        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList();
-        Iterator<SSTableReader> tableIterator = ssTablesToGroup.iterator();
-        Collection<SSTableReader> currGroup = new ArrayList();
-        while (tableIterator.hasNext()){
-            currGroup.add(tableIterator.next());
+        List<SSTableReader> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
+        Collections.sort(sortedSSTablesToGroup, SSTableReader.sstableComparator);
+
+        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
+        Collection<SSTableReader> currGroup = new ArrayList<>();
+
+        for (SSTableReader sstable : sortedSSTablesToGroup)
+        {
+            currGroup.add(sstable);
             if (currGroup.size() == groupSize)
             {
                 groupedSSTables.add(currGroup);
-                currGroup=new ArrayList<SSTableReader>();
+                currGroup = new ArrayList<>();
             }
         }
+
         if (currGroup.size() != 0)
             groupedSSTables.add(currGroup);
         return groupedSSTables;

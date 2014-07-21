@@ -189,34 +189,34 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
      * @return Groups of sstables from the same level
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTables(Collection<SSTableReader> ssTablesToGroup)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> ssTablesToGroup, int groupSize)
     {
-        Map<Integer,Collection<SSTableReader>> sstablesByLevel = new HashMap();
+        Map<Integer, Collection<SSTableReader>> sstablesByLevel = new HashMap<>();
         for (SSTableReader sstable : ssTablesToGroup)
         {
             Integer level = sstable.getSSTableLevel();
             if (!sstablesByLevel.containsKey(level))
             {
-                sstablesByLevel.put(level,new ArrayList<SSTableReader>());
+                sstablesByLevel.put(level, new ArrayList<SSTableReader>());
             }
             sstablesByLevel.get(level).add(sstable);
         }
 
-        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList();
+        Collection<Collection<SSTableReader>> groupedSSTables = new ArrayList<>();
 
         for (Collection<SSTableReader> levelOfSSTables : sstablesByLevel.values())
         {
-            Iterator<SSTableReader> tableIterator = levelOfSSTables.iterator();
-            Collection<SSTableReader> currGroup = new ArrayList();
-            while (tableIterator.hasNext())
+            Collection<SSTableReader> currGroup = new ArrayList<>();
+            for (SSTableReader sstable : levelOfSSTables)
             {
-                currGroup.add(tableIterator.next());
+                currGroup.add(sstable);
                 if (currGroup.size() == groupSize)
                 {
                     groupedSSTables.add(currGroup);
-                    currGroup = new ArrayList<SSTableReader>();
+                    currGroup = new ArrayList<>();
                 }
             }
+
             if (currGroup.size() != 0)
                 groupedSSTables.add(currGroup);
         }
