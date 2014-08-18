@@ -407,8 +407,9 @@ public abstract class AbstractCompactionStrategy
      * as a group. If a given compaction strategy creates sstables which
      * cannot be merged due to some constraint it must override this method.
      */
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup, int groupSize)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
     {
+        int groupSize = 2;
         List<SSTableReader> sortedSSTablesToGroup = new ArrayList<>(sstablesToGroup);
         Collections.sort(sortedSSTablesToGroup, SSTableReader.sstableComparator);
 

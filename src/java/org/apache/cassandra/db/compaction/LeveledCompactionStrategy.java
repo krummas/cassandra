@@ -189,8 +189,9 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
      * @return Groups of sstables from the same level
      */
     @Override
-    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> ssTablesToGroup, int groupSize)
+    public Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> ssTablesToGroup)
     {
+        int groupSize = 2;
         Map<Integer, Collection<SSTableReader>> sstablesByLevel = new HashMap<>();
         for (SSTableReader sstable : ssTablesToGroup)
         {

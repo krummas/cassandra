@@ -990,46 +990,29 @@ public class CompactionManager implements CompactionManagerMBean
      * @param ranges Repaired ranges to be placed into one of the new sstables. The repaired table will be tracked via
      * the {@link org.apache.cassandra.io.sstable.metadata.StatsMetadata#repairedAt} field.
      */
-    private Collection<SSTableReader> doAntiCompaction(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
+    private void doAntiCompaction(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
                                                        Collection<SSTableReader> repairedSSTables, long repairedAt)
     {
-        List<SSTableReader> anticompactedSSTables = new ArrayList<>();
-        int repairedKeyCount = 0;
-        int unrepairedKeyCount = 0;
         // TODO(5351): we can do better here:
         logger.info("Performing anticompaction on {} sstables", repairedSSTables.size());
 
         //Group SSTables
-        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(repairedSSTables, 2);
+        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(repairedSSTables);
         // iterate over sstables to check if the repaired / unrepaired ranges intersect them.
+        int antiCompactedSSTableCount = 0;
         for (Collection<SSTableReader> sstableGroup : groupedSSTables)
         {
-            AntiCompactionResults results =  antiCompactGroup(cfs, ranges, sstableGroup, repairedAt);
-            anticompactedSSTables.addAll(results.anticompactedSSTables);
-            repairedKeyCount += results.repairedKeyCount;
-            unrepairedKeyCount += results.unrepairedKeyCount;
+            int antiCompacted = antiCompactGroup(cfs, ranges, sstableGroup, repairedAt);
+            antiCompactedSSTableCount += antiCompacted;
         }
 
-        String format = "Repaired {} keys of {} for {}/{}";
-        logger.debug(format, repairedKeyCount, (repairedKeyCount + unrepairedKeyCount), cfs.keyspace, cfs.getColumnFamilyName());
-        String format2 = "Anticompaction completed successfully, anticompacted from {} to {} sstable(s).";
-        logger.info(format2, repairedSSTables.size(), anticompactedSSTables.size());
-
-        return anticompactedSSTables;
+        String format = "Anticompaction completed successfully, anticompacted from {} to {} sstable(s).";
+        logger.info(format, repairedSSTables.size(), antiCompactedSSTableCount);
     }
 
-    private static class AntiCompactionResults
-    {
-        public long repairedKeyCount = 0;
-        public long unrepairedKeyCount = 0;
-        public List<SSTableReader> anticompactedSSTables = new ArrayList<>();
-    }
-
-    private AntiCompactionResults antiCompactGroup(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
+    private int antiCompactGroup(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
                              Collection<SSTableReader> anticompactionGroup, long repairedAt)
     {
-        AntiCompactionResults results = new AntiCompactionResults();
-
         long groupMaxDataAge = -1;
 
         // check that compaction hasn't stolen any sstables used in previous repair sessions
@@ -1050,7 +1033,7 @@ public class CompactionManager implements CompactionManagerMBean
         if (anticompactionGroup.size() == 0)
         {
             logger.info("No valid anticompactions for this group, All sstables were compacted and are no longer available");
-            return results;
+            return 0;
         }
 
         logger.info("Anticompacting {}", anticompactionGroup);
@@ -1065,6 +1048,8 @@ public class CompactionManager implements CompactionManagerMBean
 
         int expectedBloomFilterSize = Math.max(cfs.metadata.getMinIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(anticompactionGroup)));
 
+        long repairedKeyCount = 0;
+        long unrepairedKeyCount = 0;
         try (CompactionController controller = new CompactionController(cfs, sstableAsSet, CFMetaData.DEFAULT_GC_GRACE_SECONDS))
         {
             repairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, repairedAt, sstableAsSet));
@@ -1081,13 +1066,13 @@ public class CompactionManager implements CompactionManagerMBean
                     if (Range.isInRanges(row.key.getToken(), ranges))
                     {
                         repairedSSTableWriter.append(row);
-                        results.repairedKeyCount++;
+                        repairedKeyCount++;
                     }
                     // otherwise save into the new 'non-repaired' table
                     else
                     {
                         unRepairedSSTableWriter.append(row);
-                        results.unrepairedKeyCount++;
+                        unrepairedKeyCount++;
                     }
                 }
             }
@@ -1096,8 +1081,12 @@ public class CompactionManager implements CompactionManagerMBean
             repairedSSTableWriter.finish(false, repairedAt);
             unRepairedSSTableWriter.finish(ActiveRepairService.UNREPAIRED_SSTABLE);
             // add repaired table with a non-null timestamp field to be saved in SSTableMetadata#repairedAt
-            results.anticompactedSSTables.addAll(repairedSSTableWriter.finished());
-            results.anticompactedSSTables.addAll(unRepairedSSTableWriter.finished());
+            logger.debug("Repaired {} keys out of {} for {}/{} in {}", repairedKeyCount,
+                                                                       repairedKeyCount + unrepairedKeyCount,
+                                                                       cfs.keyspace.getName(),
+                                                                       cfs.getColumnFamilyName(),
+                                                                       anticompactionGroup);
+            return repairedSSTableWriter.finished().size() + unRepairedSSTableWriter.finished().size();
         }
         catch (Throwable e)
         {
@@ -1105,7 +1094,7 @@ public class CompactionManager implements CompactionManagerMBean
             repairedSSTableWriter.abort();
             unRepairedSSTableWriter.abort();
         }
-        return results;
+        return 0;
     }
 
     /**
