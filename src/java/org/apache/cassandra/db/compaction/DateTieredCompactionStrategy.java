@@ -20,6 +20,7 @@ package org.apache.cassandra.db.compaction;
 import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
 import com.google.common.collect.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,8 +45,8 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         this.options = new DateTieredCompactionStrategyOptions(options);
     }
 
-
-    public AbstractCompactionTask getNextBackgroundTask(int gcBefore)
+    @Override
+    public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
         if (!isEnabled())
             return null;
@@ -58,7 +59,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
                 return null;
 
             if (cfs.getDataTracker().markCompacting(latestBucket))
-                return new CompactionTask(cfs, latestBucket, gcBefore);
+                return new CompactionTask(cfs, latestBucket, gcBefore, false);
         }
     }
 
@@ -72,17 +73,25 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         if (!isEnabled() || cfs.getSSTables().isEmpty())
             return Collections.emptyList();
 
-        final int base = cfs.getMinimumCompactionThreshold();
-        final long now = getNow();
+        int base = cfs.getMinimumCompactionThreshold();
+        long now = getNow();
 
         Iterable<SSTableReader> candidates = filterSuspectSSTables(cfs.getUncompactingSSTables());
-        candidates = filterOldSSTables(Lists.newArrayList(candidates), options.maxSSTableAge, now);
+        Set<SSTableReader> repairedCandidates = new HashSet<>();
+        Set<SSTableReader> unRepairedCandidates = new HashSet<>();
+        for (SSTableReader sstable : candidates)
+        {
+            if (sstable.isRepaired())
+                repairedCandidates.add(sstable);
+            else
+                unRepairedCandidates.add(sstable);
+        }
 
-        List<List<SSTableReader>> buckets = getBuckets(createSSTableAndMinTimestampPairs(candidates), options.timeUnit, base, now);
-        logger.debug("Compaction buckets are {}", buckets);
-        updateEstimatedCompactionsByTasks(buckets);
-        List<SSTableReader> mostInteresting = newestBucket(buckets, cfs.getMinimumCompactionThreshold(), cfs.getMaximumCompactionThreshold());
-        if (!mostInteresting.isEmpty())
+        List<SSTableReader> mostInteresting = getCompactionCandidates(unRepairedCandidates, now, base);
+        if (mostInteresting != null)
+            return mostInteresting;
+        mostInteresting = getCompactionCandidates(repairedCandidates, now, base);
+        if (mostInteresting != null)
             return mostInteresting;
 
         // if there is no sstable to compact in standard way, try compacting single sstable whose droppable tombstone
@@ -99,12 +108,25 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         return Collections.singletonList(Collections.min(sstablesWithTombstones, new SSTableReader.SizeComparator()));
     }
 
+    private List<SSTableReader> getCompactionCandidates(Iterable<SSTableReader> candidateSSTables, long now, int base)
+    {
+        Iterable<SSTableReader> candidates = filterOldSSTables(Lists.newArrayList(candidateSSTables), options.maxSSTableAge, now);
+
+        List<List<SSTableReader>> buckets = getBuckets(createSSTableAndMinTimestampPairs(candidates), options.timeUnit, base, now);
+        logger.debug("Compaction buckets are {}", buckets);
+        updateEstimatedCompactionsByTasks(buckets);
+        List<SSTableReader> mostInteresting = newestBucket(buckets, cfs.getMinimumCompactionThreshold(), cfs.getMaximumCompactionThreshold());
+        if (!mostInteresting.isEmpty())
+            return mostInteresting;
+        return null;
+    }
+
     /**
      * Gets the timestamp that DateTieredCompactionStrategy considers to be the "current time".
      * @return the maximum timestamp across all SSTables.
      * @throws java.util.NoSuchElementException if there are no SSTables.
      */
-    public long getNow()
+    private long getNow()
     {
         return Collections.max(cfs.getSSTables(), new Comparator<SSTableReader>()
         {
@@ -123,34 +145,19 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
      * @return a list of sstables with the oldest sstables excluded
      */
     @VisibleForTesting
-    static List<SSTableReader> filterOldSSTables(List<SSTableReader> sstables, long maxSSTableAge, long now)
+    static Iterable<SSTableReader> filterOldSSTables(List<SSTableReader> sstables, long maxSSTableAge, long now)
     {
         if (maxSSTableAge == 0)
             return sstables;
-
-        // Sort the sstables by max timestamp (oldest first).
-        Collections.sort(sstables, new Comparator<SSTableReader>()
+        final long cutoff = now - maxSSTableAge;
+        return Iterables.filter(sstables, new Predicate<SSTableReader>()
         {
-            public int compare(SSTableReader o1, SSTableReader o2)
+            @Override
+            public boolean apply(SSTableReader sstable)
             {
-                return Long.compare(o1.getMaxTimestamp(), o2.getMaxTimestamp());
+                return sstable.getMaxTimestamp() >= cutoff;
             }
         });
-
-        if (sstables.isEmpty())
-            return sstables;
-
-        final long cutoff = now - maxSSTableAge;
-
-        ListIterator<SSTableReader> it = sstables.listIterator();
-        while (it.hasNext())
-            if (it.next().getMaxTimestamp() >= cutoff)
-            {
-                it.previous();
-                break;
-            }
-
-        return sstables.subList(it.nextIndex(), sstables.size());
     }
 
     /**
@@ -229,13 +236,15 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
      * @return a list of buckets of files. The list is ordered such that the files with newest timestamps come first.
      *         Each bucket is also a list of files ordered from newest to oldest.
      */
-    public static <T> List<List<T>> getBuckets(Collection<Pair<T, Long>> files, long timeUnit, int base, long now)
+    @VisibleForTesting
+    static <T> List<List<T>> getBuckets(Collection<Pair<T, Long>> files, long timeUnit, int base, long now)
     {
         // Sort files by age. Newest first.
         final List<Pair<T, Long>> sortedFiles = Lists.newArrayList(files);
         Collections.sort(sortedFiles, Collections.reverseOrder(new Comparator<Pair<T, Long>>()
         {
-            public int compare(Pair<T, Long> p1, Pair<T, Long> p2) {
+            public int compare(Pair<T, Long> p1, Pair<T, Long> p2)
+            {
                 return p1.right.compareTo(p2.right);
             }
         }));
@@ -256,7 +265,8 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
 
                     if (!it.hasNext())
                         break outerLoop;
-                } else // If the file is too old for the target, switch targets.
+                }
+                else // If the file is too old for the target, switch targets.
                     target = target.nextTarget(base);
             }
 
@@ -284,7 +294,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
     private void updateEstimatedCompactionsByTasks(List<List<SSTableReader>> tasks)
     {
         int n = 0;
-        for (List<SSTableReader> bucket: tasks)
+        for (List<SSTableReader> bucket : tasks)
         {
             if (bucket.size() >= cfs.getMinimumCompactionThreshold())
                 n += Math.ceil((double)bucket.size() / cfs.getMaximumCompactionThreshold());
@@ -299,7 +309,8 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
      * @param maxThreshold maximum number of sstables to compact at once (the returned bucket will be trimmed down to this).
      * @return a bucket (list) of sstables to compact.
      */
-    public static List<SSTableReader> newestBucket(List<List<SSTableReader>> buckets, int minThreshold, int maxThreshold)
+    @VisibleForTesting
+    static List<SSTableReader> newestBucket(List<List<SSTableReader>> buckets, int minThreshold, int maxThreshold)
     {
         // Skip buckets containing less than minThreshold sstables, and limit other buckets to maxThreshold sstables.
         for (List<SSTableReader> bucket : buckets)
@@ -320,17 +331,18 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         return bucket.subList(0, Math.min(bucket.size(), maxThreshold));
     }
 
-
-    public AbstractCompactionTask getMaximalTask(int gcBefore)
+    @Override
+    public synchronized Collection<AbstractCompactionTask> getMaximalTask(int gcBefore)
     {
         Iterable<SSTableReader> sstables = cfs.markAllCompacting();
         if (sstables == null)
             return null;
 
-        return new CompactionTask(cfs, sstables, gcBefore);
+        return Arrays.<AbstractCompactionTask>asList(new CompactionTask(cfs, sstables, gcBefore, false));
     }
 
-    public AbstractCompactionTask getUserDefinedTask(Collection<SSTableReader> sstables, int gcBefore)
+    @Override
+    public synchronized AbstractCompactionTask getUserDefinedTask(Collection<SSTableReader> sstables, int gcBefore)
     {
         assert !sstables.isEmpty(); // checked for by CM.submitUserDefined
 
@@ -340,7 +352,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
             return null;
         }
 
-        return new CompactionTask(cfs, sstables, gcBefore).setUserDefined(true);
+        return new CompactionTask(cfs, sstables, gcBefore, false).setUserDefined(true);
     }
 
     public int getEstimatedRemainingTasks()

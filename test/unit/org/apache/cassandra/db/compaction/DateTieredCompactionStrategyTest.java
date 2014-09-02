@@ -20,19 +20,22 @@ package org.apache.cassandra.db.compaction;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.RowMutation;
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.getBuckets;
@@ -45,6 +48,21 @@ import static org.junit.Assert.*;
 
 public class DateTieredCompactionStrategyTest extends SchemaLoader
 {
+    public static final String KEYSPACE1 = "DateTieredCompactionStrategyTest";
+    private static final String CF_STANDARD1 = "Standard1";
+
+
+    @BeforeClass
+    public static void defineSchema() throws ConfigurationException
+    {
+        SchemaLoader.prepareServer();
+        SchemaLoader.createKeyspace(KEYSPACE1,
+                                    SimpleStrategy.class,
+                                    KSMetaData.optsWithRF(1),
+                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1));
+    }
+
+
     @Test
     public void testOptionsValidation() throws ConfigurationException
     {
@@ -157,10 +175,8 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     @Test
     public void testPrepBucket()
     {
-        String ksname = "Keyspace1";
-        String cfname = "Standard1";
-        Keyspace keyspace = Keyspace.open(ksname);
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
         cfs.truncateBlocking();
         cfs.disableAutoCompaction();
 
@@ -171,8 +187,8 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            RowMutation rm = new RowMutation(ksname, key.key);
-            rm.add(cfname, ByteBufferUtil.bytes("column"), value, r);
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+            rm.add(CF_STANDARD1, Util.cellname("column"), value, r);
             rm.apply();
             cfs.forceBlockingFlush();
         }
@@ -203,10 +219,8 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     @Test
     public void testFilterOldSSTables()
     {
-        String ksname = "Keyspace1";
-        String cfname = "Standard1";
-        Keyspace keyspace = Keyspace.open(ksname);
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
         cfs.truncateBlocking();
         cfs.disableAutoCompaction();
 
@@ -217,26 +231,26 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (int r = 0; r < numSSTables; r++)
         {
             DecoratedKey key = Util.dk(String.valueOf(r));
-            RowMutation rm = new RowMutation(ksname, key.key);
-            rm.add(cfname, ByteBufferUtil.bytes("column"), value, r);
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+            rm.add(CF_STANDARD1, Util.cellname("column"), value, r);
             rm.apply();
             cfs.forceBlockingFlush();
         }
         cfs.forceBlockingFlush();
 
-        List<SSTableReader> filtered;
+        Iterable<SSTableReader> filtered;
         List<SSTableReader> sstrs = new ArrayList<>(cfs.getSSTables());
 
         filtered = filterOldSSTables(sstrs, 0, 2);
-        assertEquals("when maxSSTableAge is zero, no sstables should be filtered", sstrs.size(), filtered.size());
+        assertEquals("when maxSSTableAge is zero, no sstables should be filtered", sstrs.size(), Iterables.size(filtered));
 
         filtered = filterOldSSTables(sstrs, 1, 2);
-        assertEquals("only the newest 2 sstables should remain", 2, filtered.size());
+        assertEquals("only the newest 2 sstables should remain", 2, Iterables.size(filtered));
 
         filtered = filterOldSSTables(sstrs, 1, 3);
-        assertEquals("only the newest sstable should remain", 1, filtered.size());
+        assertEquals("only the newest sstable should remain", 1, Iterables.size(filtered));
 
         filtered = filterOldSSTables(sstrs, 1, 4);
-        assertEquals("no sstables should remain when all are too old", 0, filtered.size());
+        assertEquals("no sstables should remain when all are too old", 0, Iterables.size(filtered));
     }
 }
