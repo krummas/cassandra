@@ -183,7 +183,7 @@ public class SSTableRewriter
         for (SSTableReader sstable : finished)
         {
             sstable.markObsolete();
-            sstable.releaseReference();
+            sstable.sharedRef().release();
         }
 
         // abort the writers
@@ -377,7 +377,7 @@ public class SSTableRewriter
             {
                 if (reader.getCurrentReplacement() == null)
                     reader.markObsolete();
-                reader.releaseReference();
+                reader.sharedRef().release();
             }
         }
         else

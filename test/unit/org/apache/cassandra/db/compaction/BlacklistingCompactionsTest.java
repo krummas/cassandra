@@ -26,6 +26,8 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -44,7 +46,15 @@ public class BlacklistingCompactionsTest extends SchemaLoader
 {
     public static final String KEYSPACE = "Keyspace1";
 
-    @BeforeClass
+    @After
+    public void leakDetect() throws InterruptedException
+    {
+        System.gc();
+        System.gc();
+        System.gc();
+        Thread.sleep(10);
+    }
+
     public static void closeStdErr()
     {
         // These tests generate an error message per CorruptSSTableException since it goes through

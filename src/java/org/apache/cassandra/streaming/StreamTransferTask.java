@@ -26,6 +26,7 @@ import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.streaming.messages.OutgoingFileMessage;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.concurrent.RefCounted;
 
 /**
  * StreamTransferTask sends sections of SSTable files in certain ColumnFamily.
@@ -47,10 +48,10 @@ public class StreamTransferTask extends StreamTask
         super(session, cfId);
     }
 
-    public synchronized void addTransferFile(SSTableReader sstable, long estimatedKeys, List<Pair<Long, Long>> sections, long repairedAt)
+    public synchronized void addTransferFile(SSTableReader sstable, RefCounted.Ref ref, long estimatedKeys, List<Pair<Long, Long>> sections, long repairedAt)
     {
         assert sstable != null && cfId.equals(sstable.metadata.cfId);
-        OutgoingFileMessage message = new OutgoingFileMessage(sstable, sequenceNumber.getAndIncrement(), estimatedKeys, sections, repairedAt);
+        OutgoingFileMessage message = new OutgoingFileMessage(sstable, ref, sequenceNumber.getAndIncrement(), estimatedKeys, sections, repairedAt);
         files.put(message.header.sequenceNumber, message);
         totalSize += message.header.size();
     }
@@ -71,7 +72,7 @@ public class StreamTransferTask extends StreamTask
 
             OutgoingFileMessage file = files.remove(sequenceNumber);
             if (file != null)
-                file.sstable.releaseReference();
+                file.ref.release();
 
             signalComplete = files.isEmpty();
         }
@@ -92,7 +93,7 @@ public class StreamTransferTask extends StreamTask
         timeoutTasks.clear();
 
         for (OutgoingFileMessage file : files.values())
-            file.sstable.releaseReference();
+            file.ref.release();
     }
 
     public synchronized int getTotalNumberOfFiles()
