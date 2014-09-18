@@ -201,9 +201,14 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements Iterable
         RangeTombstone tombstone;
 
         int columns = 0;
-        long minTimestampSeen = Long.MAX_VALUE;
-        long maxTimestampSeen = Long.MIN_VALUE;
-        int maxLocalDeletionTimeSeen = Integer.MIN_VALUE;
+        // if the row tombstone is 'live' we need to set timestamp to MAX_VALUE to be able to overwrite it later
+        // markedForDeleteAt is MIN_VALUE for 'live' row tombstones (which we use to default maxTimestampSeen)
+        long minTimestampSeen = maxRowTombstone.isLive() ? Long.MAX_VALUE : maxRowTombstone.markedForDeleteAt;
+        long maxTimestampSeen = maxRowTombstone.markedForDeleteAt;
+        // we need to set MIN_VALUE if we are 'live' since we want to overwrite it later
+        // we are bound to have either a RangeTombstone or standard cells will set this properly:
+        int maxLocalDeletionTimeSeen = maxRowTombstone.isLive() ? Integer.MIN_VALUE : maxRowTombstone.localDeletionTime;
+
         StreamingHistogram tombstones = new StreamingHistogram(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE);
         List<ByteBuffer> minColumnNameSeen = Collections.emptyList();
         List<ByteBuffer> maxColumnNameSeen = Collections.emptyList();
@@ -256,6 +261,7 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements Iterable
                     tombstones.update(t.getLocalDeletionTime());
                     minTimestampSeen = Math.min(minTimestampSeen, t.minTimestamp());
                     maxTimestampSeen = Math.max(maxTimestampSeen, t.maxTimestamp());
+                    maxLocalDeletionTimeSeen = Math.max(maxLocalDeletionTimeSeen, t.getLocalDeletionTime());
                     minColumnNameSeen = ColumnNameHelper.minComponents(minColumnNameSeen, t.min, controller.cfs.metadata.comparator);
                     maxColumnNameSeen = ColumnNameHelper.maxComponents(maxColumnNameSeen, t.max, controller.cfs.metadata.comparator);
 

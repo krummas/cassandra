@@ -236,7 +236,12 @@ public class SSTableWriter extends SSTable
             columnCount = in.readInt();
 
         if (cf.deletionInfo().getTopLevelDeletion().localDeletionTime < Integer.MAX_VALUE)
+        {
             tombstones.update(cf.deletionInfo().getTopLevelDeletion().localDeletionTime);
+            maxLocalDeletionTime = Math.max(maxLocalDeletionTime, cf.deletionInfo().getTopLevelDeletion().localDeletionTime);
+            minTimestamp = Math.min(minTimestamp, cf.deletionInfo().getTopLevelDeletion().markedForDeleteAt);
+            maxTimestamp = Math.max(maxTimestamp, cf.deletionInfo().getTopLevelDeletion().markedForDeleteAt);
+        }
 
         Iterator<RangeTombstone> rangeTombstoneIterator = cf.deletionInfo().rangeIterator();
         while (rangeTombstoneIterator.hasNext())
@@ -245,7 +250,7 @@ public class SSTableWriter extends SSTable
             tombstones.update(rangeTombstone.getLocalDeletionTime());
             minTimestamp = Math.min(minTimestamp, rangeTombstone.minTimestamp());
             maxTimestamp = Math.max(maxTimestamp, rangeTombstone.maxTimestamp());
-
+            maxLocalDeletionTime = Math.max(maxLocalDeletionTime, rangeTombstone.getLocalDeletionTime());
             minColumnNames = ColumnNameHelper.minComponents(minColumnNames, rangeTombstone.min, metadata.comparator);
             maxColumnNames = ColumnNameHelper.maxComponents(maxColumnNames, rangeTombstone.max, metadata.comparator);
         }
