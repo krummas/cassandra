@@ -176,7 +176,7 @@ public interface ColumnFamilyStoreMBean
     /**
      * force a major compaction of this column family
      */
-    public void forceMajorCompaction() throws ExecutionException, InterruptedException;
+    public void forceMajorCompaction(boolean optOutput) throws ExecutionException, InterruptedException;
 
     /**
      * @see org.apache.cassandra.metrics.ColumnFamilyMetrics#minRowSize

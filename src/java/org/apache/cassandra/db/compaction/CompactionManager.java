@@ -85,7 +85,6 @@ import org.apache.cassandra.metrics.CompactionMetrics;
 import org.apache.cassandra.repair.Validator;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.CloseableIterator;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MerkleTree;
 import org.apache.cassandra.utils.WrappedRunnable;
@@ -471,6 +470,32 @@ public class CompactionManager implements CompactionManagerMBean
         };
         return executor.submit(runnable);
     }
+
+    public void performManyToManyCompaction(ColumnFamilyStore cfs) throws ExecutionException, InterruptedException
+    {
+        submitManyToManyCompaction(cfs, getDefaultGcBefore(cfs)).get();
+    }
+
+    public Future<?> submitManyToManyCompaction(final ColumnFamilyStore cfs, final int gcBefore) throws ExecutionException, InterruptedException
+    {
+        Runnable runnable = new WrappedRunnable()
+        {
+            @Override
+            protected void runMayThrow() throws Exception
+            {
+                List<AbstractCompactionTask> tasks = cfs.getCompactionStrategy().getManyToManyTasks(gcBefore);
+                if (tasks == null)
+                {
+                    logger.info("Compaction strategy {} does not support many to many compaction.", cfs.getCompactionStrategy().getClass());
+                    return;
+                }
+                for (AbstractCompactionTask task : tasks)
+                    task.execute(metrics);
+            }
+        };
+        return executor.submit(runnable);
+    }
+
 
     public void forceUserDefinedCompaction(String dataFiles)
     {

@@ -2329,7 +2329,16 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void forceMajorCompaction() throws InterruptedException, ExecutionException
     {
-        CompactionManager.instance.performMaximal(this);
+        forceMajorCompaction(false);
+    }
+
+
+    public void forceMajorCompaction(boolean optOutput) throws InterruptedException, ExecutionException
+    {
+        if (optOutput)
+            CompactionManager.instance.performManyToManyCompaction(this);
+        else
+            CompactionManager.instance.performMaximal(this);
     }
 
     public static Iterable<ColumnFamilyStore> all()

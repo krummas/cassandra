@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 import org.junit.After;
 import org.junit.Before;
@@ -139,6 +140,35 @@ public class LeveledCompactionStrategyTest
             }
         }
 
+    }
+
+
+    @Test
+    public void testManyToManyCompact() throws ExecutionException, InterruptedException
+    {
+        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
+
+        int rows = 40;
+        int columns = 20;
+        cfs.disableAutoCompaction();
+        // Adds enough data to trigger multiple sstable per level
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+            for (int c = 0; c < columns; c++)
+            {
+                rm.add(CF_STANDARDDLEVELED, Util.cellname("column" + c), value, 0);
+            }
+            rm.apply();
+
+        }
+        cfs.forceBlockingFlush();
+        CompactionManager.instance.performManyToManyCompaction(cfs);
+        LeveledCompactionStrategy strategy = (LeveledCompactionStrategy)cfs.getCompactionStrategy();
+        assertEquals(strategy.getLevelSize(0), 0);
+        assertTrue(strategy.getLevelSize(1) > 0);
+        assertTrue(strategy.getLevelSize(2) > 0);
     }
 
     /*

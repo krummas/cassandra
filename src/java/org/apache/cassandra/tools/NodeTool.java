@@ -1003,6 +1003,9 @@ public class NodeTool
         @Arguments(usage = "[<keyspace> <tables>...]", description = "The keyspace followed by one or many tables")
         private List<String> args = new ArrayList<>();
 
+        @Option(title = "optimal_output", name = {"-o", "--optimal-output"}, description = "Use -o to not create a single big file, but several (and works for leveled compaction)")
+        private boolean optOutput = false;
+
         @Override
         public void execute(NodeProbe probe)
         {
@@ -1013,7 +1016,7 @@ public class NodeTool
             {
                 try
                 {
-                    probe.forceKeyspaceCompaction(keyspace, cfnames);
+                    probe.forceKeyspaceCompaction(optOutput, keyspace, cfnames);
                 } catch (Exception e)
                 {
                     throw new RuntimeException("Error occurred during compaction", e);

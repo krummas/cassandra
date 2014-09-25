@@ -18,17 +18,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.SortedSet;
+import java.util.*;
 
 
 import com.google.common.annotations.VisibleForTesting;
@@ -44,6 +34,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.INotificationConsumer;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
@@ -404,6 +395,12 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
     }
 
     @Override
+    public CompactionAwareWriter getCompactionAwareWriter(Set<SSTableReader> sstables)
+    {
+        return new LeveledCompactionAwareWriter(cfs, sstables, manifest, getMaxSSTableBytes());
+    }
+
+    @Override
     public String toString()
     {
         return String.format("LCS@%d(%s)", hashCode(), cfs.name);
@@ -462,5 +459,80 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         uncheckedOptions = SizeTieredCompactionStrategyOptions.validateOptions(options, uncheckedOptions);
 
         return uncheckedOptions;
+    }
+
+    private static class LeveledCompactionAwareWriter implements CompactionAwareWriter
+    {
+        private final SSTableRewriter rewriter;
+        private final LeveledManifest manifest;
+        private final long maxSSTableSize;
+        private final ColumnFamilyStore cfs;
+        private int currentLevel = 1;
+        private long averageEstimatedKeysPerSSTable;
+        private long partitionsWritten = 0;
+        private long totalWrittenInLevel = 0;
+        private int sstablesWritten = 0;
+        private long repairedAt = Long.MAX_VALUE;
+        private final Set<SSTableReader> sstables;
+
+        public LeveledCompactionAwareWriter(ColumnFamilyStore cfs, Set<SSTableReader> sstables, LeveledManifest manifest, long maxSSTableSize)
+        {
+            this.cfs = cfs;
+            this.sstables = sstables;
+            this.manifest = manifest;
+            this.maxSSTableSize = maxSSTableSize;
+            for (SSTableReader sstable : sstables)
+                repairedAt = Math.min(repairedAt, sstable.getSSTableMetadata().repairedAt);
+            rewriter = new SSTableRewriter(cfs, sstables, CompactionTask.getMaxDataAge(sstables), OperationType.COMPACTION, false);
+            long keysPerSSTable = Math.max(1, SSTableReader.getTotalBytes(sstables) / maxSSTableSize);
+            rewriter.switchWriter(SizeTieredCompactionStrategy.createWriter(cfs, sstables, manifest.maxBytesForLevel(currentLevel), keysPerSSTable, repairedAt, currentLevel));
+        }
+
+        @Override
+        public void append(AbstractCompactedRow row)
+        {
+            long posBefore = rewriter.currentWriter().getOnDiskFilePointer();
+            rewriter.append(row);
+            totalWrittenInLevel += rewriter.currentWriter().getOnDiskFilePointer() - posBefore;
+            partitionsWritten++;
+            if (rewriter.currentWriter().getOnDiskFilePointer() > maxSSTableSize)
+            {
+                if (totalWrittenInLevel > manifest.maxBytesForLevel(currentLevel))
+                {
+                    totalWrittenInLevel = 0;
+                    currentLevel++;
+                }
+                // we are bound to get a better estimate here
+                averageEstimatedKeysPerSSTable = Math.round(((double)averageEstimatedKeysPerSSTable * sstablesWritten + partitionsWritten) / (sstablesWritten + 1));
+                rewriter.switchWriter(SizeTieredCompactionStrategy.createWriter(cfs, sstables, manifest.maxBytesForLevel(currentLevel), averageEstimatedKeysPerSSTable, repairedAt, currentLevel));
+                partitionsWritten = 0;
+                sstablesWritten++;
+            }
+
+        }
+
+        @Override
+        public void close()
+        {
+            rewriter.finish(false);
+        }
+
+        @Override
+        public void abort()
+        {
+            rewriter.abort();
+        }
+
+        @Override
+        public List<SSTableReader> finished()
+        {
+            return rewriter.finished();
+        }
+
+        @Override
+        public Set<SSTableReader> getSSTables()
+        {
+            return sstables;
+        }
     }
 }

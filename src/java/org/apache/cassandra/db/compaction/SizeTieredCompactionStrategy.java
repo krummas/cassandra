@@ -31,6 +31,9 @@ import org.apache.cassandra.cql3.statements.CFPropDefs;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.sstable.SSTableRewriter;
+import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.utils.Pair;
 
 public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
@@ -395,10 +398,116 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
         return uncheckedOptions;
     }
 
+    @Override
+    public CompactionAwareWriter getCompactionAwareWriter(Set<SSTableReader> sstables)
+    {
+
+        return new SizeTieredCompactionWriter(cfs, sstables);
+    }
+
+
     public String toString()
     {
         return String.format("SizeTieredCompactionStrategy[%s/%s]",
             cfs.getMinimumCompactionThreshold(),
             cfs.getMaximumCompactionThreshold());
+    }
+
+    static class SizeTieredCompactionWriter implements CompactionAwareWriter
+    {
+        private final double[] ratios;
+        private final long expectedKeys;
+        private final SSTableRewriter writer;
+        private final Set<SSTableReader> sstables;
+        private final long totalSize;
+        private final ColumnFamilyStore cfs;
+        private long writtenPartitions;
+        private long currentPartitionsToWrite;
+        private int currentRatioIndex = 0;
+        private long repairedAt;
+
+        public SizeTieredCompactionWriter(ColumnFamilyStore cfs, Set<SSTableReader> sstables)
+        {
+            this.cfs = cfs;
+            this.sstables = sstables;
+            this.totalSize = SSTableReader.getTotalBytes(sstables);
+            this.expectedKeys = SSTableReader.getApproximateKeyCount(sstables);
+            double[] potentialRatios = new double[10];
+            double currentRatio = 1;
+            for (int i = 0; i < potentialRatios.length; i++)
+            {
+                currentRatio = currentRatio / 2;
+                potentialRatios[i] = currentRatio;
+            }
+
+            int noPointIndex = 0;
+            // find how many sstables we should create - 50MB min sstable size
+            for (double ratio : potentialRatios)
+            {
+                noPointIndex++;
+                if (ratio * totalSize < 50_000_000)
+                {
+                    break;
+                }
+            }
+            this.ratios = Arrays.copyOfRange(potentialRatios, 0, noPointIndex);
+
+            this.writer = new SSTableRewriter(cfs, sstables, CompactionTask.getMaxDataAge(sstables), OperationType.COMPACTION, false);
+            for (SSTableReader sstable : sstables)
+                repairedAt = Math.min(repairedAt, sstable.getSSTableMetadata().repairedAt);
+
+            writer.switchWriter(createWriter(cfs, sstables, Math.round(totalSize * ratios[currentRatioIndex]), Math.round(expectedKeys * ratios[currentRatioIndex]), repairedAt, 0));
+            currentPartitionsToWrite = Math.round(expectedKeys * ratios[currentRatioIndex]);
+            logger.info("Ratios={}, expectedKeys = {}, totalSize = {}, currentPartitionsToWrite = {}", ratios, expectedKeys, totalSize, currentPartitionsToWrite);
+        }
+        @Override
+        public void append(AbstractCompactedRow row)
+        {
+            writer.append(row);
+            writtenPartitions++;
+            if (writtenPartitions >= currentPartitionsToWrite && currentRatioIndex < ratios.length - 1) // if we underestimate how many keys we have, the last sstable might get more than we expect
+            {
+                currentRatioIndex++;
+                writtenPartitions = 0;
+                currentPartitionsToWrite = Math.round(ratios[currentRatioIndex] * expectedKeys);
+                writer.switchWriter(createWriter(cfs, sstables, Math.round(totalSize * ratios[currentRatioIndex]), Math.round(expectedKeys * ratios[currentRatioIndex]), 0, 0));
+                logger.debug("Switching writer, currentPartitionsToWrite = {}", currentPartitionsToWrite);
+            }
+        }
+
+        @Override
+        public void close()
+        {
+            writer.finish(false);
+        }
+
+        @Override
+        public void abort()
+        {
+            writer.abort();
+        }
+
+        @Override
+        public List<SSTableReader> finished()
+        {
+            return writer.finished();
+        }
+
+        @Override
+        public Set<SSTableReader> getSSTables()
+        {
+            return sstables;
+        }
+    }
+
+    public static SSTableWriter createWriter(ColumnFamilyStore cfs, Set<SSTableReader> sstables, long writeSize, long keysPerSSTable, long repairedAt, int level)
+    {
+        // todo: actually check if we have space for the sstable
+        return new SSTableWriter(cfs.getTempSSTablePath(cfs.directories.getDirectoryForNewSSTables()),
+                                 keysPerSSTable,
+                                 repairedAt,
+                                 cfs.metadata,
+                                 cfs.partitioner,
+                                 new MetadataCollector(sstables, cfs.metadata.comparator, level, true));
     }
 }

@@ -19,7 +19,10 @@ package org.apache.cassandra.db.compaction;
 
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 
+import com.google.common.primitives.Ints;
+import com.google.common.primitives.Longs;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -273,4 +276,48 @@ public class SizeTieredCompactionStrategyTest
         filtered = filterColdSSTables(sstrs, 1.0);
         assertTrue(filtered.isEmpty());
     }
+
+    @Test
+    public void testManyToManyCompact() throws ExecutionException, InterruptedException
+    {
+        String ksname = KEYSPACE1;
+        String cfname = "Standard1";
+        Keyspace keyspace = Keyspace.open(ksname);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfname);
+
+        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
+
+        int rows = 60;
+        int columns = 20;
+        cfs.disableAutoCompaction();
+        // Adds enough data to trigger multiple sstable per level
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            Mutation rm = new Mutation(ksname, key.getKey());
+            for (int c = 0; c < columns; c++)
+            {
+                rm.add(cfname, Util.cellname("column" + c), value, 0);
+            }
+            rm.apply();
+
+        }
+        cfs.forceBlockingFlush();
+        long preSize = SSTableReader.getTotalBytes(cfs.getSSTables());
+        CompactionManager.instance.performManyToManyCompaction(cfs);
+        List<SSTableReader> sstables = new ArrayList<>(cfs.getSSTables());
+        Collections.sort(sstables, new Comparator<SSTableReader>()
+        {
+            @Override
+            public int compare(SSTableReader o1, SSTableReader o2)
+            {
+                return Longs.compare(o2.onDiskLength(), o1.onDiskLength());
+            }
+        });
+// we get the biggest sstable first, which is the one that should have 50% data (note that the second one will get 50% as well since we only want to create 2 sstables)
+        assertEquals(sstables.get(0).onDiskLength(), preSize/2, 100);
+        assertTrue(cfs.getSSTables().size() > 1);
+
+    }
+
 }

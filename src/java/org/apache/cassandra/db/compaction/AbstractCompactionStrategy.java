@@ -23,6 +23,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -187,6 +188,32 @@ public abstract class AbstractCompactionStrategy
      */
     public abstract long getMaxSSTableBytes();
 
+    public List<AbstractCompactionTask> getManyToManyTasks(int gcBefore)
+    {
+        Set<SSTableReader> compacting = Sets.newHashSet(cfs.markAllCompacting());
+        if (compacting.size() == 0)
+            return null;
+
+        Set<SSTableReader> repaired = cfs.getRepairedSSTables();
+        List<AbstractCompactionTask> tasks = new ArrayList<>(2);
+        if (repaired.size() > 0)
+        {
+            CompactionAwareWriter writer = getCompactionAwareWriter(Sets.intersection(compacting, repaired));
+            if (writer == null)
+                return null;
+            tasks.add(new ManyToManyCompactionTask(cfs, gcBefore, writer));
+            tasks.add(new ManyToManyCompactionTask(cfs, gcBefore, new SizeTieredCompactionStrategy.SizeTieredCompactionWriter(cfs, Sets.difference(compacting, repaired))));
+        }
+        else
+        {
+            CompactionAwareWriter writer = getCompactionAwareWriter(compacting);
+            if (writer == null)
+                return null;
+            tasks.add(new ManyToManyCompactionTask(cfs, gcBefore, writer));
+        }
+        return tasks;
+    }
+
     public boolean isEnabled()
     {
         return this.enabled && this.isActive;
@@ -286,6 +313,11 @@ public abstract class AbstractCompactionStrategy
             throw t;
         }
         return new ScannerList(scanners);
+    }
+
+    public CompactionAwareWriter getCompactionAwareWriter(Set<SSTableReader> sstables)
+    {
+        return null;
     }
 
     public static class ScannerList implements AutoCloseable
@@ -475,5 +507,14 @@ public abstract class AbstractCompactionStrategy
         if (currGroup.size() != 0)
             groupedSSTables.add(currGroup);
         return groupedSSTables;
+    }
+
+    public static interface CompactionAwareWriter
+    {
+        void append(AbstractCompactedRow row);
+        void close();
+        void abort();
+        List<SSTableReader> finished();
+        Set<SSTableReader> getSSTables();
     }
 }
