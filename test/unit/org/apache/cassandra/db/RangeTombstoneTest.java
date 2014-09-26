@@ -198,7 +198,6 @@ public class RangeTombstoneTest extends SchemaLoader
         assertTimes(sstable.getSSTableMetadata(), 999, 1000, Integer.MAX_VALUE);
     }
 
-
     private void assertTimes(SSTableMetadata metadata, long min, long max, int localDeletionTime)
     {
         assertEquals(min, metadata.minTimestamp);

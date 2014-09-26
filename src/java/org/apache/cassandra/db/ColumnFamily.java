@@ -415,44 +415,44 @@ public abstract class ColumnFamily implements Iterable<Column>, IRowCacheEntry
         // note that we default to MIN_VALUE/MAX_VALUE here to be able to override them later in this method
         // we are checking row/range tombstones and actual cells - there should always be data that overrides
         // these with actual values
-        long minTimestampSeen = Long.MAX_VALUE;
-        long maxTimestampSeen = Long.MIN_VALUE;
+        ColumnStats.MinTracker<Long> minTimestampTracker = new ColumnStats.MinTracker<>(Long.MIN_VALUE);
+        ColumnStats.MaxTracker<Long> maxTimestampTracker = new ColumnStats.MaxTracker<>(Long.MAX_VALUE);
         StreamingHistogram tombstones = new StreamingHistogram(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE);
-        int maxLocalDeletionTime = Integer.MIN_VALUE;
+        ColumnStats.MaxTracker<Integer> maxDeletionTimeTracker = new ColumnStats.MaxTracker<>(Integer.MAX_VALUE);
         List<ByteBuffer> minColumnNamesSeen = Collections.emptyList();
         List<ByteBuffer> maxColumnNamesSeen = Collections.emptyList();
 
         if (deletionInfo().getTopLevelDeletion().localDeletionTime < Integer.MAX_VALUE)
         {
             tombstones.update(deletionInfo().getTopLevelDeletion().localDeletionTime);
-            maxLocalDeletionTime = Math.max(deletionInfo().getTopLevelDeletion().localDeletionTime, maxLocalDeletionTime);
-            minTimestampSeen = Math.min(deletionInfo().getTopLevelDeletion().markedForDeleteAt, minTimestampSeen);
-            maxTimestampSeen = Math.max(deletionInfo().getTopLevelDeletion().markedForDeleteAt, maxTimestampSeen);
+            maxDeletionTimeTracker.update(deletionInfo().getTopLevelDeletion().localDeletionTime);
+            minTimestampTracker.update(deletionInfo().getTopLevelDeletion().markedForDeleteAt);
+            maxTimestampTracker.update(deletionInfo().getTopLevelDeletion().markedForDeleteAt);
         }
         Iterator<RangeTombstone> it = deletionInfo().rangeIterator();
         while (it.hasNext())
         {
             RangeTombstone rangeTombstone = it.next();
             tombstones.update(rangeTombstone.getLocalDeletionTime());
-            minTimestampSeen = Math.min(minTimestampSeen, rangeTombstone.minTimestamp());
-            maxTimestampSeen = Math.max(maxTimestampSeen, rangeTombstone.maxTimestamp());
-            maxLocalDeletionTime = Math.max(maxLocalDeletionTime, rangeTombstone.getLocalDeletionTime());
+            minTimestampTracker.update(rangeTombstone.minTimestamp());
+            maxTimestampTracker.update(rangeTombstone.maxTimestamp());
+            maxDeletionTimeTracker.update(rangeTombstone.getLocalDeletionTime());
             minColumnNamesSeen = ColumnNameHelper.minComponents(minColumnNamesSeen, rangeTombstone.min, metadata.comparator);
             maxColumnNamesSeen = ColumnNameHelper.maxComponents(maxColumnNamesSeen, rangeTombstone.max, metadata.comparator);
         }
 
         for (Column column : this)
         {
-            minTimestampSeen = Math.min(minTimestampSeen, column.minTimestamp());
-            maxTimestampSeen = Math.max(maxTimestampSeen, column.maxTimestamp());
-            maxLocalDeletionTime = Math.max(maxLocalDeletionTime, column.getLocalDeletionTime());
+            minTimestampTracker.update(column.minTimestamp());
+            maxTimestampTracker.update(column.maxTimestamp());
+            maxDeletionTimeTracker.update(column.getLocalDeletionTime());
             int deletionTime = column.getLocalDeletionTime();
             if (deletionTime < Integer.MAX_VALUE)
                 tombstones.update(deletionTime);
             minColumnNamesSeen = ColumnNameHelper.minComponents(minColumnNamesSeen, column.name, metadata.comparator);
             maxColumnNamesSeen = ColumnNameHelper.maxComponents(maxColumnNamesSeen, column.name, metadata.comparator);
         }
-        return new ColumnStats(getColumnCount(), minTimestampSeen, maxTimestampSeen, maxLocalDeletionTime, tombstones, minColumnNamesSeen, maxColumnNamesSeen);
+        return new ColumnStats(getColumnCount(), minTimestampTracker.get(), maxTimestampTracker.get(), maxDeletionTimeTracker.get(), tombstones, minColumnNamesSeen, maxColumnNamesSeen);
     }
 
     public boolean isMarkedForDelete()
