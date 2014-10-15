@@ -290,6 +290,24 @@ public abstract class AbstractCompactionStrategy
         return new ScannerList(scanners);
     }
 
+    public boolean shouldDefragment()
+    {
+        return false;
+    }
+
+    public String getName()
+    {
+        return getClass().getSimpleName();
+    }
+
+    public void addSSTable(SSTableReader added)
+    {
+    }
+
+    public void removeSSTable(SSTableReader sstable)
+    {
+    }
+
     public static class ScannerList implements AutoCloseable
     {
         public final List<ICompactionScanner> scanners;
