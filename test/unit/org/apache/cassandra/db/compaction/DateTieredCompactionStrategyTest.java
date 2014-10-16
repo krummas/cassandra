@@ -53,28 +53,28 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     public void testOptionsValidation() throws ConfigurationException
     {
         Map<String, String> options = new HashMap<>();
-        options.put(DateTieredCompactionStrategyOptions.TIME_UNIT_KEY, "1800000000");
-        options.put(DateTieredCompactionStrategyOptions.MAX_SSTABLE_AGE_KEY, "157680000000000");
+        options.put(DateTieredCompactionStrategyOptions.BASE_TIME_KEY, "30");
+        options.put(DateTieredCompactionStrategyOptions.MAX_SSTABLE_AGE_KEY, "1825");
         Map<String, String> unvalidated = validateOptions(options);
         assertTrue(unvalidated.isEmpty());
 
         try
         {
-            options.put(DateTieredCompactionStrategyOptions.TIME_UNIT_KEY, "0");
+            options.put(DateTieredCompactionStrategyOptions.BASE_TIME_KEY, "0");
             validateOptions(options);
-            fail(String.format("%s == 0 should be rejected", DateTieredCompactionStrategyOptions.TIME_UNIT_KEY));
+            fail(String.format("%s == 0 should be rejected", DateTieredCompactionStrategyOptions.BASE_TIME_KEY));
         }
         catch (ConfigurationException e) {}
 
         try
         {
-            options.put(DateTieredCompactionStrategyOptions.TIME_UNIT_KEY, "-1337");
+            options.put(DateTieredCompactionStrategyOptions.BASE_TIME_KEY, "-1337");
             validateOptions(options);
-            fail(String.format("%Negative %s should be rejected", DateTieredCompactionStrategyOptions.TIME_UNIT_KEY));
+            fail(String.format("%Negative %s should be rejected", DateTieredCompactionStrategyOptions.BASE_TIME_KEY));
         }
         catch (ConfigurationException e)
         {
-            options.put(DateTieredCompactionStrategyOptions.TIME_UNIT_KEY, "1");
+            options.put(DateTieredCompactionStrategyOptions.BASE_TIME_KEY, "1");
         }
 
         try

@@ -18,39 +18,55 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.exceptions.ConfigurationException;
 
 public final class DateTieredCompactionStrategyOptions
 {
-    protected static final long DEFAULT_MAX_SSTABLE_AGE = 0; //5 * 365L * 24L * 60L * 60L * 1000L * 1000L; // 5 years
-    protected static final long DEFAULT_TIME_UNIT = 60L * 60L * 1000L * 1000L; // One hour
-    protected static final String MAX_SSTABLE_AGE_KEY = "max_sstable_age";
-    protected static final String TIME_UNIT_KEY = "time_unit";
+    protected static final TimeUnit DEFAULT_TIMESTAMP_RESOLUTION = TimeUnit.MICROSECONDS;
+    protected static final long DEFAULT_MAX_SSTABLE_AGE_DAYS = 365;
+    protected static final long DEFAULT_BASE_TIME_SECONDS = 60 * 60;
+    protected static final String TIMESTAMP_RESOLUTION_KEY = "timestamp_resolution";
+    protected static final String MAX_SSTABLE_AGE_KEY = "max_sstable_age_days";
+    protected static final String BASE_TIME_KEY = "base_time_seconds";
 
     protected long maxSSTableAge;
-    protected long timeUnit;
+    protected long baseTime;
 
     public DateTieredCompactionStrategyOptions(Map<String, String> options)
     {
-        String optionValue = options.get(MAX_SSTABLE_AGE_KEY);
-        maxSSTableAge = optionValue == null ? DEFAULT_MAX_SSTABLE_AGE : Long.parseLong(optionValue);
-        optionValue = options.get(TIME_UNIT_KEY);
-        timeUnit = optionValue == null ? DEFAULT_TIME_UNIT : Long.parseLong(optionValue);
+        String optionValue = options.get(TIMESTAMP_RESOLUTION_KEY);
+        TimeUnit timestampResolution = optionValue == null ? DEFAULT_TIMESTAMP_RESOLUTION : TimeUnit.valueOf(optionValue);
+        optionValue = options.get(MAX_SSTABLE_AGE_KEY);
+        maxSSTableAge = timestampResolution.convert(optionValue == null ? DEFAULT_MAX_SSTABLE_AGE_DAYS : Long.parseLong(optionValue), TimeUnit.DAYS);
+        optionValue = options.get(BASE_TIME_KEY);
+        baseTime = timestampResolution.convert(optionValue == null ? DEFAULT_BASE_TIME_SECONDS : Long.parseLong(optionValue), TimeUnit.SECONDS);
     }
 
     public DateTieredCompactionStrategyOptions()
     {
-        maxSSTableAge = DEFAULT_MAX_SSTABLE_AGE;
-        timeUnit = DEFAULT_TIME_UNIT;
+        maxSSTableAge = DEFAULT_TIMESTAMP_RESOLUTION.convert(DEFAULT_MAX_SSTABLE_AGE_DAYS, TimeUnit.DAYS);
+        baseTime = DEFAULT_TIMESTAMP_RESOLUTION.convert(DEFAULT_BASE_TIME_SECONDS, TimeUnit.SECONDS);
     }
 
     public static Map<String, String> validateOptions(Map<String, String> options, Map<String, String> uncheckedOptions) throws  ConfigurationException
     {
-        String optionValue = options.get(MAX_SSTABLE_AGE_KEY);
+        String optionValue = options.get(TIMESTAMP_RESOLUTION_KEY);
         try
         {
-            long maxSStableAge = optionValue == null ? DEFAULT_MAX_SSTABLE_AGE : Long.parseLong(optionValue);
+            if (optionValue != null)
+                TimeUnit.valueOf(optionValue);
+        }
+        catch (IllegalArgumentException e)
+        {
+            throw new ConfigurationException(String.format("timestamp_resolution %s is not valid", optionValue));
+        }
+
+        optionValue = options.get(MAX_SSTABLE_AGE_KEY);
+        try
+        {
+            long maxSStableAge = optionValue == null ? DEFAULT_MAX_SSTABLE_AGE_DAYS : Long.parseLong(optionValue);
             if (maxSStableAge < 0)
             {
                 throw new ConfigurationException(String.format("%s must be non-negative: %d", MAX_SSTABLE_AGE_KEY, maxSStableAge));
@@ -61,22 +77,23 @@ public final class DateTieredCompactionStrategyOptions
             throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", optionValue, MAX_SSTABLE_AGE_KEY), e);
         }
 
-        optionValue = options.get(TIME_UNIT_KEY);
+        optionValue = options.get(BASE_TIME_KEY);
         try
         {
-            long timeUnit = optionValue == null ? DEFAULT_TIME_UNIT : Long.parseLong(optionValue);
-            if (timeUnit <= 0)
+            long baseTime = optionValue == null ? DEFAULT_BASE_TIME_SECONDS : Long.parseLong(optionValue);
+            if (baseTime <= 0)
             {
-                throw new ConfigurationException(String.format("%s must be greater than 0, but was %d", TIME_UNIT_KEY, timeUnit));
+                throw new ConfigurationException(String.format("%s must be greater than 0, but was %d", BASE_TIME_KEY, baseTime));
             }
         }
         catch (NumberFormatException e)
         {
-            throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", optionValue, TIME_UNIT_KEY), e);
+            throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", optionValue, BASE_TIME_KEY), e);
         }
 
         uncheckedOptions.remove(MAX_SSTABLE_AGE_KEY);
-        uncheckedOptions.remove(TIME_UNIT_KEY);
+        uncheckedOptions.remove(BASE_TIME_KEY);
+        uncheckedOptions.remove(TIMESTAMP_RESOLUTION_KEY);
 
         return uncheckedOptions;
     }
