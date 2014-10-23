@@ -58,6 +58,7 @@ import org.apache.cassandra.metrics.KeyspaceMetrics;
 public class Keyspace
 {
     public static final String SYSTEM_KS = "system";
+    public static final String DISTRIBUTED_SYSTEM_KS = "system_distributed";
     private static final int DEFAULT_PAGE_SIZE = 10000;
 
     private static final Logger logger = LoggerFactory.getLogger(Keyspace.class);

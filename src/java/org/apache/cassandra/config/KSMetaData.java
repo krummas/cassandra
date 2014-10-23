@@ -109,6 +109,12 @@ public final class KSMetaData
         return new KSMetaData(Keyspace.SYSTEM_KS, LocalStrategy.class, Collections.<String, String>emptyMap(), true, cfDefs);
     }
 
+    public static KSMetaData distributedSystemKeyspace()
+    {
+        List<CFMetaData> cfDefs = Arrays.asList(CFMetaData.RepairHistoryCf);
+        return new KSMetaData(Keyspace.DISTRIBUTED_SYSTEM_KS, SimpleStrategy.class, ImmutableMap.of("replication_factor", "2"), true, cfDefs);
+    }
+
     public static KSMetaData traceKeyspace()
     {
         List<CFMetaData> cfDefs = Arrays.asList(CFMetaData.TraceSessionsCf, CFMetaData.TraceEventsCf);

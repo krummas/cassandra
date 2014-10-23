@@ -95,6 +95,7 @@ import org.apache.cassandra.exceptions.SyntaxException;
 import org.apache.cassandra.io.compress.CompressionParameters;
 import org.apache.cassandra.io.compress.LZ4Compressor;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.repair.RepairResultPersister;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.thrift.CfDef;
 import org.apache.cassandra.thrift.CqlResult;
@@ -326,6 +327,23 @@ public final class CFMetaData
                                                      + "PRIMARY KEY (row_key, cf_id)"
                                                      + ") WITH COMMENT='in-progress paxos proposals' "
                                                      + "AND COMPACTION={'class' : 'LeveledCompactionStrategy'}");
+
+    public static final CFMetaData RepairHistoryCf = compile("CREATE TABLE " + RepairResultPersister.REPAIRS_CF + " ("
+                                                             + "keyspace_name text,"
+                                                             + "columnfamily_name text,"
+                                                             + "id timeuuid,"
+                                                             + "range_begin text,"
+                                                             + "range_end text,"
+                                                             + "coordinator inet,"
+                                                             + "participants set<inet>,"
+                                                             + "exception_message text,"
+                                                             + "exception_stacktrace text,"
+                                                             + "status text,"
+                                                             + "started_at timestamp,"
+                                                             + "finished_at timestamp,"
+                                                             + "PRIMARY KEY ((keyspace_name, columnfamily_name), id)"
+                                                             + ") WITH COMMENT='history of repair jobs' AND DEFAULT_TIME_TO_LIVE=15552000",
+                                                             Keyspace.DISTRIBUTED_SYSTEM_KS);
 
     public static final CFMetaData SSTableActivityCF = compile("CREATE TABLE " + SystemKeyspace.SSTABLE_ACTIVITY_CF + " ("
                                                                + "keyspace_name text,"

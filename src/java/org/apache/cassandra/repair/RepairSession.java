@@ -216,11 +216,14 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
             return;
 
         logger.info(String.format("[repair #%s] new session: will sync %s on range %s for %s.%s", getId(), repairedNodes(), range, keyspace, Arrays.toString(cfnames)));
+        final RepairResultPersister repairResults = new RepairResultPersister(id, keyspace, cfnames, endpoints, range);
+        repairResults.start();
 
         if (endpoints.isEmpty())
         {
             logger.info(String.format("[repair #%s] No neighbors to repair with on range %s: session completed", getId(), range));
             set(Lists.<RepairResult>newArrayList());
+            repairResults.success();
             return;
         }
 
@@ -231,7 +234,9 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
             {
                 String message = String.format("Cannot proceed on repair because a neighbor (%s) is dead: session failed", endpoint);
                 logger.error("[repair #{}] {}", getId(), message);
-                setException(new IOException(message));
+                Exception e = new IOException(message);
+                repairResults.failure(e);
+                setException(e);
                 return;
             }
         }
@@ -253,6 +258,7 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
                 // this repair session is completed
                 logger.info(String.format("[repair #%s] session completed successfully", getId()));
                 set(results);
+                repairResults.success();
                 taskExecutor.shutdown();
                 // mark this session as terminated
                 terminate();
@@ -261,6 +267,7 @@ public class RepairSession extends AbstractFuture<List<RepairResult>> implements
             public void onFailure(Throwable t)
             {
                 logger.error("Repair job failed", t);
+                repairResults.failure(t);
                 setException(t);
             }
         });

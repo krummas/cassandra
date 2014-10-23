@@ -575,7 +575,7 @@ public class DatabaseDescriptor
         }
 
         // Hardcoded system keyspaces
-        List<KSMetaData> systemKeyspaces = Arrays.asList(KSMetaData.systemKeyspace());
+        List<KSMetaData> systemKeyspaces = Arrays.asList(KSMetaData.systemKeyspace(), KSMetaData.distributedSystemKeyspace());
         assert systemKeyspaces.size() == Schema.systemKeyspaceNames.size();
         for (KSMetaData ksmd : systemKeyspaces)
             Schema.instance.load(ksmd);
