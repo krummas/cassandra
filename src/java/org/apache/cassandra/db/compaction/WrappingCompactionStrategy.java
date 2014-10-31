@@ -53,6 +53,9 @@ public final class WrappingCompactionStrategy extends AbstractCompactionStrategy
     @Override
     public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
+        if (!isEnabled())
+            return null;
+
         if (repaired.getEstimatedRemainingTasks() > unrepaired.getEstimatedRemainingTasks())
         {
             AbstractCompactionTask repairedTask = repaired.getNextBackgroundTask(gcBefore);
@@ -71,7 +74,7 @@ public final class WrappingCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    public synchronized Collection<AbstractCompactionTask> getMaximalTask(final int gcBefore)
+    public Collection<AbstractCompactionTask> getMaximalTask(final int gcBefore)
     {
         // runWithCompactionsDisabled cancels active compactions and disables them, then we are able
         // to make the repaired/unrepaired strategies mark their own sstables as compacting. Once the
@@ -81,20 +84,24 @@ public final class WrappingCompactionStrategy extends AbstractCompactionStrategy
             @Override
             public Collection<AbstractCompactionTask> call() throws Exception
             {
-                Collection<AbstractCompactionTask> repairedTasks = repaired.getMaximalTask(gcBefore);
-                Collection<AbstractCompactionTask> unrepairedTasks = unrepaired.getMaximalTask(gcBefore);
-                if (repairedTasks == null && unrepairedTasks == null)
-                    return null;
+                synchronized (WrappingCompactionStrategy.this)
+                {
+                    Collection<AbstractCompactionTask> repairedTasks = repaired.getMaximalTask(gcBefore);
+                    Collection<AbstractCompactionTask> unrepairedTasks = unrepaired.getMaximalTask(gcBefore);
 
-                if (repairedTasks == null)
-                    return unrepairedTasks;
-                if (unrepairedTasks == null)
-                    return repairedTasks;
+                    if (repairedTasks == null && unrepairedTasks == null)
+                        return null;
 
-                List<AbstractCompactionTask> tasks = new ArrayList<>();
-                tasks.addAll(repairedTasks);
-                tasks.addAll(unrepairedTasks);
-                return tasks;
+                    if (repairedTasks == null)
+                        return unrepairedTasks;
+                    if (unrepairedTasks == null)
+                        return repairedTasks;
+
+                    List<AbstractCompactionTask> tasks = new ArrayList<>();
+                    tasks.addAll(repairedTasks);
+                    tasks.addAll(unrepairedTasks);
+                    return tasks;
+                }
             }
         }, false);
     }
