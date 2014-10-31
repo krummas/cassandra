@@ -1027,7 +1027,7 @@ public class CompactionManager implements CompactionManagerMBean
                 // so that the second one can do so safely, without leaving us with references < 0 or any other ugliness
                 // add repaired table with a non-null timestamp field to be saved in SSTableMetadata#repairedAt
                 anticompactedSSTables.addAll(repairedSSTableWriter.finish(repairedAt));
-                anticompactedSSTables.addAll(unRepairedSSTableWriter.finish(repairedAt));
+                anticompactedSSTables.addAll(unRepairedSSTableWriter.finish(ActiveRepairService.UNREPAIRED_SSTABLE));
                 cfs.getDataTracker().markCompactedSSTablesReplaced(sstableAsSet, anticompactedSSTables, OperationType.ANTICOMPACTION);
             }
             catch (Throwable e)
