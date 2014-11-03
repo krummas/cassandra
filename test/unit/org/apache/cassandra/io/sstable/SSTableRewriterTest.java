@@ -434,8 +434,8 @@ public class SSTableRewriterTest extends SchemaLoader
     private SSTableReader writeFile(ColumnFamilyStore cfs, int count)
     {
         ArrayBackedSortedColumns cf = ArrayBackedSortedColumns.factory.create(cfs.metadata);
-        for (int i = 0; i < count; i++)
-            cf.addColumn(Util.column(String.valueOf(i), "a", 1));
+        for (int i = 0; i < count / 100; i++)
+            cf.addColumn(Util.cellname(i), ByteBuffer.allocate(1000), 1);
         File dir = cfs.directories.getDirectoryForNewSSTables();
         String filename = cfs.getTempSSTablePath(dir);
 
