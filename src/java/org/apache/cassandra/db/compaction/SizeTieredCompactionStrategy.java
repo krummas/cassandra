@@ -22,6 +22,7 @@ import java.util.Map.Entry;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -78,9 +79,6 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
 
     private List<SSTableReader> getNextBackgroundSSTables(final int gcBefore)
     {
-        if (!isEnabled())
-            return Collections.emptyList();
-
         // make local copies so they can't be changed out from under us mid-method
         int minThreshold = cfs.getMinimumCompactionThreshold();
         int maxThreshold = cfs.getMaximumCompactionThreshold();
@@ -180,9 +178,6 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
 
     public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
-        if (!isEnabled())
-            return null;
-
         while (true)
         {
             List<SSTableReader> hottestBucket = getNextBackgroundSSTables(gcBefore);
@@ -327,6 +322,12 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
     public void removeSSTable(SSTableReader sstable)
     {
         sstables.remove(sstable);
+    }
+
+    @Override
+    public synchronized Iterable<SSTableReader> getSSTables()
+    {
+        return ImmutableSet.copyOf(sstables);
     }
 
     public String toString()

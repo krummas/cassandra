@@ -108,7 +108,7 @@ public class CompactionTask extends AbstractCompactionTask
 
         // Note that the current compaction strategy, is not necessarily the one this task was created under.
         // This should be harmless; see comments to CFS.maybeReloadCompactionStrategy.
-        AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
+        CompactionStrategyManager strategyManager = cfs.getCompactionStrategyManager();
 
         if (DatabaseDescriptor.isSnapshotBeforeCompaction())
             cfs.snapshotWithoutFlush(System.currentTimeMillis() + "-compact-" + cfs.name);
@@ -116,7 +116,7 @@ public class CompactionTask extends AbstractCompactionTask
         // note that we need to do a rough estimate early if we can fit the compaction on disk - this is pessimistic, but
         // since we might remove sstables from the compaction in checkAvailableDiskSpace it needs to be done here
         long expectedWriteSize = cfs.getExpectedCompactedFileSize(sstables, compactionType);
-        long earlySSTableEstimate = Math.max(1, expectedWriteSize / strategy.getMaxSSTableBytes());
+        long earlySSTableEstimate = Math.max(1, expectedWriteSize / strategyManager.getMaxSSTableBytes());
         checkAvailableDiskSpace(earlySSTableEstimate, expectedWriteSize);
 
         // sanity check: all sstables must belong to the same cfs
@@ -127,7 +127,7 @@ public class CompactionTask extends AbstractCompactionTask
             {
                 return !sstable.descriptor.cfname.equals(cfs.name);
             }
-        });
+        }) : sstables;
 
         UUID taskId = SystemKeyspace.startCompaction(cfs, sstables);
 
@@ -152,15 +152,19 @@ public class CompactionTask extends AbstractCompactionTask
         {
             Set<SSTableReader> actuallyCompact = Sets.difference(sstables, controller.getFullyExpiredSSTables());
 
+            long estimatedTotalKeys = Math.max(cfs.metadata.getMinIndexInterval(), SSTableReader.getApproximateKeyCount(actuallyCompact));
+            long estimatedSSTables = Math.max(1, cfs.getExpectedCompactedFileSize(actuallyCompact, compactionType) / strategyManager.getMaxSSTableBytes());
+            long keysPerSSTable = (long) Math.ceil((double) estimatedTotalKeys / estimatedSSTables);
             SSTableFormat.Type sstableFormat = getFormatType(sstables);
 
+            logger.debug("Expected bloom filter size : {}", keysPerSSTable);
             List<SSTableReader> newSStables;
             AbstractCompactionIterable ci;
 
             // SSTableScanners need to be closed before markCompactedSSTablesReplaced call as scanners contain references
             // to both ifile and dfile and SSTR will throw deletion errors on Windows if it tries to delete before scanner is closed.
             // See CASSANDRA-8019 and CASSANDRA-8399
-            try (AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(actuallyCompact))
+            try (AbstractCompactionStrategy.ScannerList scanners = strategyManager.getScanners(actuallyCompact))
             {
                 ci = new CompactionIterable(compactionType, scanners.scanners, controller, sstableFormat);
                 Iterator<AbstractCompactedRow> iter = ci.iterator();
@@ -168,7 +172,7 @@ public class CompactionTask extends AbstractCompactionTask
                     collector.beginCompaction(ci);
                 long lastCheckObsoletion = start;
 
-                if (!controller.cfs.getCompactionStrategy().isActive)
+                if (!controller.cfs.getCompactionStrategyManager().isActive)
                     throw new CompactionInterruptedException(ci.getCompactionInfo());
 
                 try (CompactionAwareWriter writer = getCompactionAwareWriter(cfs, sstables, actuallyCompact))

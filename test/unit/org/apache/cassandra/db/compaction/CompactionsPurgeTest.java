@@ -19,6 +19,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.cassandra.cache.CachingOptions;
@@ -176,7 +177,7 @@ public class CompactionsPurgeTest
         rm.add(cfName, cellname(String.valueOf(5)), ByteBufferUtil.EMPTY_BYTE_BUFFER, 2);
         rm.applyUnsafe();
         cfs.forceBlockingFlush();
-        cfs.getCompactionStrategy().getUserDefinedTask(sstablesIncomplete, Integer.MAX_VALUE).execute(null);
+        cfs.getCompactionStrategyManager().getUserDefinedTask(sstablesIncomplete, Integer.MAX_VALUE).execute(null);
 
         // verify that minor compaction does GC when key is provably not
         // present in a non-compacted sstable
@@ -223,7 +224,7 @@ public class CompactionsPurgeTest
         cfs.forceBlockingFlush();
 
         // compact the sstables with the c1/c2 data and the c1 tombstone
-        cfs.getCompactionStrategy().getUserDefinedTask(sstablesIncomplete, Integer.MAX_VALUE).execute(null);
+        cfs.getCompactionStrategyManager().getUserDefinedTask(sstablesIncomplete, Integer.MAX_VALUE).execute(null);
 
         // We should have both the c1 and c2 tombstones still. Since the min timestamp in the c2 tombstone
         // sstable is older than the c1 tombstone, it is invalid to throw out the c1 tombstone.
