@@ -136,7 +136,7 @@ public class DataTracker
         while (!view.compareAndSet(currentView, newView));
     }
 
-    public void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    public void replaceFlushed(Memtable memtable, List<SSTableReader> sstables)
     {
         // sstable may be null if we flushed batchlog and nothing needed to be retained
 
@@ -146,40 +146,42 @@ public class DataTracker
             do
             {
                 currentView = view.get();
-                newView = currentView.replaceFlushed(memtable, sstable);
-                if (sstable != null)
-                    newView = newView.replace(Arrays.asList(sstable), Collections.<SSTableReader>emptyList());
+                newView = currentView.replaceFlushed(memtable, sstables);
+                if (sstables != null)
+                    newView = newView.replace(sstables, Collections.<SSTableReader>emptyList());
             }
             while (!view.compareAndSet(currentView, newView));
             return;
         }
 
         // back up before creating a new View (which makes the new one eligible for compaction)
-        if (sstable != null)
-            maybeIncrementallyBackup(sstable);
+        if (sstables != null)
+            maybeIncrementallyBackup(sstables);
 
         View currentView, newView;
         do
         {
             currentView = view.get();
-            newView = currentView.replaceFlushed(memtable, sstable);
+            newView = currentView.replaceFlushed(memtable, sstables);
         }
         while (!view.compareAndSet(currentView, newView));
 
-        if (sstable != null)
+        if (sstables != null)
         {
-            addNewSSTablesSize(Arrays.asList(sstable));
-            notifyAdded(sstable);
+            addNewSSTablesSize(sstables);
+            notifyAdded(sstables);
         }
     }
 
-    public void maybeIncrementallyBackup(final SSTableReader sstable)
+    public void maybeIncrementallyBackup(Iterable<SSTableReader> sstables)
     {
         if (!DatabaseDescriptor.isIncrementalBackupsEnabled())
             return;
-
-        File backupsDir = Directories.getBackupsDirectory(sstable.descriptor);
-        sstable.createLinks(FileUtils.getCanonicalPath(backupsDir));
+        for (SSTableReader sstable : sstables)
+        {
+            File backupsDir = Directories.getBackupsDirectory(sstable.descriptor);
+            sstable.createLinks(FileUtils.getCanonicalPath(backupsDir));
+        }
     }
 
     /**
@@ -284,11 +286,8 @@ public class DataTracker
     public void addSSTables(Collection<SSTableReader> sstables)
     {
         addSSTablesToTracker(sstables);
-        for (SSTableReader sstable : sstables)
-        {
-            maybeIncrementallyBackup(sstable);
-            notifyAdded(sstable);
-        }
+        maybeIncrementallyBackup(sstables);
+        notifyAdded(sstables);
     }
 
     /**
@@ -517,11 +516,14 @@ public class DataTracker
             subscriber.handleNotification(notification, this);
     }
 
-    public void notifyAdded(SSTableReader added)
+    public void notifyAdded(Iterable<SSTableReader> added)
     {
-        INotification notification = new SSTableAddedNotification(added);
-        for (INotificationConsumer subscriber : subscribers)
-            subscriber.handleNotification(notification, this);
+        for (SSTableReader sstable : added) // todo: only send one notification here
+        {
+            INotification notification = new SSTableAddedNotification(sstable);
+            for (INotificationConsumer subscriber : subscribers)
+                subscriber.handleNotification(notification, this);
+        }
     }
 
     public void notifySSTableRepairedStatusChanged(Collection<SSTableReader> repairStatusesChanged)
@@ -693,16 +695,16 @@ public class DataTracker
             return new View(newLive, newFlushing, sstables, compacting, intervalTree);
         }
 
-        View replaceFlushed(Memtable flushedMemtable, SSTableReader newSSTable)
+        View replaceFlushed(Memtable flushedMemtable, List<SSTableReader> flushedSSTables)
         {
             int index = flushingMemtables.indexOf(flushedMemtable);
             List<Memtable> newQueuedMemtables = ImmutableList.<Memtable>builder()
                                                              .addAll(flushingMemtables.subList(0, index))
                                                              .addAll(flushingMemtables.subList(index + 1, flushingMemtables.size()))
                                                              .build();
-            Set<SSTableReader> newSSTables = newSSTable == null
+            Set<SSTableReader> newSSTables = flushedSSTables == null
                                              ? sstables
-                                             : newSSTables(newSSTable);
+                                             : newSSTables(flushedSSTables);
             SSTableIntervalTree intervalTree = buildIntervalTree(newSSTables);
             return new View(liveMemtables, newQueuedMemtables, newSSTables, compacting, intervalTree);
         }
@@ -726,11 +728,11 @@ public class DataTracker
             return new View(liveMemtables, flushingMemtables, sstables, compactingNew, intervalTree);
         }
 
-        private Set<SSTableReader> newSSTables(SSTableReader newSSTable)
+        private Set<SSTableReader> newSSTables(List<SSTableReader> newSSTables)
         {
-            assert newSSTable != null;
+            assert newSSTables != null;
             // not performance-sensitive, don't obsess over doing a selection merge here
-            return newSSTables(Collections.<SSTableReader>emptyList(), Collections.singletonList(newSSTable));
+            return newSSTables(Collections.<SSTableReader>emptyList(), newSSTables);
         }
 
         private Set<SSTableReader> newSSTables(Collection<SSTableReader> oldSSTables, Iterable<SSTableReader> replacements)

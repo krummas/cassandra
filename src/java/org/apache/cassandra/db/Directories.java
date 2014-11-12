@@ -345,6 +345,19 @@ public class Directories
         Collections.sort(candidates);
     }
 
+    public DataDirectory[] getWritableLocations()
+    {
+        Arrays.sort(dataDirectories, new Comparator<DataDirectory>()
+        {
+            @Override
+            public int compare(DataDirectory o1, DataDirectory o2)
+            {
+                return o1.location.compareTo(o2.location);
+            }
+        });
+        return dataDirectories;
+    }
+
     public static File getSnapshotDirectory(Descriptor desc, String snapshotName)
     {
         return getSnapshotDirectory(desc.directory, snapshotName);
