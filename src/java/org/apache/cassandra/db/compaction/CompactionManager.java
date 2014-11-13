@@ -179,7 +179,7 @@ public class CompactionManager implements CompactionManagerMBean
         logger.debug("Scheduling a background task check for {}.{} with {}",
                      cfs.keyspace.getName(),
                      cfs.name,
-                     cfs.getCompactionStrategy().getName());
+                     cfs.getCompactionStrategyManager().getName());
         List<Future<?>> futures = new ArrayList<Future<?>>();
 
         // we must schedule it at least once, otherwise compaction will stop for a CF until next flush
@@ -222,8 +222,8 @@ public class CompactionManager implements CompactionManagerMBean
                     return;
                 }
 
-                AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
-                AbstractCompactionTask task = strategy.getNextBackgroundTask(getDefaultGcBefore(cfs));
+                CompactionStrategyManager strategyManager = cfs.getCompactionStrategyManager();
+                AbstractCompactionTask task = strategyManager.getNextBackgroundTask(getDefaultGcBefore(cfs));
                 if (task == null)
                 {
                     logger.debug("No tasks available");
@@ -334,7 +334,7 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public void execute(SSTableReader input) throws IOException
             {
-                AbstractCompactionTask task = cfs.getCompactionStrategy().getCompactionTask(Collections.singleton(input), NO_GC, Long.MAX_VALUE);
+                AbstractCompactionTask task = cfs.getCompactionStrategyManager().getCompactionTask(Collections.singleton(input), NO_GC, Long.MAX_VALUE);
                 task.setUserDefined(true);
                 task.setCompactionType(OperationType.UPGRADE_SSTABLES);
                 task.execute(metrics);
@@ -464,7 +464,7 @@ public class CompactionManager implements CompactionManagerMBean
         // here we compute the task off the compaction executor, so having that present doesn't
         // confuse runWithCompactionsDisabled -- i.e., we don't want to deadlock ourselves, waiting
         // for ourselves to finish/acknowledge cancellation before continuing.
-        final Collection<AbstractCompactionTask> tasks = cfStore.getCompactionStrategy().getMaximalTask(gcBefore);
+        final Collection<AbstractCompactionTask> tasks = cfStore.getCompactionStrategyManager().getMaximalTasks(gcBefore);
         Runnable runnable = new WrappedRunnable()
         {
             protected void runMayThrow() throws IOException
@@ -532,7 +532,7 @@ public class CompactionManager implements CompactionManagerMBean
                 }
                 else
                 {
-                    AbstractCompactionTask task = cfs.getCompactionStrategy().getUserDefinedTask(sstables, gcBefore);
+                    AbstractCompactionTask task = cfs.getCompactionStrategyManager().getUserDefinedTask(sstables, gcBefore);
                     if (task != null)
                         task.execute(metrics);
                 }
@@ -965,7 +965,7 @@ public class CompactionManager implements CompactionManagerMBean
             MerkleTree tree = new MerkleTree(cfs.partitioner, validator.desc.range, MerkleTree.RECOMMENDED_DEPTH, (int) Math.pow(2, depth));
 
             long start = System.nanoTime();
-            try (AbstractCompactionStrategy.ScannerList scanners = cfs.getCompactionStrategy().getScanners(sstables, validator.desc.range))
+            try (ScannerList scanners = cfs.getCompactionStrategyManager().getScanners(sstables, validator.desc.range))
             {
                 CompactionIterable ci = new ValidationCompactionIterable(cfs, scanners.scanners, gcBefore);
                 Iterator<AbstractCompactedRow> iter = ci.iterator();
@@ -1032,7 +1032,7 @@ public class CompactionManager implements CompactionManagerMBean
         logger.info("Performing anticompaction on {} sstables", repairedSSTables.size());
 
         //Group SSTables
-        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategy().groupSSTablesForAntiCompaction(repairedSSTables);
+        Collection<Collection<SSTableReader>> groupedSSTables = cfs.getCompactionStrategyManager().groupSSTablesForAntiCompaction(repairedSSTables);
         // iterate over sstables to check if the repaired / unrepaired ranges intersect them.
         int antiCompactedSSTableCount = 0;
         for (Collection<SSTableReader> sstableGroup : groupedSSTables)
@@ -1081,8 +1081,8 @@ public class CompactionManager implements CompactionManagerMBean
 
         long repairedKeyCount = 0;
         long unrepairedKeyCount = 0;
-        AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
-        try (AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(anticompactionGroup);
+        CompactionStrategyManager strategyManager = cfs.getCompactionStrategyManager();
+        try (ScannerList scanners = strategyManager.getScanners(anticompactionGroup);
              CompactionController controller = new CompactionController(cfs, sstableAsSet, CFMetaData.DEFAULT_GC_GRACE_SECONDS))
         {
             int expectedBloomFilterSize = Math.max(cfs.metadata.getMinIndexInterval(), (int)(SSTableReader.getApproximateKeyCount(anticompactionGroup)));

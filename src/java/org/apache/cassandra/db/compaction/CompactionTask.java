@@ -112,7 +112,7 @@ public class CompactionTask extends AbstractCompactionTask
 
         // Note that the current compaction strategy, is not necessarily the one this task was created under.
         // This should be harmless; see comments to CFS.maybeReloadCompactionStrategy.
-        AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
+        CompactionStrategyManager strategyManager = cfs.getCompactionStrategyManager();
 
         if (DatabaseDescriptor.isSnapshotBeforeCompaction())
             cfs.snapshotWithoutFlush(System.currentTimeMillis() + "-compact-" + cfs.name);
@@ -150,13 +150,13 @@ public class CompactionTask extends AbstractCompactionTask
             Set<SSTableReader> actuallyCompact = Sets.difference(sstables, controller.getFullyExpiredSSTables());
 
             long estimatedTotalKeys = Math.max(cfs.metadata.getMinIndexInterval(), SSTableReader.getApproximateKeyCount(actuallyCompact));
-            long estimatedSSTables = Math.max(1, SSTableReader.getTotalBytes(actuallyCompact) / strategy.getMaxSSTableBytes());
+            long estimatedSSTables = Math.max(1, SSTableReader.getTotalBytes(actuallyCompact) / strategyManager.getMaxSSTableBytes());
             long keysPerSSTable = (long) Math.ceil((double) estimatedTotalKeys / estimatedSSTables);
             SSTableFormat.Type sstableFormat = getFormatType(sstables);
 
             logger.debug("Expected bloom filter size : {}", keysPerSSTable);
 
-            try (AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(actuallyCompact))
+            try (ScannerList scanners = strategyManager.getScanners(actuallyCompact))
             {
                 AbstractCompactionIterable ci = new CompactionIterable(compactionType, scanners.scanners, controller, sstableFormat);
                 Iterator<AbstractCompactedRow> iter = ci.iterator();

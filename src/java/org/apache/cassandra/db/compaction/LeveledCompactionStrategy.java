@@ -97,15 +97,10 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
      */
     public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
-        if (!isEnabled())
-            return null;
-        Collection<AbstractCompactionTask> tasks = getMaximalTask(gcBefore);
-        if (tasks == null || tasks.size() == 0)
-            return null;
-        return tasks.iterator().next();
+        return getMaximalTask(gcBefore);
     }
 
-    public Collection<AbstractCompactionTask> getMaximalTask(int gcBefore)
+    public AbstractCompactionTask getMaximalTask(int gcBefore)
     {
         while (true)
         {
@@ -134,7 +129,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
             {
                 LeveledCompactionTask newTask = new LeveledCompactionTask(cfs, candidate.sstables, candidate.level, gcBefore, candidate.maxSSTableBytes);
                 newTask.setCompactionType(op);
-                return Arrays.<AbstractCompactionTask>asList(newTask);
+                return newTask;
             }
         }
     }

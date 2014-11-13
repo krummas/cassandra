@@ -66,19 +66,7 @@ public abstract class AbstractCompactionStrategy
     protected long tombstoneCompactionInterval;
     protected boolean uncheckedTombstoneCompaction;
 
-    /**
-     * pause/resume/getNextBackgroundTask must synchronize.  This guarantees that after pause completes,
-     * no new tasks will be generated; or put another way, pause can't run until in-progress tasks are
-     * done being created.
-     *
-     * This allows runWithCompactionsDisabled to be confident that after pausing, once in-progress
-     * tasks abort, it's safe to proceed with truncate/cleanup/etc.
-     *
-     * See CASSANDRA-3430
-     */
-    protected boolean isActive = false;
 
-    protected volatile boolean enabled = true;
 
     protected AbstractCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
     {
@@ -110,29 +98,10 @@ public abstract class AbstractCompactionStrategy
     }
 
     /**
-     * For internal, temporary suspension of background compactions so that we can do exceptional
-     * things like truncate or major compaction
-     */
-    public synchronized void pause()
-    {
-        isActive = false;
-    }
-
-    /**
-     * For internal, temporary suspension of background compactions so that we can do exceptional
-     * things like truncate or major compaction
-     */
-    public synchronized void resume()
-    {
-        isActive = true;
-    }
-
-    /**
      * Performs any extra initialization required
      */
     public void startup()
     {
-        isActive = true;
     }
 
     /**
@@ -140,7 +109,6 @@ public abstract class AbstractCompactionStrategy
      */
     public void shutdown()
     {
-        isActive = false;
     }
 
     /**
@@ -160,7 +128,7 @@ public abstract class AbstractCompactionStrategy
      *
      * Is responsible for marking its sstables as compaction-pending.
      */
-    public abstract Collection<AbstractCompactionTask> getMaximalTask(final int gcBefore);
+    public abstract AbstractCompactionTask getMaximalTask(final int gcBefore);
 
     /**
      * @param sstables SSTables to compact. Must be marked as compacting.
@@ -188,19 +156,12 @@ public abstract class AbstractCompactionStrategy
      */
     public abstract long getMaxSSTableBytes();
 
-    public boolean isEnabled()
-    {
-        return this.enabled && this.isActive;
-    }
-
     public void enable()
     {
-        this.enabled = true;
     }
 
     public void disable()
     {
-        this.enabled = false;
     }
 
     /**
@@ -302,42 +263,6 @@ public abstract class AbstractCompactionStrategy
     public abstract void addSSTable(SSTableReader added);
 
     public abstract void removeSSTable(SSTableReader sstable);
-
-    public static class ScannerList implements AutoCloseable
-    {
-        public final List<ICompactionScanner> scanners;
-        public ScannerList(List<ICompactionScanner> scanners)
-        {
-            this.scanners = scanners;
-        }
-
-        public void close()
-        {
-            Throwable t = null;
-            for (ICompactionScanner scanner : scanners)
-            {
-                try
-                {
-                    scanner.close();
-                }
-                catch (Throwable t2)
-                {
-                    JVMStabilityInspector.inspectThrowable(t2);
-                    if (t == null)
-                        t = t2;
-                    else
-                        t.addSuppressed(t2);
-                }
-            }
-            if (t != null)
-                throw Throwables.propagate(t);
-        }
-    }
-
-    public ScannerList getScanners(Collection<SSTableReader> toCompact)
-    {
-        return getScanners(toCompact, null);
-    }
 
     /**
      * Check if given sstable is worth dropping tombstones at gcBefore.

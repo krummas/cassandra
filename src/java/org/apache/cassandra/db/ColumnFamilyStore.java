@@ -144,7 +144,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     /* These are locally held copies to be changed from the config during runtime */
     private volatile DefaultInteger minCompactionThreshold;
     private volatile DefaultInteger maxCompactionThreshold;
-    private final WrappingCompactionStrategy compactionStrategyWrapper;
+    private final CompactionStrategyManager compactionStrategyManager;
 
     public final Directories directories;
 
@@ -169,7 +169,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             for (ColumnFamilyStore cfs : concatWithIndexes())
                 cfs.maxCompactionThreshold = new DefaultInteger(metadata.getMaxCompactionThreshold());
 
-        compactionStrategyWrapper.maybeReloadCompactionStrategy(metadata);
+        compactionStrategyManager.maybeReload(metadata);
 
         scheduleFlush();
 
@@ -220,7 +220,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         try
         {
             metadata.compactionStrategyClass = CFMetaData.createCompactionStrategy(compactionStrategyClass);
-            compactionStrategyWrapper.maybeReloadCompactionStrategy(metadata);
+            compactionStrategyManager.maybeReload(metadata);
         }
         catch (ConfigurationException e)
         {
@@ -304,12 +304,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             CacheService.instance.keyCache.loadSaved(this);
 
         // compaction strategy should be created after the CFS has been prepared
-        this.compactionStrategyWrapper = new WrappingCompactionStrategy(this);
+        this.compactionStrategyManager = new CompactionStrategyManager(this);
 
         if (maxCompactionThreshold.value() <= 0 || minCompactionThreshold.value() <=0)
         {
             logger.warn("Disabling compaction strategy by setting compaction thresholds to 0 is deprecated, set the compaction option 'enabled' to 'false' instead.");
-            this.compactionStrategyWrapper.disable();
+            this.compactionStrategyManager.disable();
         }
 
         // create the private ColumnFamilyStores for the secondary column indexes
@@ -373,7 +373,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             logger.warn("Failed unregistering mbean: {}", mbeanName, e);
         }
 
-        compactionStrategyWrapper.shutdown();
+        compactionStrategyManager.shutdown();
 
         SystemKeyspace.removeTruncationRecord(metadata.cfId);
         data.unreferenceSSTables();
@@ -1417,7 +1417,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     void replaceFlushed(Memtable memtable, List<SSTableReader> sstables)
     {
-        compactionStrategyWrapper.replaceFlushed(memtable, sstables);
+        compactionStrategyManager.replaceFlushed(memtable, sstables);
     }
 
     public boolean isValid()
@@ -1857,7 +1857,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         {
             public List<SSTableReader> apply(DataTracker.View view)
             {
-                return compactionStrategyWrapper.filterSSTablesForReads(view.intervalTree.search(key));
+                return compactionStrategyManager.filterSSTablesForReads(view.intervalTree.search(key));
             }
         };
     }
@@ -1872,7 +1872,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         {
             public List<SSTableReader> apply(DataTracker.View view)
             {
-                return compactionStrategyWrapper.filterSSTablesForReads(view.sstablesInBounds(rowBounds));
+                return compactionStrategyManager.filterSSTablesForReads(view.sstablesInBounds(rowBounds));
             }
         };
     }
@@ -2523,7 +2523,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
             Iterable<ColumnFamilyStore> selfWithIndexes = concatWithIndexes();
             for (ColumnFamilyStore cfs : selfWithIndexes)
-                cfs.getCompactionStrategy().pause();
+                cfs.getCompactionStrategyManager().pause();
             try
             {
                 // interrupt in-progress compactions
@@ -2572,7 +2572,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             finally
             {
                 for (ColumnFamilyStore cfs : selfWithIndexes)
-                    cfs.getCompactionStrategy().resume();
+                    cfs.getCompactionStrategyManager().resume();
             }
         }
     }
@@ -2649,7 +2649,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         // we don't use CompactionStrategy.pause since we don't want users flipping that on and off
         // during runWithCompactionsDisabled
-        this.compactionStrategyWrapper.disable();
+        compactionStrategyManager.disable();
     }
 
     public void enableAutoCompaction()
@@ -2664,7 +2664,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     @VisibleForTesting
     public void enableAutoCompaction(boolean waitForFutures)
     {
-        this.compactionStrategyWrapper.enable();
+        compactionStrategyManager.enable();
         List<Future<?>> futures = CompactionManager.instance.submitBackground(this);
         if (waitForFutures)
             FBUtilities.waitOnFutures(futures);
@@ -2672,7 +2672,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public boolean isAutoCompactionDisabled()
     {
-        return !this.compactionStrategyWrapper.isEnabled();
+        return !this.compactionStrategyManager.isEnabled();
     }
 
     /*
@@ -2684,9 +2684,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
        - get/set memtime
      */
 
-    public AbstractCompactionStrategy getCompactionStrategy()
+    public CompactionStrategyManager getCompactionStrategyManager()
     {
-        return compactionStrategyWrapper;
+        return compactionStrategyManager;
     }
 
     public void setCompactionThresholds(int minThreshold, int maxThreshold)
@@ -2783,12 +2783,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public int getUnleveledSSTables()
     {
-        return this.compactionStrategyWrapper.getUnleveledSSTables();
+        return compactionStrategyManager.getUnleveledSSTables();
     }
 
     public int[] getSSTableCountPerLevel()
     {
-        return compactionStrategyWrapper.getSSTableCountPerLevel();
+        return compactionStrategyManager.getSSTableCountPerLevel();
     }
 
     public static class ViewFragment

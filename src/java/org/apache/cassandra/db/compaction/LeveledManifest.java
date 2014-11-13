@@ -343,7 +343,7 @@ public class LeveledManifest
                     candidates = getOverlappingStarvedSSTables(nextLevel, candidates);
                     if (logger.isDebugEnabled())
                         logger.debug("Compaction candidates for L{} are {}", i, toString(candidates));
-                    return new CompactionCandidate(candidates, nextLevel, cfs.getCompactionStrategy().getMaxSSTableBytes());
+                    return new CompactionCandidate(candidates, nextLevel, maxSSTableSizeInBytes);
                 }
                 else
                 {
@@ -358,7 +358,7 @@ public class LeveledManifest
         Collection<SSTableReader> candidates = getCandidatesFor(0);
         if (candidates.isEmpty())
             return null;
-        return new CompactionCandidate(candidates, getNextLevel(candidates), cfs.getCompactionStrategy().getMaxSSTableBytes());
+        return new CompactionCandidate(candidates, getNextLevel(candidates), maxSSTableSizeInBytes);
     }
 
     private List<SSTableReader> getSSTablesForSTCS(Collection<SSTableReader> sstables)

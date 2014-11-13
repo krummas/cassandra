@@ -49,9 +49,6 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
     @Override
     public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
-        if (!isEnabled())
-            return null;
-
         while (true)
         {
             List<SSTableReader> latestBucket = getNextBackgroundSStables(gcBefore);
@@ -71,9 +68,6 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
      */
     private List<SSTableReader> getNextBackgroundSStables(final int gcBefore)
     {
-        if (!isEnabled() || cfs.getSSTables().isEmpty())
-            return Collections.emptyList();
-
         int base = cfs.getMinimumCompactionThreshold();
         long now = getNow();
         Iterable<SSTableReader> candidates = filterSuspectSSTables(Sets.intersection(cfs.getUncompactingSSTables(), sstables));
@@ -331,13 +325,13 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    public synchronized Collection<AbstractCompactionTask> getMaximalTask(int gcBefore)
+    public synchronized AbstractCompactionTask getMaximalTask(int gcBefore)
     {
         Iterable<SSTableReader> sstables = cfs.markAllCompacting();
         if (sstables == null)
             return null;
 
-        return Arrays.<AbstractCompactionTask>asList(new CompactionTask(cfs, sstables, gcBefore, false));
+        return new CompactionTask(cfs, sstables, gcBefore, false);
     }
 
     @Override
