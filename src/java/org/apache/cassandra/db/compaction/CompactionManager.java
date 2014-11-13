@@ -51,6 +51,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.RateLimiter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
@@ -456,26 +457,36 @@ public class CompactionManager implements CompactionManagerMBean
 
     public void performMaximal(final ColumnFamilyStore cfStore) throws InterruptedException, ExecutionException
     {
-        submitMaximal(cfStore, getDefaultGcBefore(cfStore)).get();
+        List<Future<?>> futures = submitMaximal(cfStore, getDefaultGcBefore(cfStore));
+        for (Future<?> future : futures)
+            future.get();
     }
 
-    public Future<?> submitMaximal(final ColumnFamilyStore cfStore, final int gcBefore)
+    public List<Future<?>> submitMaximal(final ColumnFamilyStore cfStore, final int gcBefore)
     {
         // here we compute the task off the compaction executor, so having that present doesn't
         // confuse runWithCompactionsDisabled -- i.e., we don't want to deadlock ourselves, waiting
         // for ourselves to finish/acknowledge cancellation before continuing.
         final Collection<AbstractCompactionTask> tasks = cfStore.getCompactionStrategyManager().getMaximalTasks(gcBefore);
-        Runnable runnable = new WrappedRunnable()
+
+        if (tasks == null)
+            return Arrays.<Future<?>>asList(Futures.immediateFuture(null));
+
+        List<Future<?>> futures = new ArrayList<>();
+        for (final AbstractCompactionTask task : tasks)
         {
-            protected void runMayThrow() throws IOException
+            futures.add(executor.submit(new WrappedRunnable()
             {
-                if (tasks == null)
-                    return;
-                for (AbstractCompactionTask task : tasks)
+                @Override
+                protected void runMayThrow() throws Exception
+                {
+                    if (task == null)
+                        return;
                     task.execute(metrics);
-            }
-        };
-        return executor.submit(runnable);
+                }
+            }));
+        }
+        return futures;
     }
 
     public void forceUserDefinedCompaction(String dataFiles)

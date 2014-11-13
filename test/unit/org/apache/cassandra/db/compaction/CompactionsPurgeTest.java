@@ -19,6 +19,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -126,7 +127,10 @@ public class CompactionsPurgeTest
         cfs.forceBlockingFlush();
 
         // major compact and test that all columns but the resurrected one is completely gone
-        CompactionManager.instance.submitMaximal(cfs, Integer.MAX_VALUE).get();
+        for (Future<?> future : CompactionManager.instance.submitMaximal(cfs, Integer.MAX_VALUE))
+        {
+            future.get();
+        }
         cfs.invalidateCachedRow(key);
         ColumnFamily cf = cfs.getColumnFamily(QueryFilter.getIdentityFilter(key, cfName, System.currentTimeMillis()));
         assertColumns(cf, "5");
@@ -387,8 +391,9 @@ public class CompactionsPurgeTest
         assertEquals(0, result.size());
 
         // compact the two sstables with a gcBefore that does *not* allow the row tombstone to be purged
-        Future<?> future = CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) - 10000);
-        future.get();
+        List<Future<?>> futures = CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) - 10000);
+        for (Future<?> future : futures)
+            future.get();
 
         // the data should be gone, but the tombstone should still exist
         assertEquals(1, cfs.getSSTables().size());
@@ -408,8 +413,9 @@ public class CompactionsPurgeTest
         cfs.forceBlockingFlush();
 
         // compact the two sstables with a gcBefore that *does* allow the row tombstone to be purged
-        future = CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) + 10000);
-        future.get();
+        futures = CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) + 10000);
+        for (Future<?> future : futures)
+            future.get();
 
         // both the data and the tombstone should be gone this time
         assertEquals(0, cfs.getSSTables().size());

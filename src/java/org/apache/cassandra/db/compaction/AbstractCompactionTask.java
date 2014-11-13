@@ -71,6 +71,19 @@ public abstract class AbstractCompactionTask extends DiskAwareRunnable
         return cfs.directories;
     }
 
+    protected Directories.DataDirectory getDirectory()
+    {
+        int index = -1;
+        for (SSTableReader sstable : sstables)
+        {
+            if (index == -1)
+                index = CompactionStrategyManager.getDirectoryIndexFor(sstable.descriptor, getDirectories().getWriteableLocations());
+            else
+                assert index == CompactionStrategyManager.getDirectoryIndexFor(sstable.descriptor, getDirectories().getWriteableLocations());
+        }
+        return getDirectories().getWriteableLocations()[index];
+    }
+
     public AbstractCompactionTask setUserDefined(boolean isUserDefined)
     {
         this.isUserDefined = isUserDefined;

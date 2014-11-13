@@ -231,7 +231,7 @@ public class Memtable
         if (!cfs.partitioner.supportsSplitting() || localRanges.isEmpty())
             return Arrays.asList(new FlushRunnable(lastReplayPosition.get()));
 
-        Directories.DataDirectory[] locations = cfs.directories.getWritableLocations();
+        Directories.DataDirectory[] locations = cfs.directories.getWriteableLocations();
 
         if (DatabaseDescriptor.getNumTokens() > 1)
             return createFlushRunnablesForVNodes(localRanges, locations);

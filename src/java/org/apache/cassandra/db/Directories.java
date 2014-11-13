@@ -345,7 +345,7 @@ public class Directories
         Collections.sort(candidates);
     }
 
-    public DataDirectory[] getWritableLocations()
+    public DataDirectory[] getWriteableLocations()
     {
         Arrays.sort(dataDirectories, new Comparator<DataDirectory>()
         {
