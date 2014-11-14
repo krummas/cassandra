@@ -129,7 +129,7 @@ public class SSTableRewriterTest extends SchemaLoader
         assertEquals(1, sstables.size());
         SSTableRewriter.overrideOpenInterval(10000000);
         SSTableRewriter writer = new SSTableRewriter(cfs, sstables, 1000, false);
-        try (AbstractCompactionStrategy.ScannerList scanners = cfs.getCompactionStrategy().getScanners(sstables);)
+        try (ScannerList scanners = cfs.getCompactionStrategyManager().getScanners(sstables))
         {
             ICompactionScanner scanner = scanners.scanners.get(0);
             CompactionController controller = new CompactionController(cfs, sstables, cfs.gcBefore(System.currentTimeMillis()));

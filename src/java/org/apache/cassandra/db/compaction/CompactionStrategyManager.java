@@ -148,7 +148,8 @@ public class CompactionStrategyManager implements INotificationConsumer
             if (descriptor.directory.getPath().startsWith(directory.location.getPath()))
                 return i;
         }
-        throw new RuntimeException("Could not find directory for "+descriptor);
+        logger.warn("Could not find directory for {} - putting it in {} instead",descriptor, directories[0].location);
+        return 0;
     }
 
     public void shutdown()

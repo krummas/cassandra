@@ -1417,7 +1417,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     void replaceFlushed(Memtable memtable, List<SSTableReader> sstables)
     {
-        compactionStrategyManager.replaceFlushed(memtable, sstables);
+        memtable.cfs.getCompactionStrategyManager().replaceFlushed(memtable, sstables);
     }
 
     public boolean isValid()
