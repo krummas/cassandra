@@ -37,6 +37,7 @@ public class StreamPlan
     private final List<StreamEventHandler> handlers = new ArrayList<>();
     private final long repairedAt;
     private final StreamCoordinator coordinator;
+    private final boolean isIncremental;
 
     private StreamConnectionFactory connectionFactory = new DefaultConnectionFactory();
 
@@ -49,14 +50,15 @@ public class StreamPlan
      */
     public StreamPlan(String description)
     {
-        this(description, ActiveRepairService.UNREPAIRED_SSTABLE, 1);
+        this(description, ActiveRepairService.UNREPAIRED_SSTABLE, 1, false);
     }
 
-    public StreamPlan(String description, long repairedAt, int connectionsPerHost)
+    public StreamPlan(String description, long repairedAt, int connectionsPerHost, boolean isIncremental)
     {
         this.description = description;
         this.repairedAt = repairedAt;
         this.coordinator = new StreamCoordinator(connectionsPerHost, connectionFactory);
+        this.isIncremental = isIncremental;
     }
 
     /**
@@ -86,7 +88,7 @@ public class StreamPlan
     public StreamPlan requestRanges(InetAddress from, InetAddress connecting, String keyspace, Collection<Range<Token>> ranges, String... columnFamilies)
     {
         StreamSession session = coordinator.getOrCreateNextSession(from, connecting);
-        session.addStreamRequest(keyspace, ranges, Arrays.asList(columnFamilies), repairedAt);
+        session.addStreamRequest(keyspace, ranges, Arrays.asList(columnFamilies), repairedAt, isIncremental);
         return this;
     }
 
@@ -127,7 +129,7 @@ public class StreamPlan
     public StreamPlan transferRanges(InetAddress to, InetAddress connecting, String keyspace, Collection<Range<Token>> ranges, String... columnFamilies)
     {
         StreamSession session = coordinator.getOrCreateNextSession(to, connecting);
-        session.addTransferRanges(keyspace, ranges, Arrays.asList(columnFamilies), flushBeforeTransfer, repairedAt);
+        session.addTransferRanges(keyspace, ranges, Arrays.asList(columnFamilies), flushBeforeTransfer, repairedAt, isIncremental);
         return this;
     }
 

@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.google.common.base.Predicate;
 import com.google.common.collect.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,6 +143,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     private int retries;
 
     private AtomicBoolean isAborted = new AtomicBoolean(false);
+    private boolean isIncremental = false;
 
     public static enum State
     {
@@ -236,8 +238,11 @@ public class StreamSession implements IEndpointStateChangeSubscriber
      * @param ranges Ranges to retrieve data
      * @param columnFamilies ColumnFamily names. Can be empty if requesting all CF under the keyspace.
      */
-    public void addStreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, long repairedAt)
+    public void addStreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, long repairedAt, boolean isIncremental)
     {
+        // switch the whole session to incremental or non-inc
+        // note that this never changes between calls to addStreamRequest(..), see StreamPlan
+        this.isIncremental = isIncremental;
         requests.add(new StreamRequest(keyspace, ranges, columnFamilies, repairedAt));
     }
 
@@ -252,8 +257,12 @@ public class StreamSession implements IEndpointStateChangeSubscriber
      * @param flushTables flush tables?
      * @param repairedAt the time the repair started.
      */
-    public void addTransferRanges(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, boolean flushTables, long repairedAt)
+    public void addTransferRanges(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, boolean flushTables, long repairedAt, boolean isIncremental)
     {
+        // switch the whole session to incremental or non-inc
+        // note that this never changes between calls to addTransferRanges(..), see StreamPlan
+        this.isIncremental = isIncremental;
+
         Collection<ColumnFamilyStore> stores = getColumnFamilyStores(keyspace, columnFamilies);
         if (flushTables)
             flushSSTables(stores);
@@ -297,7 +306,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                 List<AbstractBounds<RowPosition>> rowBoundsList = new ArrayList<>(ranges.size());
                 for (Range<Token> range : ranges)
                     rowBoundsList.add(range.toRowBounds());
-                ColumnFamilyStore.ViewFragment view = cfStore.selectAndReference(cfStore.viewFilter(rowBoundsList));
+                ColumnFamilyStore.ViewFragment view = cfStore.selectAndReference(cfStore.viewFilter(rowBoundsList, !isIncremental));
                 sstables.addAll(view.sstables);
             }
 
@@ -420,6 +429,11 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                 prepare(msg.requests, msg.summaries);
                 break;
 
+            case PREPARE_INCREMENTAL:
+                IncrementalPrepareMessage incMsg = (IncrementalPrepareMessage) message;
+                incrementalPrepare(incMsg.requests, incMsg.summaries);
+                break;
+
             case FILE:
                 receive((IncomingFileMessage) message);
                 break;
@@ -451,15 +465,29 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     {
         // send prepare message
         state(State.PREPARING);
-        PrepareMessage prepare = new PrepareMessage();
-        prepare.requests.addAll(requests);
-        for (StreamTransferTask task : transfers.values())
-            prepare.summaries.add(task.getSummary());
-        handler.sendMessage(prepare);
+        if (!isIncremental)
+        {
+            logger.debug("[Stream #{}] Not incremental streaming, sending PrepareMessage", planId());
+            PrepareMessage prepare = new PrepareMessage();
+            prepare.requests.addAll(requests);
+            for (StreamTransferTask task : transfers.values())
+                prepare.summaries.add(task.getSummary());
+            handler.sendMessage(prepare);
 
+        }
+        else
+        {
+            logger.debug("[Stream #{}] Incremental streaming, sending IncrementalPrepareMessage", planId());
+            IncrementalPrepareMessage prepare = new IncrementalPrepareMessage();
+            prepare.requests.addAll(requests);
+            for (StreamTransferTask task : transfers.values())
+                prepare.summaries.add(task.getSummary());
+            handler.sendMessage(prepare);
+        }
         // if we don't need to prepare for receiving stream, start sending files immediately
         if (requests.isEmpty())
             startStreamingFiles();
+
     }
 
     /**l
@@ -484,10 +512,8 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     {
         // prepare tasks
         state(State.PREPARING);
-        for (StreamRequest request : requests)
-            addTransferRanges(request.keyspace, request.ranges, request.columnFamilies, true, request.repairedAt); // always flush on stream request
-        for (StreamSummary summary : summaries)
-            prepareReceiving(summary);
+        addTransfers(requests);
+        addSummaries(summaries);
 
         // send back prepare message if prepare message contains stream request
         if (!requests.isEmpty())
@@ -502,6 +528,43 @@ public class StreamSession implements IEndpointStateChangeSubscriber
         if (!maybeCompleted())
             startStreamingFiles();
     }
+
+    /**
+     * Prepare this session for sending/receiving files.
+     */
+    public void incrementalPrepare(Collection<StreamRequest> requests, Collection<StreamSummary> summaries)
+    {
+        // prepare tasks
+        state(State.PREPARING);
+        addTransfers(requests);
+        addSummaries(summaries);
+
+        // send back prepare message if prepare message contains stream request
+        if (!requests.isEmpty())
+        {
+            IncrementalPrepareMessage prepare = new IncrementalPrepareMessage();
+            for (StreamTransferTask task : transfers.values())
+                prepare.summaries.add(task.getSummary());
+            handler.sendMessage(prepare);
+        }
+
+        // if there are files to stream
+        if (!maybeCompleted())
+            startStreamingFiles();
+    }
+
+    private void addTransfers(Collection<StreamRequest> requests)
+    {
+        for (StreamRequest request : requests)
+           addTransferRanges(request.keyspace, request.ranges, request.columnFamilies, true, request.repairedAt, true); // always flush on stream request
+    }
+    private void addSummaries(Collection<StreamSummary> summaries)
+    {
+        for (StreamSummary summary : summaries)
+            prepareReceiving(summary);
+    }
+
+
 
     /**
      * Call back after sending FileMessageHeader.

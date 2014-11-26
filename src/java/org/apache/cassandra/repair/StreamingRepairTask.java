@@ -63,10 +63,14 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
         long repairedAt = ActiveRepairService.UNREPAIRED_SSTABLE;
         InetAddress dest = request.dst;
         InetAddress preferred = SystemKeyspace.getPreferredIP(dest);
+        boolean isIncremental = false;
         if (desc.parentSessionId != null && ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId) != null)
+        {
             repairedAt = ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId).repairedAt;
+            isIncremental = true;
+        }
         logger.info(String.format("[streaming task #%s] Performing streaming repair of %d ranges with %s", desc.sessionId, request.ranges.size(), request.dst));
-        StreamResultFuture op = new StreamPlan("Repair", repairedAt, 1)
+        StreamResultFuture op = new StreamPlan("Repair", repairedAt, 1, isIncremental)
                                     .flushBeforeTransfer(true)
                                     // request ranges from the remote node
                                     .requestRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily)
