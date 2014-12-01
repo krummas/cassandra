@@ -18,11 +18,12 @@
 package org.apache.cassandra.streaming.messages;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
 
 import org.apache.cassandra.io.util.DataOutputStreamAndChannel;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.streaming.StreamSession;
 
 /**
@@ -33,7 +34,13 @@ import org.apache.cassandra.streaming.StreamSession;
 public abstract class StreamMessage
 {
     /** Streaming protocol version */
-    public static final int CURRENT_VERSION = 2;
+    public static final int LEGACY_VERSION = 2;
+    public static final int CURRENT_VERSION = 3;
+
+    public static boolean supportsVersionNegotiation(InetAddress addr)
+    {
+        return MessagingService.instance().getVersion(addr) >= MessagingService.VERSION_213;
+    }
 
     public static void serialize(StreamMessage message, DataOutputStreamAndChannel out, int version, StreamSession session) throws IOException
     {

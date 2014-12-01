@@ -44,11 +44,12 @@ public class CommitLogDescriptor
     public static final int VERSION_12 = 2;
     public static final int VERSION_20 = 3;
     public static final int VERSION_21 = 4;
+    public static final int VERSION_213 = 5;
     /**
      * Increment this number if there is a changes in the commit log disc layout or MessagingVersion changes.
      * Note: make sure to handle {@link #getMessagingVersion()}
      */
-    public static final int current_version = VERSION_21;
+    public static final int current_version = VERSION_213;
 
     // [version, id, checksum]
     static final int HEADER_SIZE = 4 + 8 + 4;
@@ -127,6 +128,8 @@ public class CommitLogDescriptor
                 return MessagingService.VERSION_20;
             case VERSION_21:
                 return MessagingService.VERSION_21;
+            case VERSION_213:
+                return MessagingService.VERSION_213;
             default:
                 throw new IllegalStateException("Unknown commitlog version " + version);
         }

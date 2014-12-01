@@ -59,21 +59,11 @@ public class StreamInitMessage
     /**
      * Create serialized message.
      *
-     * @param compress true if message is compressed
      * @param version Streaming protocol version
      * @return serialized message in ByteBuffer format
      */
-    public ByteBuffer createMessage(boolean compress, int version)
+    public ByteBuffer createMessage(int version)
     {
-        int header = 0;
-        // set compression bit.
-        if (compress)
-            header |= 4;
-        // set streaming bit
-        header |= 8;
-        // Setting up the version bit
-        header |= (version << 8);
-
         byte[] bytes;
         try
         {
@@ -88,9 +78,7 @@ public class StreamInitMessage
         }
         assert bytes.length > 0;
 
-        ByteBuffer buffer = ByteBuffer.allocate(4 + 4 + bytes.length);
-        buffer.putInt(MessagingService.PROTOCOL_MAGIC);
-        buffer.putInt(header);
+        ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
         buffer.put(bytes);
         buffer.flip();
         return buffer;

@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.streaming;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
@@ -77,12 +78,12 @@ public class ConnectionHandler
     {
         logger.debug("[Stream #{}] Sending stream init for incoming stream", session.planId());
         Socket incomingSocket = session.createConnection();
-        incoming.start(incomingSocket, StreamMessage.CURRENT_VERSION);
+        incoming.start(incomingSocket, session.streamVersion);
         incoming.sendInitMessage(incomingSocket, true);
 
         logger.debug("[Stream #{}] Sending stream init for outgoing stream", session.planId());
         Socket outgoingSocket = session.createConnection();
-        outgoing.start(outgoingSocket, StreamMessage.CURRENT_VERSION);
+        outgoing.start(outgoingSocket, session.streamVersion);
         outgoing.sendInitMessage(outgoingSocket, false);
     }
 
@@ -180,7 +181,7 @@ public class ConnectionHandler
                     session.planId(),
                     session.description(),
                     isForOutgoing);
-            ByteBuffer messageBuf = message.createMessage(false, protocolVersion);
+            ByteBuffer messageBuf = message.createMessage(protocolVersion);
             getWriteChannel(socket).write(messageBuf);
         }
 

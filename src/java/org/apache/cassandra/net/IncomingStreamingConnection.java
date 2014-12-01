@@ -19,6 +19,7 @@ package org.apache.cassandra.net;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 
@@ -51,18 +52,20 @@ public class IncomingStreamingConnection extends Thread
     {
         try
         {
-            // streaming connections are per-session and have a fixed version.  we can't do anything with a wrong-version stream connection, so drop it.
-            if (version != StreamMessage.CURRENT_VERSION)
-                throw new IOException(String.format("Received stream using protocol version %d (my version %d). Terminating connection", version, MessagingService.current_version));
-
+            int maxVersion = Math.min(version, StreamMessage.CURRENT_VERSION);
+            if (maxVersion > StreamMessage.LEGACY_VERSION)
+            {
+                DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+                dos.writeInt(Math.min(version, maxVersion));
+            }
+            logger.info("NEGOTIATING STREAM VERSION maxV={} v={} cur={}", maxVersion, version, StreamMessage.CURRENT_VERSION);
             DataInput input = new DataInputStream(socket.getInputStream());
-            StreamInitMessage init = StreamInitMessage.serializer.deserialize(input, version);
-
+            StreamInitMessage init = StreamInitMessage.serializer.deserialize(input, maxVersion);
             // The initiator makes two connections, one for incoming and one for outgoing.
             // The receiving side distinguish two connections by looking at StreamInitMessage#isForOutgoing.
             // Note: we cannot use the same socket for incoming and outgoing streams because we want to
             // parallelize said streams and the socket is blocking, so we might deadlock.
-            StreamResultFuture.initReceivingSide(init.sessionIndex, init.planId, init.description, init.from, socket, init.isForOutgoing, version);
+            StreamResultFuture.initReceivingSide(init.sessionIndex, init.planId, init.description, init.from, socket, init.isForOutgoing, maxVersion);
         }
         catch (IOException e)
         {

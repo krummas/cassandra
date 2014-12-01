@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.streaming;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
@@ -39,6 +40,7 @@ import org.apache.cassandra.gms.*;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.util.DataOutputStreamAndChannel;
 import org.apache.cassandra.metrics.StreamingMetrics;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.messages.*;
@@ -142,6 +144,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     private int retries;
 
     private AtomicBoolean isAborted = new AtomicBoolean(false);
+    public int streamVersion;
 
     public static enum State
     {
@@ -226,7 +229,26 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     public Socket createConnection() throws IOException
     {
         assert factory != null;
-        return factory.createConnection(connecting);
+        Socket s = factory.createConnection(connecting);
+        int outVersion = StreamMessage.LEGACY_VERSION;
+        boolean supportsVersionNegotiation = StreamMessage.supportsVersionNegotiation(peer);
+        if (supportsVersionNegotiation)
+            outVersion = StreamMessage.CURRENT_VERSION;
+
+        DataOutputStreamAndChannel out = ConnectionHandler.MessageHandler.getWriteChannel(s);
+        out.write(StreamHandshakeMessage.create(outVersion));
+
+        if (supportsVersionNegotiation)
+        {
+            DataInputStream dis = new DataInputStream(s.getInputStream());
+            streamVersion = dis.readInt();
+        }
+        else
+        {
+            streamVersion = StreamMessage.LEGACY_VERSION;
+        }
+        logger.info("NEGOTIATED VERSION={}", streamVersion);
+        return s;
     }
 
     /**
