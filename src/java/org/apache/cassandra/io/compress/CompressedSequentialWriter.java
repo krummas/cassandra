@@ -150,6 +150,11 @@ public class CompressedSequentialWriter extends SequentialWriter
         return metadataWriter.openAfterClose(current, chunkOffset);
     }
 
+    public CompressionMetadata openEarlyFinish()
+    {
+        return metadataWriter.openEarlyFinish(current, chunkOffset);
+    }
+
     @Override
     public FileMark mark()
     {

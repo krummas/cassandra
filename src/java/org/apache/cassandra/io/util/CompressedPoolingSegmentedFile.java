@@ -45,15 +45,19 @@ public class CompressedPoolingSegmentedFile extends PoolingSegmentedFile impleme
 
         public SegmentedFile complete(String path)
         {
-            return new CompressedPoolingSegmentedFile(path, metadata(path, false));
+            return new CompressedPoolingSegmentedFile(path, metadata(path, OpenType.NORMAL));
         }
 
         public SegmentedFile openEarly(String path)
         {
-            return new CompressedPoolingSegmentedFile(path, metadata(path, true));
+            return new CompressedPoolingSegmentedFile(path, metadata(path, OpenType.EARLY));
+        }
+
+        public SegmentedFile completeEarly(String path)
+        {
+            return new CompressedPoolingSegmentedFile(path, metadata(path, OpenType.EARLY_FINISH));
         }
     }
-
     protected RandomAccessReader createReader(String path)
     {
         return CompressedRandomAccessReader.open(path, metadata, this);

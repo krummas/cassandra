@@ -117,6 +117,10 @@ public abstract class SegmentedFile
          */
         public abstract SegmentedFile complete(String path);
 
+        public SegmentedFile completeEarly(String path)
+        {
+            return complete(path);
+        }
         /**
          * Called after all potential boundaries have been added to apply this Builder to a concrete file on disk.
          * @param path The file on disk.

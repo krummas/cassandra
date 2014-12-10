@@ -33,6 +33,10 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
 
     public static class Builder extends SegmentedFile.Builder
     {
+        public enum OpenType
+        {
+            EARLY, NORMAL, EARLY_FINISH
+        }
         protected final CompressedSequentialWriter writer;
         public Builder(CompressedSequentialWriter writer)
         {
@@ -44,24 +48,35 @@ public class CompressedSegmentedFile extends SegmentedFile implements ICompresse
             // only one segment in a standard-io file
         }
 
-        protected CompressionMetadata metadata(String path, boolean early)
+        protected CompressionMetadata metadata(String path, OpenType openType)
         {
             if (writer == null)
                 return CompressionMetadata.create(path);
-            else if (early)
-                return writer.openEarly();
-            else
-                return writer.openAfterClose();
+
+            switch (openType)
+            {
+                case EARLY:
+                    return writer.openEarly();
+                case NORMAL:
+                    return writer.openAfterClose();
+                case EARLY_FINISH:
+                    return writer.openEarlyFinish();
+            }
+            throw new IllegalStateException("Unknown open type: "+openType);
         }
 
         public SegmentedFile complete(String path)
         {
-            return new CompressedSegmentedFile(path, metadata(path, false));
+            return new CompressedSegmentedFile(path, metadata(path, OpenType.NORMAL));
         }
 
         public SegmentedFile openEarly(String path)
         {
-            return new CompressedSegmentedFile(path, metadata(path, true));
+            return new CompressedSegmentedFile(path, metadata(path, OpenType.EARLY));
+        }
+        public SegmentedFile completeEarly(String path)
+        {
+            return new CompressedSegmentedFile(path, metadata(path, OpenType.EARLY_FINISH));
         }
     }
 

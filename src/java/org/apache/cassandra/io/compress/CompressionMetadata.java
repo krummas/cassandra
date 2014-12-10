@@ -330,7 +330,11 @@ public class CompressionMetadata
             offsets.unreference();
             return new CompressionMetadata(filePath, parameters, newOffsets, count * 8L, dataLength, compressedLength, Descriptor.Version.CURRENT.hasPostCompressionAdlerChecksums);
         }
-
+        public CompressionMetadata openEarlyFinish(long dataLength, long compressedLength)
+        {
+            RefCountedMemory newOffsets = offsets.copy(count * 8L);
+            return new CompressionMetadata(filePath, parameters, newOffsets, count * 8L, dataLength, compressedLength, Descriptor.Version.CURRENT.hasPostCompressionAdlerChecksums);
+        }
         /**
          * Get a chunk offset by it's index.
          *

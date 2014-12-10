@@ -495,7 +495,78 @@ public class SSTableWriter extends SSTable
         return Pair.create(rename(descriptor, components), (StatsMetadata) metadataComponents.get(MetadataType.STATS));
 
     }
+    public SSTableReader closeEarly(long maxDataAge)
+    {
+        if (getFilePointer() == 0)
+            return null;
+        // index and filter
+        iwriter.close();
+        // main data, close will truncate if necessary
+        dataFile.close();
+        Map<MetadataType, MetadataComponent> metadataComponents = sstableMetadataCollector.finalizeMetadata(
+                                                                                    partitioner.getClass().getCanonicalName(),
+                                                                                    metadata.getBloomFilterFpChance(),
+                                                                                    repairedAt);
 
+        Descriptor link = descriptor.asType(Descriptor.Type.TEMPLINK);
+        if (!new File(link.filenameFor(Component.PRIMARY_INDEX)).exists())
+        {
+            FileUtils.createHardLink(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)), new File(link.filenameFor(Component.PRIMARY_INDEX)));
+            FileUtils.createHardLink(new File(descriptor.filenameFor(Component.DATA)), new File(link.filenameFor(Component.DATA)));
+        }
+        // finalize in-memory state for the reader
+        SegmentedFile ifile = iwriter.builder.completeEarly(link.filenameFor(Component.PRIMARY_INDEX));
+        SegmentedFile dfile = dbuilder.completeEarly(link.filenameFor(Component.DATA));
+        SSTableReader sstable = SSTableReader.internalOpen(link.asType(Descriptor.Type.FINAL),
+                                                           components,
+                                                           metadata,
+                                                           partitioner,
+                                                           ifile,
+                                                           dfile,
+                                                           iwriter.summary.build(partitioner),
+                                                           iwriter.bf,
+                                                           maxDataAge,
+                                                           (StatsMetadata) metadataComponents.get(MetadataType.STATS),
+                                                           SSTableReader.OpenReason.EARLY);
+        sstable.first = getMinimalKey(first);
+        sstable.last = getMinimalKey(last);
+        return sstable;
+    }
+    public SSTableReader finishEarly(long maxDataAge)
+    {
+        return finishEarly(maxDataAge, repairedAt);
+    }
+    public SSTableReader finishEarly(long maxDataAge, long repairedAt)
+    {
+        dataFile.writeFullChecksum(descriptor);
+        // write sstable statistics
+        Map<MetadataType, MetadataComponent> metadataComponents = sstableMetadataCollector.finalizeMetadata(
+                                                                                    partitioner.getClass().getCanonicalName(),
+                                                                                    metadata.getBloomFilterFpChance(),
+                                                                                    repairedAt);
+        writeMetadata(descriptor, metadataComponents);
+
+        // save the table of components
+        SSTable.appendTOC(descriptor, components);
+        Descriptor newdesc = rename(descriptor, components);
+        SegmentedFile ifile = iwriter.builder.complete(newdesc.filenameFor(Component.PRIMARY_INDEX));
+        SegmentedFile dfile = dbuilder.complete(newdesc.filenameFor(Component.DATA));
+        SSTableReader sstable = SSTableReader.internalOpen(newdesc,
+                                                           components,
+                                                           metadata,
+                                                           partitioner,
+                                                           ifile,
+                                                           dfile,
+                                                           iwriter.summary.build(partitioner),
+                                                           iwriter.bf,
+                                                           maxDataAge,
+                                                           (StatsMetadata) metadataComponents.get(MetadataType.STATS),
+                                                           SSTableReader.OpenReason.NORMAL);
+        sstable.first = getMinimalKey(first);
+        sstable.last = getMinimalKey(last);
+        sstable.saveSummary(iwriter.builder, dbuilder);
+        return sstable;
+    }
 
     private static void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components)
     {

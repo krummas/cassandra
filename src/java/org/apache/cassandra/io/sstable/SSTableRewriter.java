@@ -295,8 +295,8 @@ public class SSTableRewriter
             writer = newWriter;
             return;
         }
-        // we leave it as a tmp file, but we open it early and add it to the dataTracker
-        SSTableReader reader = writer.openEarly(maxAge);
+        // we leave it as a tmp file, but we open it and add it to the dataTracker
+        SSTableReader reader = writer.closeEarly(maxAge);
         if (reader != null)
         {
             finishedOpenedEarly.add(reader);
@@ -333,6 +333,7 @@ public class SSTableRewriter
     {
         List<Pair<SSTableReader, SSTableReader>> toReplace = new ArrayList<>();
         switchWriter(null);
+
         // make real sstables of the written ones:
         Iterator<Pair<SSTableWriter, SSTableReader>> it = finishedWriters.iterator();
         while(it.hasNext())
@@ -340,7 +341,7 @@ public class SSTableRewriter
             Pair<SSTableWriter, SSTableReader> w = it.next();
             if (w.left.getFilePointer() > 0)
             {
-                SSTableReader newReader = repairedAt < 0 ? w.left.closeAndOpenReader(maxAge) : w.left.closeAndOpenReader(maxAge, repairedAt);
+                SSTableReader newReader = repairedAt < 0 ? w.left.finishEarly(maxAge) : w.left.finishEarly(maxAge, repairedAt);
                 finished.add(newReader);
 
                 if (w.right != null)
@@ -380,7 +381,7 @@ public class SSTableRewriter
             Pair<SSTableWriter, SSTableReader> w = it.next();
             if (w.left.getFilePointer() > 0)
             {
-                SSTableReader newReader = w.left.closeAndOpenReader(maxAge);
+                SSTableReader newReader = w.left.finishEarly(maxAge);
                 finished.add(newReader);
                 if (w.right != null)
                     w.right.sharesBfWith(newReader);
