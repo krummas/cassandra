@@ -1206,6 +1206,9 @@ public class NodeTool
         @Arguments(usage = "[<keyspace> <tables>...]", description = "The keyspace followed by one or many tables")
         private List<String> args = new ArrayList<>();
 
+        @Option(title = "split_output", name = {"-s", "--split-output"}, description = "Use -s to not create a single big file")
+        private boolean splitOutput = false;
+
         @Override
         public void execute(NodeProbe probe)
         {
@@ -1216,7 +1219,7 @@ public class NodeTool
             {
                 try
                 {
-                    probe.forceKeyspaceCompaction(keyspace, cfnames);
+                    probe.forceKeyspaceCompaction(splitOutput, keyspace, cfnames);
                 } catch (Exception e)
                 {
                     throw new RuntimeException("Error occurred during compaction", e);

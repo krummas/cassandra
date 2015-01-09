@@ -240,9 +240,9 @@ public class NodeProbe implements AutoCloseable
     }
 
 
-    public void forceKeyspaceCompaction(String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public void forceKeyspaceCompaction(boolean optOutput, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        ssProxy.forceKeyspaceCompaction(keyspaceName, columnFamilies);
+        ssProxy.forceKeyspaceCompaction(optOutput, keyspaceName, columnFamilies);
     }
 
     public void forceKeyspaceFlush(String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException

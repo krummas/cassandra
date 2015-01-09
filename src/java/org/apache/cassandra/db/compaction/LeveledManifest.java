@@ -254,8 +254,7 @@ public class LeveledManifest
         return builder.toString();
     }
 
-    @VisibleForTesting
-    long maxBytesForLevel(int level)
+    public static long maxBytesForLevel(int level, long maxSSTableSizeInBytes)
     {
         if (level == 0)
             return 4L * maxSSTableSizeInBytes;
@@ -318,7 +317,7 @@ public class LeveledManifest
             // we want to calculate score excluding compacting ones
             Set<SSTableReader> sstablesInLevel = Sets.newHashSet(sstables);
             Set<SSTableReader> remaining = Sets.difference(sstablesInLevel, cfs.getDataTracker().getCompacting());
-            double score = (double) SSTableReader.getTotalBytes(remaining) / (double)maxBytesForLevel(i);
+            double score = (double) SSTableReader.getTotalBytes(remaining) / (double)maxBytesForLevel(i, maxSSTableSizeInBytes);
             logger.debug("Compaction score for level {} is {}", i, score);
 
             if (score > 1.001)
@@ -684,7 +683,7 @@ public class LeveledManifest
         for (int i = generations.length - 1; i >= 0; i--)
         {
             List<SSTableReader> sstables = getLevel(i);
-            estimated[i] = Math.max(0L, SSTableReader.getTotalBytes(sstables) - maxBytesForLevel(i)) / maxSSTableSizeInBytes;
+            estimated[i] = Math.max(0L, SSTableReader.getTotalBytes(sstables) - maxBytesForLevel(i, maxSSTableSizeInBytes)) / maxSSTableSizeInBytes;
             tasks += estimated[i];
         }
 
@@ -715,6 +714,16 @@ public class LeveledManifest
         }
         return newLevel;
 
+    }
+
+    public Iterable<SSTableReader> getAllSSTables()
+    {
+        Set<SSTableReader> sstables = new HashSet<>();
+        for (List<SSTableReader> generation : generations)
+        {
+            sstables.addAll(generation);
+        }
+        return sstables;
     }
 
     public static class CompactionCandidate
