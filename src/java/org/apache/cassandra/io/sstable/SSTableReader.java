@@ -401,6 +401,7 @@ public class SSTableReader extends SSTable implements RefCounted
         if (sstable.getKeyCache() != null)
             logger.debug("key cache contains {}/{} keys", sstable.getKeyCache().size(), sstable.getKeyCache().getCapacity());
 
+        sstable.tidy.setup(sstable);
         return sstable;
     }
 
