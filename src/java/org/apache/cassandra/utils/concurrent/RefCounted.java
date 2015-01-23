@@ -311,7 +311,7 @@ public interface RefCounted
             return new Refs<>(ImmutableMap.copyOf(builder));
         }
 
-        public static <T extends RefCounted> Refs<T> ref(Iterable<T> reference)
+        public static <T extends RefCounted> Refs<T> tryRef(Iterable<T> reference)
         {
             HashMap<T, Ref> refs = new HashMap<>();
             for (T rc : reference)
@@ -325,6 +325,13 @@ public interface RefCounted
                 refs.put(rc, ref);
             }
             return new Refs<T>(refs);
+        }
+        public static <T extends RefCounted> Refs<T> ref(Iterable<T> reference)
+        {
+            Refs<T> refs = tryRef(reference);
+            if (refs != null)
+                return refs;
+            throw new IllegalStateException();
         }
 
         public void close()

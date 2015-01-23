@@ -32,7 +32,6 @@ import org.apache.cassandra.db.DataTracker;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
-import org.apache.cassandra.utils.concurrent.RefCounted;
 
 import static org.apache.cassandra.utils.concurrent.RefCounted.Refs;
 
@@ -82,7 +81,7 @@ public class CompactionController implements AutoCloseable
             overlappingSSTables.release();
 
         if (compacting == null)
-            overlappingSSTables = Refs.ref(Collections.<SSTableReader>emptyList());
+            overlappingSSTables = Refs.tryRef(Collections.<SSTableReader>emptyList());
         else
             overlappingSSTables = cfs.getAndReferenceOverlappingSSTables(compacting);
         this.overlappingTree = DataTracker.buildIntervalTree(overlappingSSTables);

@@ -35,7 +35,6 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
-import org.apache.cassandra.utils.concurrent.RefCounted;
 
 import static org.apache.cassandra.utils.concurrent.RefCounted.Refs;
 
@@ -130,18 +129,11 @@ public class StreamReceiveTask extends StreamTask
             lockfile.delete();
             task.sstables.clear();
 
-            Refs<SSTableReader> refs = Refs.ref(readers);
-            if (refs == null)
-                throw new AssertionError("We shouldn't fail acquiring a reference on a sstable that has just been transferred");
-            try
+            try (Refs<SSTableReader> refs = Refs.ref(readers))
             {
                 // add sstables and build secondary indexes
                 cfs.addSSTables(readers);
                 cfs.indexManager.maybeBuildSecondaryIndexes(readers, cfs.indexManager.allIndexesNames());
-            }
-            finally
-            {
-                refs.release();
             }
 
             task.session.taskCompleted(task);

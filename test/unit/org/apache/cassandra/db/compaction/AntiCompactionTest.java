@@ -64,7 +64,7 @@ public class AntiCompactionTest extends SchemaLoader
         Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("4".getBytes()));
         List<Range<Token>> ranges = Arrays.asList(range);
 
-        Refs<SSTableReader> refs = Refs.ref(sstables);
+        Refs<SSTableReader> refs = Refs.tryRef(sstables);
         if (refs == null)
             throw new IllegalStateException();
         long repairedAt = 1000;
@@ -113,7 +113,7 @@ public class AntiCompactionTest extends SchemaLoader
         long origSize = s.bytesOnDisk();
         Range<Token> range = new Range<Token>(new BytesToken(ByteBufferUtil.bytes(0)), new BytesToken(ByteBufferUtil.bytes(500)));
         Collection<SSTableReader> sstables = cfs.getSSTables();
-        CompactionManager.instance.performAnticompaction(cfs, Arrays.asList(range), Refs.ref(sstables), 12345);
+        CompactionManager.instance.performAnticompaction(cfs, Arrays.asList(range), Refs.tryRef(sstables), 12345);
         long sum = 0;
         for (SSTableReader x : cfs.getSSTables())
             sum += x.bytesOnDisk();
@@ -151,7 +151,7 @@ public class AntiCompactionTest extends SchemaLoader
         Range<Token> range = new Range<Token>(new BytesToken("-10".getBytes()), new BytesToken("-1".getBytes()));
         List<Range<Token>> ranges = Arrays.asList(range);
 
-        Refs<SSTableReader> refs = Refs.ref(sstables);
+        Refs<SSTableReader> refs = Refs.tryRef(sstables);
         if (refs == null)
             throw new IllegalStateException();
         CompactionManager.instance.performAnticompaction(store, ranges, refs, 1);
@@ -170,7 +170,7 @@ public class AntiCompactionTest extends SchemaLoader
         Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("9999".getBytes()));
         List<Range<Token>> ranges = Arrays.asList(range);
 
-        CompactionManager.instance.performAnticompaction(store, ranges, Refs.ref(sstables), 1);
+        CompactionManager.instance.performAnticompaction(store, ranges, Refs.tryRef(sstables), 1);
 
         assertThat(store.getSSTables().size(), is(1));
         assertThat(Iterables.get(store.getSSTables(), 0).isRepaired(), is(true));

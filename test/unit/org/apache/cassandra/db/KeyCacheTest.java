@@ -152,7 +152,7 @@ public class KeyCacheTest extends SchemaLoader
         assertKeyCacheSize(2, KEYSPACE1, COLUMN_FAMILY1);
 
         Set<SSTableReader> readers = cfs.getDataTracker().getSSTables();
-        Refs<SSTableReader> refs = Refs.ref(readers);
+        Refs<SSTableReader> refs = Refs.tryRef(readers);
         if (refs == null)
             throw new IllegalStateException();
 

@@ -51,7 +51,6 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CounterId;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.concurrent.RefCounted;
 
 import static org.apache.cassandra.utils.concurrent.RefCounted.Refs;
 import static org.junit.Assert.assertEquals;
@@ -205,7 +204,7 @@ public class StreamingTransferTest extends SchemaLoader
 
     private void transfer(SSTableReader sstable, List<Range<Token>> ranges) throws Exception
     {
-        new StreamPlan("StreamingTransferTest").transferFiles(LOCAL, makeStreamingDetails(ranges, Refs.ref(Arrays.asList(sstable)))).execute().get();
+        new StreamPlan("StreamingTransferTest").transferFiles(LOCAL, makeStreamingDetails(ranges, Refs.tryRef(Arrays.asList(sstable)))).execute().get();
     }
 
     private Collection<StreamSession.SSTableStreamingSections> makeStreamingDetails(List<Range<Token>> ranges, Refs<SSTableReader> sstables)
@@ -377,7 +376,7 @@ public class StreamingTransferTest extends SchemaLoader
         ranges.add(new Range<>(p.getMinimumToken(), p.getToken(ByteBufferUtil.bytes("test"))));
         ranges.add(new Range<>(p.getToken(ByteBufferUtil.bytes("transfer2")), p.getMinimumToken()));
         // Acquiring references, transferSSTables needs it
-        Refs<SSTableReader> refs = Refs.ref(Arrays.asList(sstable, sstable2));
+        Refs<SSTableReader> refs = Refs.tryRef(Arrays.asList(sstable, sstable2));
         assert refs != null;
         new StreamPlan("StreamingTransferTest").transferFiles(LOCAL, makeStreamingDetails(ranges, refs)).execute().get();
 
@@ -430,7 +429,7 @@ public class StreamingTransferTest extends SchemaLoader
         ranges.add(new Range<>(secondtolast.getKey().getToken(), p.getMinimumToken()));
 
         // Acquiring references, transferSSTables needs it
-        Refs<SSTableReader> refs = Refs.ref(ssTableReaders);
+        Refs<SSTableReader> refs = Refs.tryRef(ssTableReaders);
         if (refs == null)
             throw new AssertionError();
 

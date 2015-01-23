@@ -61,7 +61,6 @@ import org.apache.cassandra.dht.*;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSReadError;
-import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.CompressionParameters;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.sstable.Descriptor;
@@ -735,17 +734,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         }
 
         logger.info("Loading new SSTables and building secondary indexes for {}/{}: {}", keyspace.getName(), name, newSSTables);
-        Refs refs = Refs.ref(newSSTables);
-        if (refs == null)
-            throw new IllegalStateException();
-        data.addSSTables(newSSTables);
-        try
+
+        try (Refs<SSTableReader> refs = Refs.ref(newSSTables))
         {
+            data.addSSTables(newSSTables);
             indexManager.maybeBuildSecondaryIndexes(newSSTables, indexManager.allIndexesNames());
-        }
-        finally
-        {
-            refs.release();
         }
 
         logger.info("Done loading load new SSTables for {}/{}", keyspace.getName(), name);
@@ -758,19 +751,13 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         Set<String> indexes = new HashSet<String>(Arrays.asList(idxNames));
 
         Collection<SSTableReader> sstables = cfs.getSSTables();
-        Refs refs = Refs.ref(sstables);
-        if (refs == null)
-            throw new IllegalStateException();
-        try
+
+        try (Refs<SSTableReader> refs = Refs.ref(sstables))
         {
             cfs.indexManager.setIndexRemoved(indexes);
             logger.info(String.format("User Requested secondary index re-build for %s/%s indexes", ksName, cfName));
             cfs.indexManager.maybeBuildSecondaryIndexes(sstables, indexes);
             cfs.indexManager.setIndexBuilt(indexes);
-        }
-        finally
-        {
-            refs.release();
         }
     }
 
@@ -1285,7 +1272,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         while (true)
         {
             Iterable<SSTableReader> overlapped = getOverlappingSSTables(sstables);
-            Refs<SSTableReader> refs = Refs.ref(overlapped);
+            Refs<SSTableReader> refs = Refs.tryRef(overlapped);
             if (refs != null)
                 return refs;
         }
@@ -1770,7 +1757,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         while (true)
         {
             ViewFragment view = select(filter);
-            Refs<SSTableReader> refs = Refs.ref(view.sstables);
+            Refs<SSTableReader> refs = Refs.tryRef(view.sstables);
             if (refs != null)
                 return new RefViewFragment(view.sstables, view.memtables, refs);
         }
