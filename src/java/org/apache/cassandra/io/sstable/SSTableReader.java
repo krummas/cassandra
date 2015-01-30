@@ -435,13 +435,13 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         sstable.load(validationMetadata);
         logger.debug("INDEX LOAD TIME for {}: {} ms.", descriptor, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
+        sstable.setup();
         if (validate)
             sstable.validate();
 
         if (sstable.getKeyCache() != null)
             logger.debug("key cache contains {}/{} keys", sstable.getKeyCache().size(), sstable.getKeyCache().getCapacity());
 
-        sstable.setup();
         return sstable;
     }
 
@@ -989,7 +989,10 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     private void validate()
     {
         if (this.first.compareTo(this.last) > 0)
+        {
+            selfRef().release();
             throw new IllegalStateException(String.format("SSTable first key %s > last key %s", this.first, this.last));
+        }
     }
 
     /**
@@ -1892,8 +1895,11 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         private TypeManager.TypeTidy type;
         private GlobalManager.GlobalTidy global;
 
+        private boolean setup;
+
         void setup(SSTableReader reader)
         {
+            this.setup = true;
             this.bf = reader.bf;
             this.summary = reader.indexSummary;
             this.dfile = reader.dfile;
@@ -1911,6 +1917,10 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
         public void tidy()
         {
+            // don't try to cleanup if the sstablereader was never fully constructed
+            if (!setup)
+                return;
+
             final ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata.cfId);
             final OpOrder.Barrier barrier;
             if (cfs != null)
@@ -1927,7 +1937,6 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                 {
                     if (barrier != null)
                         barrier.await();
-
                     bf.close();
                     dfile.close();
                     ifile.close();
