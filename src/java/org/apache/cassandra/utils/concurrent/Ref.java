@@ -10,16 +10,18 @@ import org.slf4j.LoggerFactory;
 /**
  * A single managed reference to a RefCounted object
  */
-public final class Ref
+public final class Ref<T>
 {
     static final Logger logger = LoggerFactory.getLogger(Ref.class);
     static final boolean DEBUG_ENABLED = System.getProperty("cassandra.debugrefcount", "false").equalsIgnoreCase("true");
 
     final State state;
+    final T referent;
 
-    Ref(RefCountedImpl.GlobalState state, boolean isSharedRef)
+    Ref(T referent, RefCountedImpl.GlobalState state, boolean isSharedRef)
     {
         this.state = new State(state, this, RefCountedImpl.referenceQueue, isSharedRef);
+        this.referent = referent;
     }
 
     /**
@@ -30,6 +32,12 @@ public final class Ref
     public void release()
     {
         state.release(false);
+    }
+
+    public T get()
+    {
+        state.assertNotReleased();
+        return referent;
     }
 
     /**
@@ -58,6 +66,13 @@ public final class Ref
             this.globalState = globalState;
             this.isSharedRef = isSharedRef;
             globalState.register(this);
+        }
+
+        void assertNotReleased()
+        {
+            if (DEBUG_ENABLED && released == 1)
+                debug.log(toString());
+            assert released == 0;
         }
 
         void release(boolean leak)

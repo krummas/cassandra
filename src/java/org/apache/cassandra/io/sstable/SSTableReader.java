@@ -114,6 +114,7 @@ import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.RefCounted;
+import org.apache.cassandra.utils.concurrent.RefCountedImpl;
 
 import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
 
@@ -121,7 +122,7 @@ import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
  * Do not re-call open() on existing SSTable files; use the references kept by ColumnFamilyStore post-start instead.
  */
-public class SSTableReader extends SSTable implements RefCounted
+public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 {
     private static final Logger logger = LoggerFactory.getLogger(SSTableReader.class);
 
@@ -194,7 +195,7 @@ public class SSTableReader extends SSTable implements RefCounted
     private final AtomicLong keyCacheRequest = new AtomicLong(0);
 
     private final Tidier tidy = new Tidier();
-    private final RefCounted refCounted = RefCounted.Impl.get(tidy);
+    private final RefCounted<SSTableReader> refCounted = new RefCountedImpl<>(this, tidy);
 
     @VisibleForTesting
     public RestorableMeter readMeter;
@@ -1882,12 +1883,12 @@ public class SSTableReader extends SSTable implements RefCounted
         }
     }
 
-    public Ref tryRef()
+    public Ref<SSTableReader> tryRef()
     {
         return refCounted.tryRef();
     }
 
-    public Ref sharedRef()
+    public Ref<SSTableReader> sharedRef()
     {
         return refCounted.sharedRef();
     }

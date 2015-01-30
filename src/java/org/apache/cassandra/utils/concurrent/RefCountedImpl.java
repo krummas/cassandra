@@ -12,30 +12,32 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 
 // default implementation; can be hidden and proxied (like we do for SSTableReader)
-final class RefCountedImpl implements RefCounted
+public class RefCountedImpl<T> implements RefCounted<T>
 {
-    private final Ref sharedRef;
+    private final Ref<T> sharedRef;
     private final GlobalState state;
+    private final T referent;
 
-    public RefCountedImpl(Tidy tidy)
+    public RefCountedImpl(T referent, Tidy tidy)
     {
+        this.referent = referent;
         this.state = new GlobalState(tidy);
-        sharedRef = new Ref(this.state, true);
+        sharedRef = new Ref<T>(referent, this.state, true);
         globallyExtant.add(this.state);
     }
 
     /**
      * see {@link RefCounted#tryRef()}
      */
-    public Ref tryRef()
+    public Ref<T> tryRef()
     {
-        return state.ref() ? new Ref(state, false) : null;
+        return state.ref() ? new Ref<>(referent, state, false) : null;
     }
 
     /**
      * see {@link RefCounted#sharedRef()}
      */
-    public Ref sharedRef()
+    public Ref<T> sharedRef()
     {
         return sharedRef;
     }

@@ -44,7 +44,7 @@ public class RefCountedTest
     public void testLeak() throws InterruptedException
     {
         Tidier tidier = new Tidier();
-        RefCounted obj = RefCounted.Impl.get(tidier);
+        RefCounted obj = new RefCountedImpl(null, tidier);
         obj.tryRef();
         obj.sharedRef().release();
         System.gc();
@@ -57,7 +57,7 @@ public class RefCountedTest
     public void testSeriousLeak() throws InterruptedException
     {
         Tidier tidier = new Tidier();
-        RefCounted.Impl.get(tidier);
+        new RefCountedImpl(null, tidier);
         System.gc();
         System.gc();
         System.gc();
@@ -73,7 +73,7 @@ public class RefCountedTest
         try
         {
             tidier = new Tidier();
-            RefCounted obj = RefCounted.Impl.get(tidier);
+            RefCounted obj = new RefCountedImpl(null, tidier);
             obj.sharedRef().release();
             obj.sharedRef().release();
             Assert.assertTrue(false);

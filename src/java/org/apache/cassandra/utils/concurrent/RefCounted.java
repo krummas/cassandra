@@ -63,32 +63,24 @@ import org.apache.cassandra.concurrent.NamedThreadFactory;
  * Once the RefCountedState has been completely released, the Tidy method is called and it removes the global reference
  * to itself so it may also be collected.
  */
-public interface RefCounted
+public interface RefCounted<T>
 {
 
     /**
      * @return the a new Ref() to the managed object, incrementing its refcount, or null if it is already released
      */
-    public Ref tryRef();
+    public Ref<T> tryRef();
 
     /**
      * @return the shared Ref that is created at instantiation of the RefCounted instance.
      * Once released, if no other refs are extant the object will be tidied; references to
      * this object should never be retained outside of a method's scope
      */
-    public Ref sharedRef();
+    public Ref<T> sharedRef();
 
     public static interface Tidy
     {
         void tidy();
         String name();
-    }
-
-    public static class Impl
-    {
-        public static RefCounted get(Tidy tidy)
-        {
-            return new RefCountedImpl(tidy);
-        }
     }
 }
