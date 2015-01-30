@@ -20,12 +20,18 @@ package org.apache.cassandra.io.util;
 import java.io.File;
 
 import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 public class BufferedSegmentedFile extends SegmentedFile
 {
     public BufferedSegmentedFile(String path, long length)
     {
-        super(path, length);
+        super(new Cleanup(path), path, length);
+    }
+
+    private BufferedSegmentedFile(BufferedSegmentedFile copy)
+    {
+        super(copy);
     }
 
     public static class Builder extends SegmentedFile.Builder
@@ -49,7 +55,8 @@ public class BufferedSegmentedFile extends SegmentedFile
         return reader;
     }
 
-    public void cleanup()
+    public BufferedSegmentedFile sharedCopy()
     {
+        return new BufferedSegmentedFile(this);
     }
 }

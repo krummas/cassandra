@@ -21,6 +21,7 @@ import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 public class CompressedPoolingSegmentedFile extends PoolingSegmentedFile implements ICompressedFile
 {
@@ -28,8 +29,29 @@ public class CompressedPoolingSegmentedFile extends PoolingSegmentedFile impleme
 
     public CompressedPoolingSegmentedFile(String path, CompressionMetadata metadata)
     {
-        super(path, metadata.dataLength, metadata.compressedFileLength);
+        super(new Cleanup(path, metadata), path, metadata.dataLength, metadata.compressedFileLength);
         this.metadata = metadata;
+    }
+
+    private CompressedPoolingSegmentedFile(CompressedPoolingSegmentedFile copy)
+    {
+        super(copy);
+        this.metadata = copy.metadata;
+    }
+
+    protected static final class Cleanup extends PoolingSegmentedFile.Cleanup
+    {
+        final CompressionMetadata metadata;
+        protected Cleanup(String path, CompressionMetadata metadata)
+        {
+            super(path);
+            this.metadata = metadata;
+        }
+        public void tidy() throws Exception
+        {
+            super.tidy();
+            metadata.close();
+        }
     }
 
     public static class Builder extends CompressedSegmentedFile.Builder
@@ -59,10 +81,8 @@ public class CompressedPoolingSegmentedFile extends PoolingSegmentedFile impleme
         return metadata;
     }
 
-    @Override
-    public void cleanup()
+    public CompressedPoolingSegmentedFile sharedCopy()
     {
-        super.cleanup();
-        metadata.close();
+        return new CompressedPoolingSegmentedFile(this);
     }
 }
