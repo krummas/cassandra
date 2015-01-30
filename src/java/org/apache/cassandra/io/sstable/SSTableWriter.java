@@ -339,16 +339,12 @@ public class SSTableWriter extends SSTable
      */
     public void abort()
     {
-        abort(true);
-    }
-    public void abort(boolean closeBf)
-    {
         assert descriptor.type.isTemporary;
         if (iwriter == null && dataFile == null)
             return;
 
         if (iwriter != null)
-            iwriter.abort(closeBf);
+            iwriter.abort();
 
         if (dataFile!= null)
             dataFile.abort();
@@ -407,7 +403,7 @@ public class SSTableWriter extends SSTable
                                                            components, metadata,
                                                            partitioner, ifile,
                                                            dfile, iwriter.summary.build(partitioner, exclusiveUpperBoundOfReadableIndex),
-                                                           iwriter.bf, maxDataAge, sstableMetadata, SSTableReader.OpenReason.EARLY);
+                                                           iwriter.bf.sharedCopy(), maxDataAge, sstableMetadata, SSTableReader.OpenReason.EARLY);
 
         // now it's open, find the ACTUAL last readable key (i.e. for which the data file has also been flushed)
         sstable.first = getMinimalKey(first);
@@ -480,7 +476,7 @@ public class SSTableWriter extends SSTable
                                                            ifile,
                                                            dfile,
                                                            iwriter.summary.build(partitioner),
-                                                           iwriter.bf,
+                                                           iwriter.bf.sharedCopy(),
                                                            maxDataAge,
                                                            metadata,
                                                            finishType.openReason);
@@ -490,6 +486,7 @@ public class SSTableWriter extends SSTable
         switch (finishType)
         {
             case NORMAL: case FINISH_EARLY:
+            iwriter.bf.close();
             // try to save the summaries to disk
             sstable.saveSummary(iwriter.builder, dbuilder);
             iwriter = null;
@@ -629,11 +626,10 @@ public class SSTableWriter extends SSTable
             builder.addPotentialBoundary(indexPosition);
         }
 
-        public void abort(boolean closeBf)
+        public void abort()
         {
             indexFile.abort();
-            if (closeBf)
-                bf.close();
+            bf.close();
         }
 
         /**

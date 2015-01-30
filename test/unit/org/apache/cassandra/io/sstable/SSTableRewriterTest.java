@@ -19,11 +19,7 @@ package org.apache.cassandra.io.sstable;
 
 import java.io.File;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import com.google.common.collect.Sets;
 import org.junit.Test;
@@ -201,9 +197,10 @@ public class SSTableRewriterTest extends SchemaLoader
         assertFileCounts(dir.list(), 2, 3);
         s.markObsolete();
         s.selfRef().release();
+        s2.selfRef().release();
         Thread.sleep(1000);
         assertFileCounts(dir.list(), 0, 3);
-        writer.abort(false);
+        writer.abort();
         Thread.sleep(1000);
         int datafiles = assertFileCounts(dir.list(), 0, 0);
         assertEquals(datafiles, 0);

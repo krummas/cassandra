@@ -36,11 +36,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -174,7 +170,6 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     // indexfile and datafile: might be null before a call to load()
     private SegmentedFile ifile;
     private SegmentedFile dfile;
-
     private IndexSummary indexSummary;
     private IFilter bf;
 
@@ -184,8 +179,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
     // technically isCompacted is not necessary since it should never be unreferenced unless it is also compacted,
     // but it seems like a good extra layer of protection against reference counting bugs to not delete data based on that alone
-    private final AtomicBoolean isCompacted = new AtomicBoolean(false);
-    private final AtomicBoolean isSuspect = new AtomicBoolean(false);
+    private AtomicBoolean isSuspect = new AtomicBoolean(false);
 
     // not final since we need to be able to change level on a file.
     private volatile StatsMetadata sstableMetadata;
@@ -193,11 +187,10 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     private final AtomicLong keyCacheHit = new AtomicLong(0);
     private final AtomicLong keyCacheRequest = new AtomicLong(0);
 
-    private final Tidier tidy = new Tidier();
+    private final InstanceTidier tidy = new InstanceTidier(descriptor, metadata);
     private final Ref<SSTableReader> selfRef = new Ref<>(this, tidy);
 
     private RestorableMeter readMeter;
-    private ScheduledFuture readMeterSyncFuture;
 
     /**
      * Calculate approximate key count.
@@ -398,7 +391,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         sstable.ifile = ibuilder.complete(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX));
         sstable.dfile = dbuilder.complete(sstable.descriptor.filenameFor(Component.DATA));
         sstable.bf = FilterFactory.AlwaysPresent;
-        sstable.tidy.setup(sstable);
+        sstable.setup();
         return sstable;
     }
 
@@ -448,7 +441,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         if (sstable.getKeyCache() != null)
             logger.debug("key cache contains {}/{} keys", sstable.getKeyCache().size(), sstable.getKeyCache().getCapacity());
 
-        sstable.tidy.setup(sstable);
+        sstable.setup();
         return sstable;
     }
 
@@ -544,32 +537,6 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         this.sstableMetadata = sstableMetadata;
         this.maxDataAge = maxDataAge;
         this.openReason = openReason;
-
-        tidy.deletingTask = new SSTableDeletingTask(this);
-
-        // Don't track read rates for tables in the system keyspace and don't bother trying to load or persist
-        // the read meter when in client mode.  Also don't track reads for special operations (like early open)
-        // this is to avoid overflowing the executor queue (see CASSANDRA-8066)
-        if (Keyspace.SYSTEM_KS.equals(desc.ksname) || Config.isClientMode() || openReason != OpenReason.NORMAL)
-        {
-            overrideReadMeter(null);
-            readMeterSyncFuture = null;
-            return;
-        }
-
-        overrideReadMeter(SystemKeyspace.getSSTableReadMeter(desc.ksname, desc.cfname, desc.generation));
-        // sync the average read rate to system.sstable_activity every five minutes, starting one minute from now
-        readMeterSyncFuture = syncExecutor.scheduleAtFixedRate(new Runnable()
-        {
-            public void run()
-            {
-                if (!isCompacted.get())
-                {
-                    meterSyncThrottle.acquire();
-                    SystemKeyspace.persistSSTableReadMeter(desc.ksname, desc.cfname, desc.generation, getReadMeter());
-                }
-            }
-        }, 1, 5, TimeUnit.MINUTES);
     }
 
     private SSTableReader(Descriptor desc,
@@ -585,12 +552,11 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                           OpenReason openReason)
     {
         this(desc, components, metadata, partitioner, maxDataAge, sstableMetadata, openReason);
-
         this.ifile = ifile;
         this.dfile = dfile;
         this.indexSummary = indexSummary;
         this.bf = bloomFilter;
-        tidy.setup(this);
+        this.setup();
     }
 
     public static long getTotalBytes(Iterable<SSTableReader> sstables)
@@ -625,7 +591,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
     public void setTrackedBy(DataTracker tracker)
     {
-        tidy.deletingTask.setTracker(tracker);
+        tidy.type.deletingTask.setTracker(tracker);
         // under normal operation we can do this at any time, but SSTR is also used outside C* proper,
         // e.g. by BulkLoader, which does not initialize the cache.  As a kludge, we set up the cache
         // here when we know we're being wired into the rest of the server infrastructure.
@@ -697,7 +663,6 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         dfile = dbuilder.complete(descriptor.filenameFor(Component.DATA));
         if (saveSummaryIfCreated && (recreateBloomFilter || !summaryLoaded)) // save summary information to disk
             saveSummary(ibuilder, dbuilder);
-        tidy.setup(this);
     }
 
     /**
@@ -849,20 +814,21 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
     public void setReplacedBy(SSTableReader replacement)
     {
-        synchronized (tidy.replaceLock)
+        synchronized (tidy.global)
         {
-            assert tidy.replacedBy == null;
-            tidy.replacedBy = replacement;
-            replacement.tidy.replaces = this;
-            replacement.tidy.replaceLock = tidy.replaceLock;
+            assert replacement != null;
+            assert !tidy.isReplaced;
+            assert tidy.global.live == this;
+            tidy.isReplaced = true;
+            tidy.global.live = replacement;
         }
     }
 
     public SSTableReader cloneWithNewStart(DecoratedKey newStart, final Runnable runOnClose)
     {
-        synchronized (tidy.replaceLock)
+        synchronized (tidy.global)
         {
-            assert tidy.replacedBy == null;
+            assert openReason != OpenReason.EARLY;
 
             if (newStart.compareTo(this.first) > 0)
             {
@@ -894,10 +860,9 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                 }
             }
 
-            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, indexSummary.sharedCopy(), bf, maxDataAge, sstableMetadata,
-                    openReason == OpenReason.EARLY ? openReason : OpenReason.METADATA_CHANGE);
-            replacement.readMeterSyncFuture = this.readMeterSyncFuture;
-            replacement.overrideReadMeter(this.getReadMeter());
+            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile.sharedCopy(),
+                                                          dfile.sharedCopy(), indexSummary.sharedCopy(), bf.sharedCopy(),
+                                                          maxDataAge, sstableMetadata, OpenReason.METADATA_CHANGE);
             replacement.first = this.last.compareTo(newStart) > 0 ? newStart : this.last;
             replacement.last = this.last;
             setReplacedBy(replacement);
@@ -915,9 +880,9 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
      */
     public SSTableReader cloneWithNewSummarySamplingLevel(ColumnFamilyStore parent, int samplingLevel) throws IOException
     {
-        synchronized (tidy.replaceLock)
+        synchronized (tidy.global)
         {
-            assert tidy.replacedBy == null;
+            assert openReason != OpenReason.EARLY;
 
             int minIndexInterval = metadata.getMinIndexInterval();
             int maxIndexInterval = metadata.getMaxIndexInterval();
@@ -956,10 +921,9 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
             StorageMetrics.load.inc(newSize - oldSize);
             parent.metric.liveDiskSpaceUsed.inc(newSize - oldSize);
 
-            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, newSummary, bf, maxDataAge, sstableMetadata,
-                    openReason == OpenReason.EARLY ? openReason : OpenReason.METADATA_CHANGE);
-            replacement.readMeterSyncFuture = this.readMeterSyncFuture;
-            replacement.overrideReadMeter(this.getReadMeter());
+            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile.sharedCopy(),
+                                                          dfile.sharedCopy(), newSummary, bf.sharedCopy(), maxDataAge,
+                                                          sstableMetadata, OpenReason.METADATA_CHANGE);
             replacement.first = this.first;
             replacement.last = this.last;
             setReplacedBy(replacement);
@@ -991,6 +955,11 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         }
     }
 
+    public RestorableMeter getReadMeter()
+    {
+        return readMeter;
+    }
+
     public int getIndexSummarySamplingLevel()
     {
         return indexSummary.getSamplingLevel();
@@ -1013,7 +982,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
     public void releaseSummary() throws IOException
     {
-        indexSummary.close();
+        tidy.releaseSummary();
         indexSummary = null;
     }
 
@@ -1566,16 +1535,16 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         if (logger.isDebugEnabled())
             logger.debug("Marking {} compacted", getFilename());
 
-        synchronized (tidy.replaceLock)
+        synchronized (tidy.global)
         {
-            assert tidy.replacedBy == null : getFilename();
+            assert !tidy.isReplaced;
         }
-        return !isCompacted.getAndSet(true);
+        return !tidy.global.isCompacted.getAndSet(true);
     }
 
     public boolean isMarkedCompacted()
     {
-        return isCompacted.get();
+        return tidy.global.isCompacted.get();
     }
 
     public void markSuspect()
@@ -1672,16 +1641,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
     public SSTableReader getCurrentReplacement()
     {
-        synchronized (tidy.replaceLock)
-        {
-            SSTableReader cur = this, next = tidy.replacedBy;
-            while (next != null)
-            {
-                cur = next;
-                next = next.tidy.replacedBy;
-            }
-            return cur;
-        }
+        return tidy.global.live;
     }
 
     /**
@@ -1863,17 +1823,6 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         return keyCacheRequest.get();
     }
 
-    public RestorableMeter getReadMeter()
-    {
-        return readMeter;
-    }
-
-    @VisibleForTesting
-    public void overrideReadMeter(RestorableMeter readMeter)
-    {
-        this.readMeter = readMeter;
-    }
-
     /**
      * Increment the total row read count and read rate for this SSTable.  This should not be incremented for range
      * slice queries, row cache hits, or non-query reads, like compaction.
@@ -1907,141 +1856,55 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         return selfRef.ref();
     }
 
-    private static final class Tidier implements Tidy
+    void setup()
     {
-        private String name;
-        private CFMetaData metadata;
-        // indexfile and datafile: might be null before a call to load()
-        private SegmentedFile ifile;
-        private SegmentedFile dfile;
+        tidy.setup(this);
+        this.readMeter = tidy.global.readMeter;
+    }
 
-        private IndexSummary indexSummary;
+    @VisibleForTesting
+    public void overrideReadMeter(RestorableMeter readMeter)
+    {
+        this.readMeter = tidy.global.readMeter = readMeter;
+    }
+
+    /**
+     * One instance per SSTableReader we create
+     */
+    private static final class InstanceTidier implements Tidy
+    {
+        private final Descriptor descriptor;
+        private final CFMetaData metadata;
         private IFilter bf;
+        private IndexSummary summary;
 
-        private AtomicBoolean isCompacted;
-
-        /**
-         * To support replacing this sstablereader with another object that represents that same underlying sstable, but with different associated resources,
-         * we build a linked-list chain of replacement, which we synchronise using a shared object to make maintenance of the list across multiple threads simple.
-         * On close we check if any of the closeable resources differ between any chains either side of us; any that are in neither of the adjacent links (if any) are closed.
-         * Once we've made this decision we remove ourselves from the linked list, so that anybody behind/ahead will compare against only other still opened resources.
-         */
-        private Object replaceLock = new Object();
-        private SSTableReader replacedBy;
-        private SSTableReader replaces;
-        private SSTableDeletingTask deletingTask;
+        private SegmentedFile dfile;
+        private SegmentedFile ifile;
         private Runnable runOnClose;
+        private boolean isReplaced = false;
 
-        @VisibleForTesting
-        public RestorableMeter readMeter;
-        private volatile ScheduledFuture readMeterSyncFuture;
+        private Ref<TypeManager.TypeTidy> typeRef;
+        private TypeManager.TypeTidy type;
+        private GlobalManager.GlobalTidy global;
 
-        private void setup(SSTableReader reader)
+        void setup(SSTableReader reader)
         {
-            name = reader.toString();
-            metadata = reader.metadata;
-            ifile = reader.ifile;
-            dfile = reader.dfile;
-            indexSummary = reader.indexSummary;
-            bf = reader.bf;
-            isCompacted = reader.isCompacted;
-            readMeterSyncFuture = reader.readMeterSyncFuture;
+            this.bf = reader.bf;
+            this.summary = reader.indexSummary;
+            this.dfile = reader.dfile;
+            this.ifile = reader.ifile;
+            this.typeRef = TypeManager.instance.get(reader);
+            this.type = typeRef.get();
+            this.global = type.globalRef.get();
         }
 
-        public String name()
+        InstanceTidier(Descriptor descriptor, CFMetaData metadata)
         {
-            return name;
-        }
-
-        private void dropPageCache()
-        {
-            dropPageCache(dfile.path);
-            dropPageCache(ifile.path);
-        }
-
-        private void dropPageCache(String filePath)
-        {
-            RandomAccessFile file = null;
-
-            try
-            {
-                file = new RandomAccessFile(filePath, "r");
-
-                int fd = CLibrary.getfd(file.getFD());
-
-                if (fd > 0)
-                {
-                    if (logger.isDebugEnabled())
-                        logger.debug(String.format("Dropping page cache of file %s.", filePath));
-
-                    CLibrary.trySkipCache(fd, 0, 0);
-                }
-            }
-            catch (IOException e)
-            {
-                // we don't care if cache cleanup fails
-            }
-            finally
-            {
-                FileUtils.closeQuietly(file);
-            }
+            this.descriptor = descriptor;
+            this.metadata = metadata;
         }
 
         public void tidy()
-        {
-            if (readMeterSyncFuture != null)
-                readMeterSyncFuture.cancel(false);
-
-            synchronized (replaceLock)
-            {
-                boolean closeBf = true, closeSummary = true, closeFiles = true, deleteFiles = isCompacted.get();
-
-                if (replacedBy != null)
-                {
-                    closeBf = replacedBy.bf != bf;
-                    closeSummary = replacedBy.indexSummary != indexSummary;
-                    closeFiles = replacedBy.dfile != dfile;
-                    // if the replacement sstablereader uses a different path, clean up our paths
-                    deleteFiles = !dfile.path.equals(replacedBy.dfile.path);
-                }
-
-                if (replaces != null)
-                {
-                    closeBf &= replaces.bf != bf;
-                    closeSummary &= replaces.indexSummary != indexSummary;
-                    closeFiles &= replaces.dfile != dfile;
-                    deleteFiles &= !dfile.path.equals(replaces.dfile.path);
-                }
-
-                boolean deleteAll = false;
-                if (isCompacted.get())
-                {
-                    assert replacedBy == null;
-                    if (replaces != null && !deleteFiles)
-                    {
-                        replaces.tidy.replacedBy = null;
-                        replaces.tidy.deletingTask = deletingTask;
-                        replaces.markObsolete();
-                    }
-                    else
-                    {
-                        deleteAll = true;
-                    }
-                }
-                else
-                {
-                    closeSummary &= indexSummary != null;
-                    if (replaces != null)
-                        replaces.tidy.replacedBy = replacedBy;
-                    if (replacedBy != null)
-                        replacedBy.tidy.replaces = replaces;
-                }
-
-                scheduleTidy(closeBf, closeSummary, closeFiles, deleteFiles, deleteAll);
-            }
-        }
-
-        private void scheduleTidy(final boolean closeBf, final boolean closeSummary, final boolean closeFiles, final boolean deleteFiles, final boolean deleteAll)
         {
             final ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata.cfId);
             final OpOrder.Barrier barrier;
@@ -2059,37 +1922,218 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                 {
                     if (barrier != null)
                         barrier.await();
-                    if (closeBf)
-                        bf.close();
-                    if (closeSummary)
-                        indexSummary.close();
-                    if (closeFiles)
-                    {
-                        ifile.cleanup();
-                        dfile.cleanup();
-                    }
+
+                    bf.close();
+                    dfile.close();
+                    ifile.close();
+                    if (summary != null)
+                        summary.close();
                     if (runOnClose != null)
                         runOnClose.run();
-                    if (deleteAll)
-                    {
-                        /**
-                         * Do the OS a favour and suggest (using fadvice call) that we
-                         * don't want to see pages of this SSTable in memory anymore.
-                         *
-                         * NOTE: We can't use madvice in java because it requires the address of
-                         * the mapping, so instead we always open a file and run fadvice(fd, 0, 0) on it
-                         */
-                        dropPageCache();
-                        deletingTask.run();
-                    }
-                    else if (deleteFiles)
-                    {
-                        FileUtils.deleteWithConfirm(new File(dfile.path));
-                        FileUtils.deleteWithConfirm(new File(ifile.path));
-                    }
+                    typeRef.release();
                 }
             });
         }
+
+        public String name()
+        {
+            TypeManager.TypeTidy type = this.type;
+            if (type == null)
+                return descriptor.toString();
+            return type.desc.toString();
+        }
+
+        void releaseSummary()
+        {
+            summary.close();
+            assert summary.isCleanedUp();
+            summary = null;
+        }
     }
 
+    static final class TypeManager extends TidyManager<TypeManager.TypeTidy>
+    {
+        static final TypeManager instance = new TypeManager();
+
+        public TypeTidy create(Descriptor descriptor, SSTableReader reader)
+        {
+            return new TypeTidy(descriptor, reader);
+        }
+
+        Descriptor descriptor(SSTableReader sstable)
+        {
+            Descriptor desc = sstable.descriptor;
+            if (sstable.openReason == OpenReason.EARLY)
+                desc = desc.asType(Descriptor.Type.TEMPLINK);
+            return desc;
+        }
+
+        /**
+         * One shared between all instances of a given Descriptor.Type
+         */
+        final class TypeTidy extends TidyManager<?>.Tidy
+        {
+            private final Ref<GlobalManager.GlobalTidy> globalRef;
+            private final SSTableDeletingTask deletingTask;
+
+            TypeTidy(Descriptor descriptor, SSTableReader sstable)
+            {
+                super(descriptor);
+                this.deletingTask = new SSTableDeletingTask(descriptor, sstable);
+                this.globalRef = GlobalManager.instance.get(sstable);
+            }
+
+            public void tidy()
+            {
+                super.tidy();
+                boolean isCompacted = globalRef.get().isCompacted.get();
+                globalRef.release();
+                switch (desc.type)
+                {
+                    case FINAL:
+                        if (isCompacted)
+                            deletingTask.run();
+                        break;
+                    case TEMPLINK:
+                        deletingTask.run();
+                        break;
+                    default:
+                        throw new IllegalStateException();
+                }
+            }
+        }
+    }
+
+    static final class GlobalManager extends TidyManager<GlobalManager.GlobalTidy>
+    {
+        static final GlobalManager instance = new GlobalManager();
+
+        public GlobalTidy create(Descriptor descriptor, SSTableReader reader)
+        {
+            return new GlobalTidy(reader);
+        }
+
+        /**
+         * One instance per logical sstable
+         */
+        final class GlobalTidy extends TidyManager<?>.Tidy
+        {
+            private SSTableReader live;
+            private RestorableMeter readMeter;
+
+            private final ScheduledFuture readMeterSyncFuture;
+            private final AtomicBoolean isCompacted;
+
+            GlobalTidy(final SSTableReader reader)
+            {
+                super(reader.descriptor);
+                this.isCompacted = new AtomicBoolean();
+                this.live = reader;
+                // Don't track read rates for tables in the system keyspace and don't bother trying to load or persist
+                // the read meter when in client mode.
+                if (Keyspace.SYSTEM_KS.equals(desc.ksname) || Config.isClientMode())
+                {
+                    readMeter = null;
+                    readMeterSyncFuture = null;
+                    return;
+                }
+
+                readMeter = SystemKeyspace.getSSTableReadMeter(desc.ksname, desc.cfname, desc.generation);
+                // sync the average read rate to system.sstable_activity every five minutes, starting one minute from now
+                readMeterSyncFuture = syncExecutor.scheduleAtFixedRate(new Runnable()
+                {
+                    public void run()
+                    {
+                        if (!isCompacted.get())
+                        {
+                            meterSyncThrottle.acquire();
+                            SystemKeyspace.persistSSTableReadMeter(desc.ksname, desc.cfname, desc.generation, readMeter);
+                        }
+                    }
+                }, 1, 5, TimeUnit.MINUTES);
+            }
+
+            public void tidy()
+            {
+                super.tidy();
+                if (readMeterSyncFuture != null)
+                    readMeterSyncFuture.cancel(true);
+                if (isCompacted.get())
+                    SystemKeyspace.clearSSTableReadMeter(desc.ksname, desc.cfname, desc.generation);
+                dropPageCache(desc.filenameFor(Component.DATA));
+                dropPageCache(desc.filenameFor(Component.PRIMARY_INDEX));
+            }
+        }
+    }
+
+    abstract static class TidyManager<T extends TidyManager.Tidy>
+    {
+        final ConcurrentMap<Descriptor, Ref<T>> lookup = new ConcurrentHashMap<>();
+
+        public abstract class Tidy implements RefCounted.Tidy
+        {
+            public final Descriptor desc;
+            protected Tidy(Descriptor desc)
+            {
+                this.desc = desc;
+            }
+
+            public void tidy()
+            {
+                lookup.remove(desc);
+            }
+
+            public String name()
+            {
+                return desc.toString();
+            }
+        }
+
+        public Ref<T> get(SSTableReader sstable)
+        {
+            Descriptor descriptor = descriptor(sstable);
+            Ref<T> refc = lookup.get(descriptor);
+            if (refc != null)
+                return refc.ref();
+            T t = create(descriptor, sstable);
+            refc = new Ref<T>(t, t);
+            RefCounted<T> ex = lookup.putIfAbsent(descriptor, refc);
+            assert ex == null;
+            return refc;
+        }
+
+        abstract T create(Descriptor descriptor, SSTableReader sstable);
+        Descriptor descriptor(SSTableReader sstable)
+        {
+            return sstable.descriptor;
+        }
+    }
+
+    private static void dropPageCache(String filePath)
+    {
+        RandomAccessFile file = null;
+
+        try
+        {
+            file = new RandomAccessFile(filePath, "r");
+
+            int fd = CLibrary.getfd(file.getFD());
+
+            if (fd > 0)
+            {
+                if (logger.isDebugEnabled())
+                    logger.debug(String.format("Dropping page cache of file %s.", filePath));
+
+                CLibrary.trySkipCache(fd, 0, 0);
+            }
+        }
+        catch (IOException e)
+        {
+            // we don't care if cache cleanup fails
+        }
+        finally
+        {
+            FileUtils.closeQuietly(file);
+        }
+    }
 }
