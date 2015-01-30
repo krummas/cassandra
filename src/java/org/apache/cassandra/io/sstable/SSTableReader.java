@@ -114,7 +114,6 @@ import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.RefCounted;
-import org.apache.cassandra.utils.concurrent.RefCountedImpl;
 
 import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
 
@@ -195,7 +194,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     private final AtomicLong keyCacheRequest = new AtomicLong(0);
 
     private final Tidier tidy = new Tidier();
-    private final RefCounted<SSTableReader> refCounted = new RefCountedImpl<>(this, tidy);
+    private final Ref<SSTableReader> selfRef = new Ref<>(this, tidy);
 
     @VisibleForTesting
     public RestorableMeter readMeter;
@@ -1885,17 +1884,17 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
     public Ref<SSTableReader> tryRef()
     {
-        return refCounted.tryRef();
+        return selfRef.tryRef();
     }
 
-    public Ref<SSTableReader> sharedRef()
+    public Ref<SSTableReader> selfRef()
     {
-        return refCounted.sharedRef();
+        return selfRef;
     }
 
     public Ref<SSTableReader> ref()
     {
-        return refCounted.ref();
+        return selfRef.ref();
     }
 
     private static final class Tidier implements Tidy

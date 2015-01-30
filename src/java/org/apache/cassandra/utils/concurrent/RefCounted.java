@@ -42,22 +42,22 @@ import org.apache.cassandra.concurrent.NamedThreadFactory;
  *   - implements RefCounted
  *   - encapsulates a RefCounted.Impl, to which it proxies all calls to RefCounted behaviours
  *   - ensures no external access to the encapsulated Impl, and permits no references to it to leak
- *   - users must ensure no references to the sharedRef leak, or are retained outside of a method scope either.
- *     (to ensure the sharedRef is collected with the object, so that leaks may be detected and corrected)
+ *   - users must ensure no references to the selfRef leak, or are retained outside of a method scope either.
+ *     (to ensure the selfRef is collected with the object, so that leaks may be detected and corrected)
  *
  * This class' functionality is achieved by what may look at first glance like a complex web of references,
  * but boils down to:
  *
- * Target --> Impl --> sharedRef --> [RefState] <--> RefCountedState --> Tidy
+ * Target --> Impl --> selfRef --> [RefState] <--> RefCountedState --> Tidy
  *                                        ^                ^
  *                                        |                |
  * Ref -----------------------------------                 |
  *                                                         |
  * Global -------------------------------------------------
  *
- * So that, if Target is collected, Impl is collected and, hence, so is sharedRef.
+ * So that, if Target is collected, Impl is collected and, hence, so is selfRef.
  *
- * Once ref or sharedRef are collected, the paired RefState's release method is called, which if it had
+ * Once ref or selfRef are collected, the paired RefState's release method is called, which if it had
  * not already been called will update RefCountedState and log an error.
  *
  * Once the RefCountedState has been completely released, the Tidy method is called and it removes the global reference
@@ -65,18 +65,10 @@ import org.apache.cassandra.concurrent.NamedThreadFactory;
  */
 public interface RefCounted<T>
 {
-
     /**
      * @return the a new Ref() to the managed object, incrementing its refcount, or null if it is already released
      */
     public Ref<T> tryRef();
-
-    /**
-     * @return the shared Ref that is created at instantiation of the RefCounted instance.
-     * Once released, if no other refs are extant the object will be tidied; references to
-     * this object should never be retained outside of a method's scope
-     */
-    public Ref<T> sharedRef();
 
     public Ref<T> ref();
 

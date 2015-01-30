@@ -416,7 +416,7 @@ public class SSTableWriter extends SSTable
         if (inclusiveUpperBoundOfReadableData == null)
         {
             // Prevent leaving tmplink files on disk
-            sstable.sharedRef().release();
+            sstable.selfRef().release();
             return null;
         }
         int offset = 2;
@@ -428,7 +428,7 @@ public class SSTableWriter extends SSTable
             inclusiveUpperBoundOfReadableData = iwriter.getMaxReadableKey(offset++);
             if (inclusiveUpperBoundOfReadableData == null)
             {
-                sstable.sharedRef().release();
+                sstable.selfRef().release();
                 return null;
             }
         }
