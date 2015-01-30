@@ -894,7 +894,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                 }
             }
 
-            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, indexSummary.readOnlyClone(), bf, maxDataAge, sstableMetadata,
+            SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, indexSummary.sharedCopy(), bf, maxDataAge, sstableMetadata,
                     openReason == OpenReason.EARLY ? openReason : OpenReason.METADATA_CHANGE);
             replacement.readMeterSyncFuture = this.readMeterSyncFuture;
             replacement.overrideReadMeter(this.getReadMeter());
