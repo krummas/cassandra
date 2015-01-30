@@ -74,7 +74,7 @@ public interface RefCounted<T>
 
     public static interface Tidy
     {
-        void tidy();
+        void tidy() throws Exception;
         String name();
     }
 }
