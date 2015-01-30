@@ -34,6 +34,15 @@ public class RefCountedImpl<T> implements RefCounted<T>
         return state.ref() ? new Ref<>(referent, state, false) : null;
     }
 
+    public Ref<T> ref()
+    {
+        Ref<T> ref = tryRef();
+        // TODO: print the last release as well as the shared release here
+        if (ref == null)
+            sharedRef.state.assertNotReleased();
+        return ref;
+    }
+
     /**
      * see {@link RefCounted#sharedRef()}
      */
@@ -96,7 +105,7 @@ public class RefCountedImpl<T> implements RefCounted<T>
 
         public String toString()
         {
-            return tidy.name();
+            return tidy.getClass() + "@" + System.identityHashCode(tidy) + ":" + tidy.name();
         }
     }
 

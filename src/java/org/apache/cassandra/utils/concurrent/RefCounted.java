@@ -78,6 +78,8 @@ public interface RefCounted<T>
      */
     public Ref<T> sharedRef();
 
+    public Ref<T> ref();
+
     public static interface Tidy
     {
         void tidy();

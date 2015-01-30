@@ -1893,6 +1893,11 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         return refCounted.sharedRef();
     }
 
+    public Ref<SSTableReader> ref()
+    {
+        return refCounted.ref();
+    }
+
     private static final class Tidier implements Tidy
     {
         private String name;
