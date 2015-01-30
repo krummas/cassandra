@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.io.sstable;
 
-import java.io.Closeable;
 import java.io.DataInput;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -434,14 +433,17 @@ public class SSTableWriter extends SSTable
 
     public static enum FinishType
     {
-        NORMAL(SSTableReader.OpenReason.NORMAL),
-        EARLY(SSTableReader.OpenReason.EARLY), // no renaming
-        FINISH_EARLY(SSTableReader.OpenReason.NORMAL); // tidy up an EARLY finish
+        CLOSE(null, true),
+        NORMAL(SSTableReader.OpenReason.NORMAL, true),
+        EARLY(SSTableReader.OpenReason.EARLY, false), // no renaming
+        FINISH_EARLY(SSTableReader.OpenReason.NORMAL, true); // tidy up an EARLY finish
         final SSTableReader.OpenReason openReason;
 
-        FinishType(SSTableReader.OpenReason openReason)
+        public final boolean isFinal;
+        FinishType(SSTableReader.OpenReason openReason, boolean isFinal)
         {
             this.openReason = openReason;
+            this.isFinal = isFinal;
         }
     }
 
@@ -457,6 +459,7 @@ public class SSTableWriter extends SSTable
 
     public SSTableReader finish(FinishType finishType, long maxDataAge, long repairedAt)
     {
+        assert finishType != FinishType.CLOSE;
         Pair<Descriptor, StatsMetadata> p;
 
         p = close(finishType, repairedAt < 0 ? this.repairedAt : repairedAt);
@@ -483,9 +486,8 @@ public class SSTableWriter extends SSTable
         sstable.first = getMinimalKey(first);
         sstable.last = getMinimalKey(last);
 
-        switch (finishType)
+        if (finishType.isFinal)
         {
-            case NORMAL: case FINISH_EARLY:
             iwriter.bf.close();
             // try to save the summaries to disk
             sstable.saveSummary(iwriter.builder, dbuilder);
@@ -498,16 +500,18 @@ public class SSTableWriter extends SSTable
     // Close the writer and return the descriptor to the new sstable and it's metadata
     public Pair<Descriptor, StatsMetadata> close()
     {
-        return close(FinishType.NORMAL, this.repairedAt);
+        return close(FinishType.CLOSE, this.repairedAt);
     }
 
     private Pair<Descriptor, StatsMetadata> close(FinishType type, long repairedAt)
     {
         switch (type)
         {
-            case EARLY: case NORMAL:
+            case EARLY: case CLOSE: case NORMAL:
             iwriter.close();
             dataFile.close();
+            if (type == FinishType.CLOSE)
+                iwriter.bf.close();
         }
 
         // write sstable statistics
@@ -518,9 +522,8 @@ public class SSTableWriter extends SSTable
 
         // remove the 'tmp' marker from all components
         Descriptor descriptor = this.descriptor;
-        switch (type)
+        if (type.isFinal)
         {
-            case NORMAL: case FINISH_EARLY:
             dataFile.writeFullChecksum(descriptor);
             writeMetadata(descriptor, metadataComponents);
             // save the table of components
