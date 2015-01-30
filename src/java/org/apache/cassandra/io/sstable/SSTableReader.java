@@ -196,8 +196,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     private final Tidier tidy = new Tidier();
     private final Ref<SSTableReader> selfRef = new Ref<>(this, tidy);
 
-    @VisibleForTesting
-    public RestorableMeter readMeter;
+    private RestorableMeter readMeter;
     private ScheduledFuture readMeterSyncFuture;
 
     /**
@@ -553,12 +552,12 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         // this is to avoid overflowing the executor queue (see CASSANDRA-8066)
         if (Keyspace.SYSTEM_KS.equals(desc.ksname) || Config.isClientMode() || openReason != OpenReason.NORMAL)
         {
-            readMeter = null;
+            overrideReadMeter(null);
             readMeterSyncFuture = null;
             return;
         }
 
-        readMeter = SystemKeyspace.getSSTableReadMeter(desc.ksname, desc.cfname, desc.generation);
+        overrideReadMeter(SystemKeyspace.getSSTableReadMeter(desc.ksname, desc.cfname, desc.generation));
         // sync the average read rate to system.sstable_activity every five minutes, starting one minute from now
         readMeterSyncFuture = syncExecutor.scheduleAtFixedRate(new Runnable()
         {
@@ -567,7 +566,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                 if (!isCompacted.get())
                 {
                     meterSyncThrottle.acquire();
-                    SystemKeyspace.persistSSTableReadMeter(desc.ksname, desc.cfname, desc.generation, readMeter);
+                    SystemKeyspace.persistSSTableReadMeter(desc.ksname, desc.cfname, desc.generation, getReadMeter());
                 }
             }
         }, 1, 5, TimeUnit.MINUTES);
@@ -898,7 +897,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
             SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, indexSummary.readOnlyClone(), bf, maxDataAge, sstableMetadata,
                     openReason == OpenReason.EARLY ? openReason : OpenReason.METADATA_CHANGE);
             replacement.readMeterSyncFuture = this.readMeterSyncFuture;
-            replacement.readMeter = this.readMeter;
+            replacement.overrideReadMeter(this.getReadMeter());
             replacement.first = this.last.compareTo(newStart) > 0 ? newStart : this.last;
             replacement.last = this.last;
             setReplacedBy(replacement);
@@ -960,7 +959,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
             SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile, dfile, newSummary, bf, maxDataAge, sstableMetadata,
                     openReason == OpenReason.EARLY ? openReason : OpenReason.METADATA_CHANGE);
             replacement.readMeterSyncFuture = this.readMeterSyncFuture;
-            replacement.readMeter = this.readMeter;
+            replacement.overrideReadMeter(this.getReadMeter());
             replacement.first = this.first;
             replacement.last = this.last;
             setReplacedBy(replacement);
@@ -1862,6 +1861,17 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     public long getKeyCacheRequest()
     {
         return keyCacheRequest.get();
+    }
+
+    public RestorableMeter getReadMeter()
+    {
+        return readMeter;
+    }
+
+    @VisibleForTesting
+    public void overrideReadMeter(RestorableMeter readMeter)
+    {
+        this.readMeter = readMeter;
     }
 
     /**

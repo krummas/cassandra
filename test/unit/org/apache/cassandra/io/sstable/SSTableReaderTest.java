@@ -203,15 +203,15 @@ public class SSTableReaderTest extends SchemaLoader
         store.forceBlockingFlush();
 
         SSTableReader sstable = store.getSSTables().iterator().next();
-        assertEquals(0, sstable.readMeter.count());
+        assertEquals(0, sstable.getReadMeter().count());
 
         DecoratedKey key = sstable.partitioner.decorateKey(ByteBufferUtil.bytes("4"));
         store.getColumnFamily(key, Composites.EMPTY, Composites.EMPTY, false, 100, 100);
-        assertEquals(1, sstable.readMeter.count());
+        assertEquals(1, sstable.getReadMeter().count());
         store.getColumnFamily(key, cellname("0"), cellname("0"), false, 100, 100);
-        assertEquals(2, sstable.readMeter.count());
+        assertEquals(2, sstable.getReadMeter().count());
         store.getColumnFamily(Util.namesQueryFilter(store, key, cellname("0")));
-        assertEquals(3, sstable.readMeter.count());
+        assertEquals(3, sstable.getReadMeter().count());
     }
 
     @Test
