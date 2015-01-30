@@ -756,6 +756,8 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         }
         catch (IOException e)
         {
+            if (indexSummary != null)
+                indexSummary.close();
             logger.debug("Cannot deserialize SSTable Summary File {}: {}", summariesFile.getPath(), e.getMessage());
             // corrupted; delete it and fall back to creating a new summary
             FileUtils.closeQuietly(iStream);
