@@ -380,7 +380,7 @@ public class SSTableRewriter
         {
             for (SSTableReader reader : discard)
             {
-                if (reader.getCurrentReplacement() == null)
+                if (reader.getCurrentReplacement() == reader)
                     reader.markObsolete();
                 reader.selfRef().release();
             }
