@@ -1883,7 +1883,12 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         private Runnable runOnClose;
         private boolean isReplaced = false;
 
+        // a reference to our shared per-Descriptor.Type tidy instance, that
+        // we will release when we are ourselves released
         private Ref<TypeManager.TypeTidy> typeRef;
+
+        // a convenience stashing of the shared per-descriptor-type tidy instance itself
+        // and the per-logical-sstable globally shared state that it is linked to
         private TypeManager.TypeTidy type;
         private GlobalManager.GlobalTidy global;
 
@@ -1951,6 +1956,15 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         }
     }
 
+    /**
+     * The TidyManager for per-Descriptor.Type state, that will be cleaned up
+     * when all such instances are released.
+     *
+     * All InstanceTidiers, on setup(), ask this manager for their shared state,
+     * which exists in an instance of the inner TypeTidy class, and stash a reference
+     * to it to be released when they are. Once all such references are released,
+     * the shared tidy will be performed.
+     */
     static final class TypeManager extends TidyManager<TypeManager.TypeTidy>
     {
         static final TypeManager instance = new TypeManager();
@@ -1960,6 +1974,8 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
             return new TypeTidy(descriptor, reader);
         }
 
+        // we must key by the "real" descriptor type here, which requires
+        // backing it out from the OpenReason
         Descriptor descriptor(SSTableReader sstable)
         {
             Descriptor desc = sstable.descriptor;
@@ -1969,7 +1985,9 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         }
 
         /**
-         * One shared between all instances of a given Descriptor.Type
+         * One shared between all instances of a given Descriptor.Type.
+         * Performs only two things: the deletion of the sstables for the type,
+         * if necessary; and the shared reference to the globally shared state.
          */
         final class TypeTidy extends TidyManager<?>.Tidy
         {
@@ -2004,6 +2022,12 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         }
     }
 
+    /**
+     * The TidyManager for global state, i.e. that shared between all instances of a single logical sstable
+     *
+     * All sstables of any Descriptor.TYPE use the FINAL type here to locate their shared state, which
+     * exists in an instance of the inner GlobalTidy class.
+     */
     static final class GlobalManager extends TidyManager<GlobalManager.GlobalTidy>
     {
         static final GlobalManager instance = new GlobalManager();
@@ -2014,14 +2038,24 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
         }
 
         /**
-         * One instance per logical sstable
+         * One instance per logical sstable. This both tracks shared cleanup and some shared state related
+         * to the sstable's lifecycle. All TypeTidy instances, on construction, obtain a reference to us
+         * via our manager. There should only ever be at most two such references extant at any one time,
+         * since only TMPLINK and FINAL type descriptors should be open as readers. When all files of both
+         * kinds have been released, this shared tidy will be performed.
          */
         final class GlobalTidy extends TidyManager<?>.Tidy
         {
+            // a single convenience property for getting the most recent version of an sstable, not related to tidying
             private SSTableReader live;
+            // the readMeter that is shared between all instances of the sstable, and can be overridden in all of them
+            // at once also, for testing purposes
             private RestorableMeter readMeter;
-
+            // the scheduled persistence of the readMeter, that we will cancel once all instances of this logical
+            // sstable have been released
             private final ScheduledFuture readMeterSyncFuture;
+            // shared state managing if the logical sstable has been compacted; this is used in cleanup both here
+            // and in the FINAL type tidier
             private final AtomicBoolean isCompacted;
 
             GlobalTidy(final SSTableReader reader)
@@ -2060,12 +2094,22 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
                     readMeterSyncFuture.cancel(true);
                 if (isCompacted.get())
                     SystemKeyspace.clearSSTableReadMeter(desc.ksname, desc.cfname, desc.generation);
+                // don't ideally want to dropPageCache for the file until all instances have been released
                 dropPageCache(desc.filenameFor(Component.DATA));
                 dropPageCache(desc.filenameFor(Component.PRIMARY_INDEX));
             }
         }
     }
 
+    /**
+     * An abstract class for creating and managing shared state tidiers.
+     *
+     * Maintains a map from sstable descriptor to a shared state tidier, the selection and
+     * creation of which are implementation dependent.
+     *
+     * The inner class that must be made concrete ensures that once all references to the shared state
+     * have been released, the manager cleans up its own tracking state.
+     */
     abstract static class TidyManager<T extends TidyManager.Tidy>
     {
         final ConcurrentMap<Descriptor, Ref<T>> lookup = new ConcurrentHashMap<>();
