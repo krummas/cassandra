@@ -54,16 +54,7 @@ public class Memory implements AutoCloseable
     protected Memory(long bytes)
     {
         size = bytes;
-        if (size == 0)
-        {
-            peer = 0;
-        }
-        else
-        {
-            peer = allocator.allocate(size);
-            if (peer == 0)
-                throw new OutOfMemoryError();
-        }
+        peer = allocator.allocate(size);
     }
 
     public static Memory allocate(long bytes)

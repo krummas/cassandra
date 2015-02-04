@@ -20,7 +20,6 @@ package org.apache.cassandra.io.util;
 import java.io.File;
 
 import org.apache.cassandra.io.sstable.SSTableWriter;
-import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 public class BufferedPoolingSegmentedFile extends PoolingSegmentedFile
 {

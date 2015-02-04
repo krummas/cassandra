@@ -31,9 +31,9 @@ public class Murmur3BloomFilter extends BloomFilter
         super(hashCount, bs);
     }
 
-    protected Murmur3BloomFilter(int hashCount, IBitSet bs, Murmur3BloomFilter copy)
+    protected Murmur3BloomFilter(Murmur3BloomFilter copy)
     {
-        super(hashCount, bs, copy);
+        super(copy);
     }
 
     public long serializedSize()
@@ -43,7 +43,7 @@ public class Murmur3BloomFilter extends BloomFilter
 
     public IFilter sharedCopy()
     {
-        return new Murmur3BloomFilter(hashCount, bitset, this);
+        return new Murmur3BloomFilter(this);
     }
 
     @Override

@@ -45,11 +45,11 @@ public abstract class BloomFilter extends WrappedSharedCloseable implements IFil
         this.bitset = bitset;
     }
 
-    BloomFilter(int hashCount, IBitSet bitset, BloomFilter copy)
+    BloomFilter(BloomFilter copy)
     {
         super(copy);
-        this.hashCount = hashCount;
-        this.bitset = bitset;
+        this.hashCount = copy.hashCount;
+        this.bitset = copy.bitset;
     }
 
     // Murmur is faster than an SHA-based approach and provides as-good collision

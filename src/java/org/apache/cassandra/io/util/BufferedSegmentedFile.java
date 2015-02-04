@@ -34,6 +34,18 @@ public class BufferedSegmentedFile extends SegmentedFile
         super(copy);
     }
 
+    private static class Cleanup extends SegmentedFile.Cleanup
+    {
+        protected Cleanup(String path)
+        {
+            super(path);
+        }
+        public void tidy() throws Exception
+        {
+
+        }
+    }
+
     public static class Builder extends SegmentedFile.Builder
     {
         public void addPotentialBoundary(long boundary)

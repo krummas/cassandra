@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
-import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 public class MmappedSegmentedFile extends SegmentedFile
 {

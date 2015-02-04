@@ -76,16 +76,12 @@ public abstract class SegmentedFile extends SharedCloseableImpl
         onDiskLength = copy.onDiskLength;
     }
 
-    protected static class Cleanup implements RefCounted.Tidy
+    protected static abstract class Cleanup implements RefCounted.Tidy
     {
         final String path;
         protected Cleanup(String path)
         {
             this.path = path;
-        }
-
-        public void tidy() throws Exception
-        {
         }
 
         public String name()
