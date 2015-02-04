@@ -18,31 +18,33 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 
 /**
- * An object that needs ref counting does the following:
+ * An object that needs ref counting does the two following:
  *   - defines a Tidy object that will cleanup once it's gone,
  *     (this must retain no references to the object we're tracking (only its resources and how to clean up))
+ * Then, one of two options:
+ * 1) Construct a Ref directly pointing to it, and always use this Ref; or
+ * 2)
  *   - implements RefCounted
- *   - encapsulates a RefCounted.Impl, to which it proxies all calls to RefCounted behaviours
- *   - ensures no external access to the encapsulated Impl, and permits no references to it to leak
- *   - users must ensure no references to the selfRef leak, or are retained outside of a method scope either.
+ *   - encapsulates a Ref, we'll call selfRef, to which it proxies all calls to RefCounted behaviours
+ *   - users must ensure no references to the selfRef leak, or are retained outside of a method scope.
  *     (to ensure the selfRef is collected with the object, so that leaks may be detected and corrected)
  *
  * This class' functionality is achieved by what may look at first glance like a complex web of references,
  * but boils down to:
  *
- * Target --> Impl --> selfRef --> [RefState] <--> RefCountedState --> Tidy
- *                                        ^                ^
- *                                        |                |
- * Ref -----------------------------------                 |
- *                                                         |
- * Global -------------------------------------------------
+ * Target --> selfRef --> [Ref.State] <--> Ref.GlobalState --> Tidy
+ *                                             ^
+ *                                             |
+ * Ref ----------------------------------------
+ *                                             |
+ * Global -------------------------------------
  *
  * So that, if Target is collected, Impl is collected and, hence, so is selfRef.
  *
- * Once ref or selfRef are collected, the paired RefState's release method is called, which if it had
- * not already been called will update RefCountedState and log an error.
+ * Once ref or selfRef are collected, the paired Ref.State's release method is called, which if it had
+ * not already been called will update Ref.GlobalState and log an error.
  *
- * Once the RefCountedState has been completely released, the Tidy method is called and it removes the global reference
+ * Once the Ref.GlobalState has been completely released, the Tidy method is called and it removes the global reference
  * to itself so it may also be collected.
  */
 public final class Ref<T> implements RefCounted<T>
@@ -104,7 +106,7 @@ public final class Ref<T> implements RefCounted<T>
         return state.globalState.count();
     }
 
-    // similar to RefCountedState, but tracks only the management of each unique ref created to the managed object
+    // similar to Ref.GlobalState, but tracks only the management of each unique ref created to the managed object
     // ensures it is only released once, and that it is always released
     static final class State extends PhantomReference<Ref>
     {
@@ -194,7 +196,7 @@ public final class Ref<T> implements RefCounted<T>
         }
     }
 
-    // the object that manages the actual cleaning up; this does not reference the RefCounted.Impl
+    // the object that manages the actual cleaning up; this does not reference the target object
     // so that we can detect when references are lost to the resource itself, and still cleanup afterwards
     // the Tidy object MUST not contain any references to the object we are managing
     static final class GlobalState
