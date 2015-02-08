@@ -114,8 +114,60 @@ import org.apache.cassandra.utils.concurrent.RefCounted;
 import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
 
 /**
- * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
- * Do not re-call open() on existing SSTable files; use the references kept by ColumnFamilyStore post-start instead.
+ * An SSTableReader can be constructed in a number of places, but typically is either
+ * read from disk at startup, or constructed from a flushed memtable, or after compaction
+ * to replace some existing sstables. However once created, an sstablereader may also be modified.
+ *
+ * A reader's OpenReason describes its current stage in its lifecycle, as follows:
+ *
+ * NORMAL
+ * From:       None        => Reader has been read from disk, either at startup or from a flushed memtable
+ *             EARLY       => Reader is the final result of a compaction
+ *             MOVED_START => Reader WAS being compacted, but this failed and it has been restored to NORMAL status
+ *
+ * EARLY
+ * From:       None        => Reader is a compaction replacement that is either incomplete and has been opened
+ *                            to represent its partial result status, or has been finished but the compaction
+ *                            it is a part of has not yet completed fully
+ *             EARLY       => Same as from None, only it is not the first time it has been
+ *
+ * MOVED_START
+ * From:       NORMAL      => Reader is being compacted. This compaction has not finished, but the compaction result
+ *                            is either partially or fully opened, to either partially or fully replace this reader.
+ *                            This reader's start key has been updated to represent this, so that reads only hit
+ *                            one or the other reader.
+ *
+ * METADATA_CHANGE
+ * From:       NORMAL      => Reader has seen low traffic and the amount of memory available for index summaries is
+ *                            constrained, so its index summary has been downsampled.
+ *         METADATA_CHANGE => Same
+ *
+ * Note that in parallel to this, there are two different Descriptor types; TMPLINK and FINAL; the latter corresponds
+ * to NORMAL state readers and all readers that replace a NORMAL one. TMPLINK is used for EARLY state readers and
+ * no others.
+ *
+ * When a reader is being compacted, if the result is large its replacement may be opened as EARLY before compaction
+ * completes in order to present the result to consumers earlier. In this case the reader will itself be changed to
+ * a MOVED_START state, where its start no longer represents its on-disk minimum key. This is to permit reads to be
+ * directed to only one reader when the two represent the same data. The EARLY file can represent a compaction result
+ * that is either partially complete and still in-progress, or a complete and immutable sstable that is part of a larger
+ * macro compaction action that has not yet fully completed.
+ *
+ * Currently ALL compaction results at least briefly go through an EARLY open state prior to completion, regardless
+ * of if early opening is enabled.
+ *
+ * Since a reader can be created multiple times over the same shared underlying resources, and the exact resources
+ * it shares between each instance differ subtly, we track the lifetime of any underlying resource with its own
+ * reference count, which each instance takes a Ref to. Each instance then tracks references to itself, and once these
+ * all expire it releases its Refs to these underlying resources.
+ *
+ * There is some shared cleanup behaviour needed only once all sstablereaders in a certain stage of their lifecycle
+ * (i.e. EARLY or NORMAL opening), and some that must only occur once all readers of any kind over a single logical
+ * sstable have expired. These are managed by the TypeTidy and GlobalTidy classes at the bottom, and are effectively
+ * managed as another resource each instance tracks its own Ref instance to, to ensure all of these resources are
+ * cleaned up safely and can be debugged otherwise.
+ *
+ * TODO: fill in details about DataTracker and lifecycle interactions for tools, and for compaction strategies
  */
 public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 {
@@ -162,7 +214,8 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
     {
         NORMAL,
         EARLY,
-        METADATA_CHANGE
+        METADATA_CHANGE,
+        MOVED_START
     }
 
     public final OpenReason openReason;
@@ -864,7 +917,7 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
 
             SSTableReader replacement = new SSTableReader(descriptor, components, metadata, partitioner, ifile.sharedCopy(),
                                                           dfile.sharedCopy(), indexSummary.sharedCopy(), bf.sharedCopy(),
-                                                          maxDataAge, sstableMetadata, OpenReason.METADATA_CHANGE);
+                                                          maxDataAge, sstableMetadata, OpenReason.MOVED_START);
             replacement.first = this.last.compareTo(newStart) > 0 ? newStart : this.last;
             replacement.last = this.last;
             setReplacedBy(replacement);

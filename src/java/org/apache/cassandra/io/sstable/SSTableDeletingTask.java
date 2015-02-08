@@ -66,7 +66,9 @@ public class SSTableDeletingTask implements Runnable
 
     public void setTracker(DataTracker tracker)
     {
-        // we don't want to alert deletions if not final
+        // the tracker is used only to notify listeners of deletion of the sstable;
+        // since deletion of a non-final file is not really deletion of the sstable,
+        // we don't want to notify the listeners in this event
         if (desc.type == Descriptor.Type.FINAL)
             this.tracker = tracker;
     }
