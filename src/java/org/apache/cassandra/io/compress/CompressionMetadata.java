@@ -327,6 +327,7 @@ public class CompressionMetadata
             RefCountedMemory offsets;
             if (finishType.isFinal)
             {
+                // we now know how many offsets we have and can resize the offsets properly
                 offsets = this.offsets.copy(count * 8L);
                 this.offsets.unreference();
             }

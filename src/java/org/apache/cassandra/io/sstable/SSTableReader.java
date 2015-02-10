@@ -1930,7 +1930,10 @@ public class SSTableReader extends SSTable implements RefCounted<SSTableReader>
      * One instance per SSTableReader we create. This references the type-shared tidy, which in turn references
      * the globally shared tidy, i.e.
      *
-     * InstanceTidier => DescriptorTypeTidy => GlobalTidy
+     * InstanceTidier => DescriptorTypeTitdy => GlobalTidy
+     *
+     * We can create many InstanceTidiers (one for every time we reopen an sstable with MOVED_START for example), but there can only be
+     * two DescriptorTypeTidy (FINAL and TEMPLINK) and only one GlobalTidy for one single logical sstable.
      *
      * When the InstanceTidier cleansup, it releases its reference to its DescriptorTypeTidy; when all InstanceTidiers
      * for that type have run, the DescriptorTypeTidy cleansup. DescriptorTypeTidy behaves in the same way towards GlobalTidy.

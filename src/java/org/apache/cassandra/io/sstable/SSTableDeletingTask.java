@@ -47,6 +47,11 @@ public class SSTableDeletingTask implements Runnable
     private final Set<Component> components;
     private DataTracker tracker;
 
+    /**
+     * realDescriptor is the actual descriptor for the sstable, the descriptor inside
+     * referent can be 'faked' as FINAL for early opened files. We need the real one
+     * to be able to remove the files.
+     */
     public SSTableDeletingTask(Descriptor realDescriptor, SSTableReader referent)
     {
         this.referent = referent;
