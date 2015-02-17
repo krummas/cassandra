@@ -818,6 +818,9 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         if (Schema.instance.getKSMetaData(TraceKeyspace.NAME) == null)
             MigrationManager.announceNewKeyspace(TraceKeyspace.definition(), 0, false);
 
+        if (Schema.instance.getKSMetaData(SystemDistributedKeyspace.NAME) == null)
+            MigrationManager.announceNewKeyspace(SystemDistributedKeyspace.definition(), 0, false);
+
         if (!isSurveyMode)
         {
             // start participating in the ring.
@@ -2779,16 +2782,23 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     sendNotification("repair", e.getMessage(), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
                     return;
                 }
+                String[] cfnames = new String[columnFamilyStores.size()];
+                for (int i = 0; i < columnFamilyStores.size(); i++)
+                {
+                    cfnames[i] = columnFamilyStores.get(i).name;
+                }
 
-                final UUID parentSession;
+                final UUID parentSession = UUIDGen.getTimeUUID();
+                SystemDistributedKeyspace.startParentRepair(parentSession, keyspace, cfnames, options.getRanges());
                 long repairedAt;
                 try
                 {
-                    parentSession = ActiveRepairService.instance.prepareForRepair(allNeighbors, options, columnFamilyStores);
+                    ActiveRepairService.instance.prepareForRepair(parentSession, allNeighbors, options, columnFamilyStores);
                     repairedAt = ActiveRepairService.instance.getParentRepairSession(parentSession).repairedAt;
                 }
                 catch (Throwable t)
                 {
+                    SystemDistributedKeyspace.failParentRepair(parentSession, t);
                     sendNotification("repair", String.format("Repair failed with error %s", t.getMessage()), new int[]{cmd, ActiveRepairService.Status.FINISHED.ordinal()});
                     return;
                 }
@@ -2802,11 +2812,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                                                                                                                            "internal"));
 
                 List<ListenableFuture<RepairSessionResult>> futures = new ArrayList<>(options.getRanges().size());
-                String[] cfnames = new String[columnFamilyStores.size()];
-                for (int i = 0; i < columnFamilyStores.size(); i++)
-                {
-                    cfnames[i] = columnFamilyStores.get(i).name;
-                }
+
                 for (Range<Token> range : options.getRanges())
                 {
                     final RepairSession session = ActiveRepairService.instance.submitRepairSession(parentSession,
@@ -2858,17 +2864,21 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                         try
                         {
                             ActiveRepairService.instance.finishParentSession(parentSession, allNeighbors, successfulRanges);
+                            SystemDistributedKeyspace.successfulParentRepair(parentSession, successfulRanges);
                         }
                         catch (Exception e)
                         {
                             logger.error("Error in incremental repair", e);
+                            SystemDistributedKeyspace.failParentRepair(parentSession, e);
                         }
                         repairComplete();
+
                     }
 
                     public void onFailure(Throwable t)
                     {
                         repairComplete();
+                        SystemDistributedKeyspace.failParentRepair(parentSession, t);
                     }
 
                     private void repairComplete()
