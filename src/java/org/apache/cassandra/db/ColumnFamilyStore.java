@@ -1230,7 +1230,23 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      * columns that have been dropped from the schema (for CQL3 tables only).
      * @return the updated ColumnFamily
      */
-    public static ColumnFamily removeDeletedColumnsOnly(ColumnFamily cf, int gcBefore, SecondaryIndexManager.Updater indexer)
+    public static ColumnFamily removeDeletedColumnsOnly(ColumnFamily cf, final int gcBefore, SecondaryIndexManager.Updater indexer)
+    {
+        return removeDeletedColumnsOnly(cf, new Function<Integer, Boolean>()
+        {
+            public Boolean apply(Integer localDeletionTime)
+            {
+                return localDeletionTime < gcBefore;
+            }
+        }, indexer);
+    }
+
+    /**
+     * Removes only per-cell tombstones, cells that are shadowed by a row-level or range tombstone, or
+     * columns that have been dropped from the schema (for CQL3 tables only).
+     * @return the updated ColumnFamily
+     */
+    public static ColumnFamily removeDeletedColumnsOnly(ColumnFamily cf, Function<Integer, Boolean> shouldPurge, SecondaryIndexManager.Updater indexer)
     {
         BatchRemoveIterator<Cell> iter = cf.batchRemoveIterator();
         DeletionInfo.InOrderTester tester = cf.inOrderDeletionTester();
@@ -1242,7 +1258,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             // (a) the column itself is gcable or
             // (b) the column is shadowed by a CF tombstone
             // (c) the column has been dropped from the CF schema (CQL3 tables only)
-            if (c.getLocalDeletionTime() < gcBefore || tester.isDeleted(c) || (hasDroppedColumns && isDroppedColumn(c, cf.metadata())))
+            Boolean purge = shouldPurge.apply(c.getLocalDeletionTime());
+            if ((purge != null && purge) || tester.isDeleted(c) || (hasDroppedColumns && isDroppedColumn(c, cf.metadata())))
             {
                 iter.remove();
                 indexer.remove(c);

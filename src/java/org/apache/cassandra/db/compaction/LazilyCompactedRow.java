@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import com.google.common.base.Function;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Iterators;
 
@@ -50,7 +51,8 @@ public class LazilyCompactedRow extends AbstractCompactedRow
 {
     private final List<? extends OnDiskAtomIterator> rows;
     private final CompactionController controller;
-    private final long maxPurgeableTimestamp;
+    private boolean hasCalculatedMaxPurgeableTimestamp = false;
+    private long maxPurgeableTimestamp;
     private final ColumnFamily emptyColumnFamily;
     private ColumnStats columnStats;
     private boolean closed;
@@ -77,26 +79,28 @@ public class LazilyCompactedRow extends AbstractCompactedRow
                 maxRowTombstone = rowTombstone;
         }
 
-        // tombstones with a localDeletionTime before this can be purged.  This is the minimum timestamp for any sstable
-        // containing `key` outside of the set of sstables involved in this compaction.
-        maxPurgeableTimestamp = controller.maxPurgeableTimestamp(key);
-
         emptyColumnFamily = ArrayBackedSortedColumns.factory.create(controller.cfs.metadata);
         emptyColumnFamily.delete(maxRowTombstone);
-        if (maxRowTombstone.markedForDeleteAt < maxPurgeableTimestamp)
+        if (maxRowTombstone != DeletionTime.LIVE && maxRowTombstone.markedForDeleteAt < getMaxPurgeableTimestamp())
             emptyColumnFamily.purgeTombstones(controller.gcBefore);
 
         reducer = new Reducer();
         merger = Iterators.filter(MergeIterator.get(rows, emptyColumnFamily.getComparator().onDiskAtomComparator(), reducer), Predicates.notNull());
     }
 
-    private static void removeDeleted(ColumnFamily cf, boolean shouldPurge, DecoratedKey key, CompactionController controller)
+    private long getMaxPurgeableTimestamp()
     {
-        // We should only purge cell tombstones if shouldPurge is true, but regardless, it's still ok to remove cells that
-        // are shadowed by a row or range tombstone; removeDeletedColumnsOnly(cf, Integer.MIN_VALUE) will accomplish this
-        // without purging tombstones.
-        int overriddenGCBefore = shouldPurge ? controller.gcBefore : Integer.MIN_VALUE;
-        ColumnFamilyStore.removeDeletedColumnsOnly(cf, overriddenGCBefore, controller.cfs.indexManager.gcUpdaterFor(key));
+        if (!hasCalculatedMaxPurgeableTimestamp)
+        {
+            hasCalculatedMaxPurgeableTimestamp = true;
+            maxPurgeableTimestamp = controller.maxPurgeableTimestamp(key);
+        }
+        return maxPurgeableTimestamp;
+    }
+
+    private static void removeDeleted(ColumnFamily cf, Function<Integer, Boolean> shouldPurge, DecoratedKey key, CompactionController controller)
+    {
+        ColumnFamilyStore.removeDeletedColumnsOnly(cf, shouldPurge, controller.cfs.indexManager.gcUpdaterFor(key));
     }
 
     public RowIndexEntry write(long currentPosition, DataOutputPlus out) throws IOException
@@ -251,7 +255,7 @@ public class LazilyCompactedRow extends AbstractCompactedRow
                 RangeTombstone t = tombstone;
                 tombstone = null;
 
-                if (t.timestamp() < maxPurgeableTimestamp && t.data.isGcAble(controller.gcBefore))
+                if (t.timestamp() < getMaxPurgeableTimestamp() && t.data.isGcAble(controller.gcBefore))
                 {
                     indexBuilder.tombstoneTracker().update(t, true);
                     return null;
@@ -269,9 +273,16 @@ public class LazilyCompactedRow extends AbstractCompactedRow
             }
             else
             {
-                boolean shouldPurge = container.getSortedColumns().iterator().next().timestamp() < maxPurgeableTimestamp;
                 // when we clear() the container, it removes the deletion info, so this needs to be reset each time
                 container.delete(maxRowTombstone);
+                final long ts = container.getSortedColumns().iterator().next().timestamp();
+                Function<Integer, Boolean> shouldPurge = new Function<Integer, Boolean>()
+                {
+                    public Boolean apply(Integer deletionTime)
+                    {
+                        return deletionTime < controller.gcBefore && ts < getMaxPurgeableTimestamp();
+                    }
+                };
                 removeDeleted(container, shouldPurge, key, controller);
                 Iterator<Cell> iter = container.iterator();
                 if (!iter.hasNext())
