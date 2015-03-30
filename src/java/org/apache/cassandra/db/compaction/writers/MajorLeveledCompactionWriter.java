@@ -49,6 +49,7 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     private long partitionsWritten = 0;
     private long totalWrittenInLevel = 0;
     private int sstablesWritten = 0;
+    private final boolean skipAncestors;
 
     public MajorLeveledCompactionWriter(ColumnFamilyStore cfs, Set<SSTableReader> allSSTables, Set<SSTableReader> nonExpiredSSTables, long maxSSTableSize, boolean offline, OperationType compactionType)
     {
@@ -60,7 +61,7 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
         long estimatedSSTables = Math.max(1, SSTableReader.getTotalBytes(nonExpiredSSTables) / maxSSTableSize);
         long keysPerSSTable = estimatedTotalKeys / estimatedSSTables;
         File sstableDirectory = cfs.directories.getLocationForDisk(getWriteDirectory(expectedWriteSize));
-        boolean skipAncestors = estimatedSSTables * allSSTables.size() > 200000; // magic number, avoid storing too much ancestor information since allSSTables are ancestors to *all* resulting sstables
+        skipAncestors = estimatedSSTables * allSSTables.size() > 200000; // magic number, avoid storing too much ancestor information since allSSTables are ancestors to *all* resulting sstables
 
         if (skipAncestors)
             logger.warn("Many sstables involved in compaction, skipping storing ancestor information to avoid running out of memory");
@@ -90,14 +91,13 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
             }
 
             averageEstimatedKeysPerSSTable = Math.round(((double) averageEstimatedKeysPerSSTable * sstablesWritten + partitionsWritten) / (sstablesWritten + 1));
-            // todo: ancestors!
             File sstableDirectory = cfs.directories.getLocationForDisk(getWriteDirectory(expectedWriteSize));
             SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getTempSSTablePath(sstableDirectory)),
                                                         averageEstimatedKeysPerSSTable,
                                                         minRepairedAt,
                                                         cfs.metadata,
                                                         cfs.partitioner,
-                                                        new MetadataCollector(allSSTables, cfs.metadata.comparator, currentLevel));
+                                                        new MetadataCollector(allSSTables, cfs.metadata.comparator, currentLevel, skipAncestors));
             rewriter.switchWriter(writer);
             partitionsWritten = 0;
             sstablesWritten++;
