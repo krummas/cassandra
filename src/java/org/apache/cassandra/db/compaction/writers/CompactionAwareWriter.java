@@ -51,7 +51,7 @@ public abstract class CompactionAwareWriter
 
     /**
      * Writes a row in an implementation specific way
-     * @param row
+     * @param row the row to append
      * @return true if the row was written, false otherwise
      */
     public abstract boolean append(AbstractCompactedRow row);
@@ -63,14 +63,12 @@ public abstract class CompactionAwareWriter
 
     /**
      * we are done, return the finished sstables so that the caller can mark the old ones as compacted
-     * @return
+     * @return all the written sstables sstables
      */
     public abstract List<SSTableReader> finish();
 
     /**
-     * entimated number of keys we should write
-     *
-     * @return
+     * estimated number of keys we should write
      */
     public long estimatedKeys()
     {
@@ -78,10 +76,7 @@ public abstract class CompactionAwareWriter
     }
 
     /**
-     *
      * The directories we can write to
-     *
-     * @return
      */
     public Directories getDirectories()
     {
@@ -90,9 +85,6 @@ public abstract class CompactionAwareWriter
 
     /**
      * Return a directory where we can expect expectedWriteSize to fit.
-     *
-     * @param expectedWriteSize
-     * @return
      */
     public Directories.DataDirectory getWriteDirectory(long expectedWriteSize)
     {
