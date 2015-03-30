@@ -51,8 +51,7 @@ public class SplittingSizeTieredCompactionWriter extends CompactionAwareWriter
     private final SSTableRewriter sstableWriter;
     private final long totalSize;
     private final Set<SSTableReader> allSSTables;
-    private long writtenPartitions;
-    private long currentPartitionsToWrite;
+    private long currentBytesToWrite;
     private int currentRatioIndex = 0;
 
     public SplittingSizeTieredCompactionWriter(ColumnFamilyStore cfs, Set<SSTableReader> allSSTables, Set<SSTableReader> nonExpiredSSTables, OperationType compactionType)
@@ -86,7 +85,8 @@ public class SplittingSizeTieredCompactionWriter extends CompactionAwareWriter
         ratios = Arrays.copyOfRange(potentialRatios, 0, noPointIndex);
         sstableWriter = new SSTableRewriter(cfs, allSSTables, CompactionTask.getMaxDataAge(nonExpiredSSTables), false);
         File sstableDirectory = cfs.directories.getLocationForDisk(getWriteDirectory(Math.round(totalSize * ratios[currentRatioIndex])));
-        currentPartitionsToWrite = Math.round(estimatedTotalKeys * ratios[currentRatioIndex]);
+        long currentPartitionsToWrite = Math.round(estimatedTotalKeys * ratios[currentRatioIndex]);
+        currentBytesToWrite = Math.round(totalSize * ratios[currentRatioIndex]);
         SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getTempSSTablePath(sstableDirectory)),
                                                                             currentPartitionsToWrite,
                                                                             minRepairedAt,
@@ -95,19 +95,18 @@ public class SplittingSizeTieredCompactionWriter extends CompactionAwareWriter
                                                                             new MetadataCollector(allSSTables, cfs.metadata.comparator, 0));
 
         sstableWriter.switchWriter(writer);
-        logger.debug("Ratios={}, expectedKeys = {}, totalSize = {}, currentPartitionsToWrite = {}", ratios, estimatedTotalKeys, totalSize, currentPartitionsToWrite);
+        logger.debug("Ratios={}, expectedKeys = {}, totalSize = {}, currentPartitionsToWrite = {}, currentBytesToWrite = {}", ratios, estimatedTotalKeys, totalSize, currentPartitionsToWrite, currentBytesToWrite);
     }
 
     @Override
     public boolean append(AbstractCompactedRow row)
     {
         RowIndexEntry rie = sstableWriter.append(row);
-        writtenPartitions++;
-        if (writtenPartitions >= currentPartitionsToWrite && currentRatioIndex < ratios.length - 1) // if we underestimate how many keys we have, the last sstable might get more than we expect
+        if (sstableWriter.currentWriter().getOnDiskFilePointer() > currentBytesToWrite && currentRatioIndex < ratios.length - 1) // if we underestimate how many keys we have, the last sstable might get more than we expect
         {
             currentRatioIndex++;
-            writtenPartitions = 0;
-            currentPartitionsToWrite = Math.round(ratios[currentRatioIndex] * estimatedTotalKeys);
+            currentBytesToWrite = Math.round(totalSize * ratios[currentRatioIndex]);
+            long currentPartitionsToWrite = Math.round(ratios[currentRatioIndex] * estimatedTotalKeys);
             File sstableDirectory = cfs.directories.getLocationForDisk(getWriteDirectory(Math.round(totalSize * ratios[currentRatioIndex])));
             SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getTempSSTablePath(sstableDirectory)),
                                                                                 currentPartitionsToWrite,
