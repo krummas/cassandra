@@ -67,6 +67,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         this.sstableWriter = new SSTableRewriter(cfs, allSSTables, maxAge, offline);
         this.locations = cfs.directories.getWriteableLocations();
         this.diskBoundaries = StorageService.getDiskBoundaries(cfs);
+        logger.info("disk boundaries = {}", diskBoundaries);
         this.locationIndex = -1;
     }
 

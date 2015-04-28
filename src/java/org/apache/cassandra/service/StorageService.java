@@ -4302,6 +4302,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             return null;
 
         Collection<Range<Token>> lr = StorageService.instance.getLocalRanges(cfs.keyspace.getName());
+        logger.info("local ranges = {}", lr);
         if (lr == null || lr.isEmpty())
             return null;
         List<Range<Token>> localRanges = Range.sort(lr);

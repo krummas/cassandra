@@ -39,6 +39,7 @@ import org.apache.cassandra.db.compaction.LeveledManifest;
 import org.apache.cassandra.db.compaction.Scrubber;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.OutputHandler;
 
@@ -63,10 +64,10 @@ public class StandaloneScrubber
 
             if (Schema.instance.getKSMetaData(options.keyspaceName) == null)
                 throw new IllegalArgumentException(String.format("Unknown keyspace %s", options.keyspaceName));
-
+            Keyspace.setInitialized();
             // Do not load sstables since they might be broken
             Keyspace keyspace = Keyspace.openWithoutSSTables(options.keyspaceName);
-
+            StorageService.instance.populateTokenMetadata();
             ColumnFamilyStore cfs = null;
             for (ColumnFamilyStore c : keyspace.getValidColumnFamilies(true, false, options.cfName))
             {
