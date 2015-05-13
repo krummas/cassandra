@@ -4344,10 +4344,10 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             Token last = localRanges.get(localRanges.size() - 1).right;
             boundaries = partitioner.splitRange(first, last, dataDirectories.length);
             List<RowPosition> diskBoundaries = new ArrayList<>();
-            for (Token t : boundaries)
-            {
-                diskBoundaries.add(t.minKeyBound());
-            }
+
+            for (int i = 0; i < boundaries.size() - 1; i++)
+                diskBoundaries.add(boundaries.get(i).minKeyBound());
+
             diskBoundaries.add(max);
             return diskBoundaries;
         }

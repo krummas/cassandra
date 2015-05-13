@@ -209,7 +209,7 @@ public class RandomPartitioner implements IPartitioner
     public static List<Token> splitRange(Token start, Token end, int parts, IPartitioner partitioner)
     {
         if (parts == 1)
-            return Arrays.asList(partitioner.getMaximumToken());
+            return Collections.singletonList(partitioner.getMaximumToken());
 
         BigInteger startValue = partitioner.valueForToken(start);
         BigInteger endValue = partitioner.valueForToken(end.equals(partitioner.getMinimumToken()) ? partitioner.getMaximumToken() : end);

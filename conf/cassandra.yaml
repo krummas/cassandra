@@ -22,7 +22,7 @@ cluster_name: 'Test Cluster'
 #
 # If you already have a cluster with 1 token per node, and wish to migrate to 
 # multiple tokens per node, see http://wiki.apache.org/cassandra/Operations
-num_tokens: 256
+num_tokens: 1
 
 # initial_token allows you to specify tokens manually.  While you can use # it with
 # vnodes (num_tokens > 1, above) -- in which case you should provide a 
@@ -135,7 +135,7 @@ data_file_directories:
    - /home/marcuse/c/d1
    - /home/marcuse/c/d2
 #   - /home/marcuse/c/d3
-   - /home/marcuse/c/d4
+#   - /home/marcuse/c/d4
 
 # commit log.  when running on magnetic HDD, this should be a
 # separate spindle than the data directories.
