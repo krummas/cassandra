@@ -28,7 +28,6 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.compaction.AbstractCompactedRow;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
@@ -39,15 +38,13 @@ import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 public class DefaultCompactionWriter extends CompactionAwareWriter
 {
     protected static final Logger logger = LoggerFactory.getLogger(DefaultCompactionWriter.class);
-    private final SSTableRewriter sstableWriter;
     private final Set<SSTableReader> allSSTables;
 
     public DefaultCompactionWriter(ColumnFamilyStore cfs, Set<SSTableReader> allSSTables, Set<SSTableReader> nonExpiredSSTables, boolean offline, OperationType compactionType)
     {
-        super(cfs, nonExpiredSSTables, nonExpiredSSTables, offline);
+        super(cfs, allSSTables, nonExpiredSSTables, offline);
         this.allSSTables = allSSTables;
         logger.debug("Expected bloom filter size : {}", estimatedTotalKeys);
-        sstableWriter = new SSTableRewriter(cfs, allSSTables, maxAge, offline);
     }
 
     @Override

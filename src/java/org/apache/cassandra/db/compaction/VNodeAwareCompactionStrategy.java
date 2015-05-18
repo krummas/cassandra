@@ -18,21 +18,10 @@
 package org.apache.cassandra.db.compaction;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import javax.annotation.Nullable;
-
-import com.google.common.base.Function;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Longs;
 import org.slf4j.Logger;
@@ -42,7 +31,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
-import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -67,6 +55,8 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
     private final Set<SSTableReader> unknownSSTables = new HashSet<>();
     private final long vnodeSSTableSize;
     private List<Range<Token>> localRanges;
+    private int estimatedL1compactions = 0;
+    private int estimatedL0compactions = 0;
 
     public VNodeAwareCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
     {
@@ -107,12 +97,11 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
             vnodeBoundaries.add(r.right);
         vnodeBoundaries.add(cfs.partitioner.getMaximumToken());
         for (int i = 0; i < vnodeBoundaries.size(); i++)
-            sstables.add(new HashSet<SSTableReader>());
+            sstables.add(new HashSet<>());
         // unknown sstables are the ones added before we knew the vnode boundaries:
         for (SSTableReader sstable : unknownSSTables)
-        {
             addSSTable(sstable);
-        }
+
         unknownSSTables.clear();
         StringBuilder sb = new StringBuilder();
         sb.append("ks=").append(cfs.keyspace.getName()).append(" cf=").append(cfs.getColumnFamilyName()).append(": ");
@@ -130,9 +119,10 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         if (vnodeBoundaries == null || vnodeBoundaries.isEmpty())
             return null;
         Set<SSTableReader> l0candidates = getL0Candidates();
+        Set<SSTableReader> l1candidates = getL1Candidates();
+
         if (l0candidates != null && cfs.getDataTracker().markCompacting(l0candidates))
             return new VNodeAwareCompactionTask(cfs, l0candidates, gcBefore, vnodeBoundaries, localRanges, cfs.directories.getWriteableLocations(), vnodeSSTableSize);
-        Set<SSTableReader> l1candidates = getL1Candidates();
         if (l1candidates != null && cfs.getDataTracker().markCompacting(l1candidates))
             return new VNodeAwareCompactionTask(cfs, l1candidates, gcBefore, vnodeBoundaries, localRanges, cfs.directories.getWriteableLocations(), vnodeSSTableSize);
         return null;
@@ -140,12 +130,10 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
 
     private Set<SSTableReader> getL0Candidates()
     {
-        if (l0sstables.isEmpty())
-            return null;
-
         Set<SSTableReader> nonCompactingL0 = Sets.difference(l0sstables, cfs.getDataTracker().getCompacting());
-        List<SSTableReader> interesting = getSSTablesForSTCS(nonCompactingL0);
-        if (!interesting.isEmpty())
+        CompactionCandidates interesting = getSSTablesForSTCS(nonCompactingL0);
+        estimatedL0compactions = interesting.estimatedRemainingCompactions;
+        if (!interesting.sstables.isEmpty())
             return nonCompactingL0;
 
         return null;
@@ -155,42 +143,38 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
     {
         final Set<SSTableReader> compacting = cfs.getDataTracker().getCompacting();
         // for each vnodes sstables, get the most interesting STCS sstables to compact
-        List<Set<SSTableReader>> transformed = Lists.newArrayList(Iterables.transform(sstables, new Function<Set<SSTableReader>, Set<SSTableReader>>()
-        {
-            @Nullable
-            @Override
-            public Set<SSTableReader> apply(Set<SSTableReader> candidateSSTables)
-            {
-                return new HashSet<>(getSSTablesForSTCS(Sets.difference(candidateSSTables, compacting)));
-            }
-        }));
+        List<CompactionCandidates> transformed = sstables.stream().map((mapper) -> getSSTablesForSTCS(Sets.difference(mapper, compacting))).collect(Collectors.toList());
+        estimatedL1compactions = transformed.stream().mapToInt((c) -> c.estimatedRemainingCompactions).sum();
         // sort by the biggest one;
-        Set<SSTableReader> candidate = Collections.max(transformed, new Comparator<Set<SSTableReader>>()
-        {
-            @Override
-            public int compare(Set<SSTableReader> o1, Set<SSTableReader> o2)
-            {
-                return Longs.compare(SSTableReader.getTotalBytes(o1), SSTableReader.getTotalBytes(o2));
-            }
-        });
-
-        if (!candidate.isEmpty())
-            return candidate;
+        Optional<CompactionCandidates> candidate = transformed.stream().max((o1, o2) -> Longs.compare(SSTableReader.getTotalBytes(o1.sstables), SSTableReader.getTotalBytes(o2.sstables)));
+        if (candidate.isPresent() && !candidate.get().sstables.isEmpty())
+            return new HashSet<>(candidate.get().sstables);
 
         return null;
     }
 
-    private List<SSTableReader> getSSTablesForSTCS(Collection<SSTableReader> sstables)
+    private CompactionCandidates getSSTablesForSTCS(Set<SSTableReader> sstables)
     {
         Iterable<SSTableReader> candidates = cfs.getDataTracker().getUncompactingSSTables(sstables);
-        List<Pair<SSTableReader,Long>> pairs = SizeTieredCompactionStrategy.createSSTableAndLengthPairs(AbstractCompactionStrategy.filterSuspectSSTables(candidates));
+        List<Pair<SSTableReader, Long>> pairs = SizeTieredCompactionStrategy.createSSTableAndLengthPairs(AbstractCompactionStrategy.filterSuspectSSTables(candidates));
         List<List<SSTableReader>> buckets = SizeTieredCompactionStrategy.getBuckets(pairs,
                 sizeTieredOptions.bucketHigh,
                 sizeTieredOptions.bucketLow,
                 sizeTieredOptions.minSSTableSize);
         int minThreshold = cfs.getMinimumCompactionThreshold();
         int maxThreshold = cfs.getMaximumCompactionThreshold();
-        return SizeTieredCompactionStrategy.mostInterestingBucket(buckets, minThreshold, maxThreshold);
+        return new CompactionCandidates(SizeTieredCompactionStrategy.getEstimatedCompactionsByTasks(cfs, buckets), SizeTieredCompactionStrategy.mostInterestingBucket(buckets, minThreshold, maxThreshold));
+    }
+
+    private static class CompactionCandidates
+    {
+        private int estimatedRemainingCompactions;
+        private List<SSTableReader> sstables;
+        public CompactionCandidates(int estimatedRemainingCompactions, List<SSTableReader> sstables)
+        {
+            this.estimatedRemainingCompactions = estimatedRemainingCompactions;
+            this.sstables = sstables;
+        }
     }
 
     @Override
@@ -208,7 +192,7 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
     @Override
     public int getEstimatedRemainingTasks()
     {
-        return 0;
+        return estimatedL0compactions + estimatedL1compactions;
     }
 
     @Override
@@ -283,10 +267,9 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         }
     }
 
-    private static class VNodeAwareCompactionWriter extends CompactionAwareWriter
+    public static class VNodeAwareCompactionWriter extends CompactionAwareWriter
     {
         private final SSTableRewriter l1writer;
-        private final SSTableRewriter l0writer;
         private final List<Token> vnodeBoundaries;
         private final double compactionGain;
         private final Set<SSTableReader> allSSTables;
@@ -297,10 +280,9 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
 
         public VNodeAwareCompactionWriter(ColumnFamilyStore cfs, Set<SSTableReader> allSSTables, Set<SSTableReader> nonExpiredSSTables, List<Token> vnodeBoundaries, List<Range<Token>> localRanges, long vnodeSSTableSize)
         {
-            super(cfs, nonExpiredSSTables);
+            super(cfs, allSSTables, nonExpiredSSTables, false);
 
             l1writer = new SSTableRewriter(cfs, allSSTables, maxAge, false);
-            l0writer = new SSTableRewriter(cfs, allSSTables, maxAge, false);
             this.vnodeBoundaries = vnodeBoundaries;
             compactionGain = SSTableReader.estimateCompactionGain(nonExpiredSSTables);
             this.allSSTables = allSSTables;
@@ -321,7 +303,7 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
             this.location = location;
             logger.info("Switching compaction location to {}", location);
             // note that we only switch the l0 writer if we switch compaction location
-            l0writer.switchWriter(createWriter(location, estimatedTotalKeys, 0));
+            sstableWriter.switchWriter(createWriter(location, estimatedTotalKeys, 0));
             if (l1writer.currentWriter() != null)
                 l1writer.switchWriter(createWriter(location, estimatedTotalKeys, 1));
         }
@@ -345,8 +327,8 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
             }
             else
             {
-                activeWriter = l0writer;
-                logger.info("writing vnode {} to L0, estimated size = {}, loc = {}", vnodeIndex, estimatedVNodeSize, l0writer.currentWriter().getFilename());
+                activeWriter = sstableWriter;
+                logger.info("writing vnode {} to L0, estimated size = {}, loc = {}", vnodeIndex, estimatedVNodeSize, sstableWriter.currentWriter().getFilename());
             }
         }
 
@@ -365,19 +347,33 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         }
 
         @Override
-        public void abort()
+        public Throwable doAbort(Throwable accumulate)
         {
-            l1writer.abort();
-            l0writer.abort();
             activeWriter = null;
+            accumulate = super.doAbort(accumulate);
+            return l1writer.abort(accumulate);
+        }
+
+        @Override
+        protected Throwable doCommit(Throwable accumulate)
+        {
+            accumulate = super.doCommit(accumulate);
+            return l1writer.commit(accumulate);
+        }
+
+        @Override
+        protected void doPrepare()
+        {
+            super.doPrepare();
+            l1writer.prepareToCommit();
         }
 
         @Override
         public List<SSTableReader> finish()
         {
             List<SSTableReader> finished = new ArrayList<>();
-            finished.addAll(l0writer.finish());
-            finished.addAll(l1writer.finish());
+            finished.addAll(super.finish());
+            finished.addAll(l1writer.finished());
             return finished;
         }
 
@@ -385,10 +381,11 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         public List<SSTableReader> finish(long repairedAt)
         {
             List<SSTableReader> finished = new ArrayList<>();
-            finished.addAll(l0writer.finish(repairedAt));
-            finished.addAll(l1writer.finish(repairedAt));
+            finished.addAll(sstableWriter.setRepairedAt(repairedAt).finish());
+            finished.addAll(l1writer.setRepairedAt(repairedAt).finish());
             return finished;
         }
+
         private SSTableWriter createWriter(Directories.DataDirectory directory, long estimatedKeys, int level)
         {
             File sstableDirectory = cfs.directories.getLocationForDisk(directory);

@@ -103,7 +103,7 @@ public class RangeAwareSSTableWriter
         for (SSTableWriter writer : finishedWriters)
         {
             if (writer.getFilePointer() > 0)
-                sstableReaders.add(writer.closeAndOpenReader());
+                sstableReaders.add(writer.finish(true));
             else
                 writer.abort();
         }

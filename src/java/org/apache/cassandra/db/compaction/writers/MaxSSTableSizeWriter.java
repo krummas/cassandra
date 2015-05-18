@@ -77,12 +77,6 @@ public class MaxSSTableSizeWriter extends CompactionAwareWriter
     }
 
     @Override
-    public List<SSTableReader> finish()
-    {
-        return sstableWriter.finish();
-    }
-
-    @Override
     public List<SSTableReader> finish(long repairedAt)
     {
         return sstableWriter.setRepairedAt(repairedAt).finish();
