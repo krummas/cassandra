@@ -130,10 +130,9 @@ public class SSTableRewriterTest extends SchemaLoader
         cfs.addSSTable(s);
         Set<SSTableReader> sstables = new HashSet<>(cfs.getSSTables());
         assertEquals(1, sstables.size());
-        SSTableRewriter.overrideOpenInterval(10000000);
         try (AbstractCompactionStrategy.ScannerList scanners = cfs.getCompactionStrategy().getScanners(sstables);
              LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.UNKNOWN);
-             SSTableRewriter writer = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter writer = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             ISSTableScanner scanner = scanners.scanners.get(0);
             CompactionController controller = new CompactionController(cfs, sstables, cfs.gcBefore(System.currentTimeMillis()));
@@ -164,11 +163,10 @@ public class SSTableRewriterTest extends SchemaLoader
         cfs.addSSTable(s);
         Set<SSTableReader> sstables = new HashSet<>(cfs.getSSTables());
         assertEquals(1, sstables.size());
-        SSTableRewriter.overrideOpenInterval(10000000);
         boolean checked = false;
         try (AbstractCompactionStrategy.ScannerList scanners = cfs.getCompactionStrategy().getScanners(sstables);
              LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.UNKNOWN);
-             SSTableRewriter writer = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter writer = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             ISSTableScanner scanner = scanners.scanners.get(0);
             CompactionController controller = new CompactionController(cfs, sstables, cfs.gcBefore(System.currentTimeMillis()));
@@ -264,14 +262,13 @@ public class SSTableRewriterTest extends SchemaLoader
         long startStorageMetricsLoad = StorageMetrics.load.getCount();
         long sBytesOnDisk = s.bytesOnDisk();
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(10000000);
 
         List<SSTableReader> sstables;
         int files = 1;
         try (ISSTableScanner scanner = s.getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
             while(scanner.hasNext())
@@ -315,14 +312,13 @@ public class SSTableRewriterTest extends SchemaLoader
         cfs.addSSTable(s);
 
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(10000000);
 
         List<SSTableReader> sstables;
         int files = 1;
         try (ISSTableScanner scanner = s.getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
             while(scanner.hasNext())
@@ -439,12 +435,11 @@ public class SSTableRewriterTest extends SchemaLoader
         DecoratedKey origLast = s.last;
         long startSize = cfs.metric.liveDiskSpaceUsed.getCount();
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(10000000);
 
         try (ISSTableScanner scanner = s.getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
             test.run(scanner, controller, s, cfs, rewriter);
@@ -471,13 +466,12 @@ public class SSTableRewriterTest extends SchemaLoader
         cfs.addSSTable(s);
 
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(10000000);
 
         int files = 1;
         try (ISSTableScanner scanner = s.getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
             while(scanner.hasNext())
@@ -516,14 +510,13 @@ public class SSTableRewriterTest extends SchemaLoader
         SSTableReader s = writeFile(cfs, 1000);
         cfs.addSSTable(s);
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(10000000);
 
         List<SSTableReader> sstables;
         int files = 1;
         try (ISSTableScanner scanner = s.getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 10000000);)
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
             while(scanner.hasNext())
@@ -558,14 +551,13 @@ public class SSTableRewriterTest extends SchemaLoader
         SSTableReader s = writeFile(cfs, 400);
         cfs.addSSTable(s);
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(1000000);
 
         List<SSTableReader> sstables;
         int files = 1;
         try (ISSTableScanner scanner = s.getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);)
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 1000000);)
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
             while(scanner.hasNext())
@@ -648,12 +640,11 @@ public class SSTableRewriterTest extends SchemaLoader
         if (!offline)
             cfs.addSSTable(s);
         Set<SSTableReader> compacting = Sets.newHashSet(s);
-        SSTableRewriter.overrideOpenInterval(10000000);
         try (ISSTableScanner scanner = compacting.iterator().next().getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = offline ? LifecycleTransaction.offline(OperationType.UNKNOWN, compacting)
                                        : cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, offline);
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, offline, 10000000);
         )
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
@@ -730,12 +721,11 @@ public class SSTableRewriterTest extends SchemaLoader
         Set<SSTableReader> compacting = new HashSet<>();
         compacting.add(s);
 
-        SSTableRewriter.overrideOpenInterval(1);
         int keyCount = 0;
         try (ISSTableScanner scanner = compacting.iterator().next().getScanner();
              CompactionController controller = new CompactionController(cfs, compacting, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(compacting, OperationType.UNKNOWN);
-             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false);
+             SSTableRewriter rewriter = new SSTableRewriter(cfs, txn, 1000, false, 1);
         )
         {
             rewriter.switchWriter(getWriter(cfs, s.descriptor.directory));
@@ -767,12 +757,11 @@ public class SSTableRewriterTest extends SchemaLoader
         cfs.addSSTable(s);
         Set<SSTableReader> sstables = Sets.newHashSet(s);
         assertEquals(1, sstables.size());
-        SSTableRewriter.overrideOpenInterval(10000000);
         boolean checked = false;
         try (ISSTableScanner scanner = sstables.iterator().next().getScanner();
              CompactionController controller = new CompactionController(cfs, sstables, 0);
              LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.UNKNOWN);
-             SSTableRewriter writer = new SSTableRewriter(cfs, txn, 1000, false);
+             SSTableRewriter writer = new SSTableRewriter(cfs, txn, 1000, false, 10000000);
         )
         {
             writer.switchWriter(getWriter(cfs, sstables.iterator().next().descriptor.directory));
