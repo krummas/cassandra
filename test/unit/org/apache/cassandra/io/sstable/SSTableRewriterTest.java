@@ -770,6 +770,55 @@ public class SSTableRewriterTest extends SchemaLoader
         validateCFS(cfs);
     }
 
+    /**
+     * emulates anticompaction - writing from one source sstable to two new sstables
+     *
+     * @throws IOException
+     */
+    @Test
+    public void testTwoWriters() throws IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF);
+        cfs.truncateBlocking();
+
+        SSTableReader s = writeFile(cfs, 1000);
+        cfs.addSSTable(s);
+        Set<SSTableReader> sstables = Sets.newHashSet(cfs.markAllCompacting());
+        assertEquals(1, sstables.size());
+        SSTableRewriter writer = new SSTableRewriter(cfs, sstables, 1000, false, false);
+        SSTableRewriter writer2 = new SSTableRewriter(cfs, sstables, 1000, false, false);
+        try (AbstractCompactionStrategy.ScannerList scanners = cfs.getCompactionStrategy().getScanners(sstables))
+        {
+            ISSTableScanner scanner = scanners.scanners.get(0);
+            CompactionController controller = new CompactionController(cfs, sstables, cfs.gcBefore(System.currentTimeMillis()));
+            writer.switchWriter(getWriter(cfs, sstables.iterator().next().descriptor.directory));
+            writer2.switchWriter(getWriter(cfs, sstables.iterator().next().descriptor.directory));
+            while (scanner.hasNext())
+            {
+                AbstractCompactedRow row = new LazilyCompactedRow(controller, Collections.singletonList(scanner.next()));
+
+                if (writer.currentWriter().getFilePointer() < 15000000)
+                    writer.append(row);
+                else
+                    writer2.append(row);
+            }
+            for (int i = 0; i < 5000; i++)
+            {
+                DecoratedKey key = Util.dk(ByteBufferUtil.bytes(i));
+                ColumnFamily cf = Util.getColumnFamily(keyspace, key, CF);
+                assertTrue(cf != null);
+            }
+        }
+        writer.abort();
+        writer2.abort();
+        cfs.getDataTracker().unmarkCompacting(sstables);
+        cfs.truncateBlocking();
+        SSTableDeletingTask.waitForDeletions();
+        validateCFS(cfs);
+    }
+
+
     private void validateKeys(Keyspace ks)
     {
         for (int i = 0; i < 100; i++)
