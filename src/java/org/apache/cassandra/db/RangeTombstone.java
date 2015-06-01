@@ -118,14 +118,15 @@ public class RangeTombstone extends Interval<ByteBuffer, DeletionTime> implement
     {
         private final Comparator<ByteBuffer> comparator;
         private final Deque<RangeTombstone> ranges = new ArrayDeque<RangeTombstone>();
-        private final SortedSet<RangeTombstone> maxOrderingSet = new TreeSet<RangeTombstone>(new Comparator<RangeTombstone>()
+        private final Comparator<RangeTombstone> maxComparator = new Comparator<RangeTombstone>()
         {
             public int compare(RangeTombstone t1, RangeTombstone t2)
             {
                 return comparator.compare(t1.max, t2.max);
             }
-        });
-        public final Set<RangeTombstone> expired = new HashSet<RangeTombstone>();
+        };
+        private final SortedSet<RangeTombstone> maxOrderingSet = new TreeSet<>(maxComparator);
+        private final SortedSet<RangeTombstone> expired = new TreeSet<>(maxComparator);
         private int atomCount;
 
         public Tracker(Comparator<ByteBuffer> comparator)
@@ -198,6 +199,25 @@ public class RangeTombstone extends Interval<ByteBuffer, DeletionTime> implement
          */
         public void update(OnDiskAtom atom, boolean isExpired)
         {
+            Iterator<RangeTombstone> expiredIter = expired.iterator();
+            while (expiredIter.hasNext())
+            {
+                RangeTombstone t = expiredIter.next();
+                if (comparator.compare(atom.name(), t.max) > 0)
+                {
+                    // this expired tombstone is now useless since it cannot cover this or any future atoms
+                    // (the max is smaller than the name() of the atom, and new atoms are passed to this method with
+                    // increasing name())
+                    ranges.remove(t);
+                    maxOrderingSet.remove(t);
+                    expiredIter.remove();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
             if (atom instanceof RangeTombstone)
             {
                 RangeTombstone t = (RangeTombstone)atom;
@@ -232,6 +252,7 @@ public class RangeTombstone extends Interval<ByteBuffer, DeletionTime> implement
                         // That tombstone is now useless
                         iter.remove();
                         ranges.remove(tombstone);
+                        expired.remove(tombstone);
                     }
                     else
                     {
