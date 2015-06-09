@@ -251,12 +251,6 @@ public class CompactionManager implements CompactionManagerMBean
     {
         try (LifecycleTransaction compacting = cfs.markAllCompacting(operationType);)
         {
-            if (compacting == null)
-            {
-                logger.info("No sstables for {}.{}", cfs.keyspace.getName(), cfs.name);
-                return AllSSTableOpStatus.SUCCESSFUL;
-            }
-
             Iterable<SSTableReader> sstables = Lists.newArrayList(operation.filterSSTables(compacting));
             if (Iterables.isEmpty(sstables))
             {
