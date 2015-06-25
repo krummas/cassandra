@@ -183,7 +183,7 @@ public abstract class UnfilteredDeserializer
             {
                 markerBuilder.reset();
                 RangeTombstone.Bound.Kind kind = clusteringDeserializer.deserializeNextBound(markerBuilder);
-                UnfilteredSerializer.serializer.deserializeMarkerBody(in, header, kind.isBoundary(), markerBuilder);
+                UnfilteredSerializer.serializer.deserializeMarkerBody(in, header, helper, kind.isBoundary(), markerBuilder);
                 return markerBuilder.build();
             }
             else
@@ -274,7 +274,7 @@ public abstract class UnfilteredDeserializer
 
             while (true)
             {
-                nextAtom = LegacyLayout.readLegacyAtom(metadata, in, readAllAsDynamic);
+                nextAtom = LegacyLayout.readLegacyAtom(metadata, in, readAllAsDynamic, helper.isRepaired);
                 if (nextAtom == null)
                 {
                     isDone = true;
@@ -320,7 +320,7 @@ public abstract class UnfilteredDeserializer
                         if (tombstone.start.bound.size() == 0)
                         {
                             savedAtom = tombstone;
-                            nextAtom = LegacyLayout.readLegacyAtom(metadata, in, readAllAsDynamic);
+                            nextAtom = LegacyLayout.readLegacyAtom(metadata, in, readAllAsDynamic, helper.isRepaired);
                             if (nextAtom == null)
                             {
                                 // That was actually the only atom so use it after all

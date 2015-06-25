@@ -192,7 +192,7 @@ public class UnfilteredRowIteratorSerializer
 
         SerializationHeader header = SerializationHeader.serializer.deserializeForMessaging(in, metadata, hasStatic);
 
-        DeletionTime partitionDeletion = hasPartitionDeletion ? readDelTime(in, header) : DeletionTime.LIVE;
+        DeletionTime partitionDeletion = hasPartitionDeletion ? readDelTime(in, header, false) : DeletionTime.LIVE;
 
         Row staticRow = Rows.EMPTY_STATIC_ROW;
         if (hasStatic)
@@ -252,11 +252,11 @@ public class UnfilteredRowIteratorSerializer
              + TypeSizes.sizeof(header.encodeDeletionTime(dt.localDeletionTime()));
     }
 
-    public static DeletionTime readDelTime(DataInput in, SerializationHeader header) throws IOException
+    public static DeletionTime readDelTime(DataInput in, SerializationHeader header, boolean isRepaired) throws IOException
     {
         long markedAt = header.decodeTimestamp(in.readLong());
         int localDelTime = header.decodeDeletionTime(in.readInt());
-        return new SimpleDeletionTime(markedAt, localDelTime);
+        return new SimpleDeletionTime(markedAt, localDelTime, isRepaired);
     }
 
     public static void skipDelTime(DataInput in, SerializationHeader header) throws IOException

@@ -28,11 +28,13 @@ public class DeletionTimeArray
 {
     private long[] markedForDeleteAts;
     private int[] delTimes;
+    private boolean[] isRepaired;
 
     public DeletionTimeArray(int initialCapacity)
     {
         this.markedForDeleteAts = new long[initialCapacity];
         this.delTimes = new int[initialCapacity];
+        this.isRepaired = new boolean[initialCapacity];
         clear();
     }
 
@@ -40,12 +42,14 @@ public class DeletionTimeArray
     {
         markedForDeleteAts[i] = Long.MIN_VALUE;
         delTimes[i] = Integer.MAX_VALUE;
+        isRepaired[i] = false;
     }
 
     public void set(int i, DeletionTime dt)
     {
         this.markedForDeleteAts[i] = dt.markedForDeleteAt();
         this.delTimes[i] = dt.localDeletionTime();
+        this.isRepaired[i] = dt.isRepaired();
     }
 
     public int size()
@@ -59,9 +63,11 @@ public class DeletionTimeArray
 
         markedForDeleteAts = Arrays.copyOf(markedForDeleteAts, newSize);
         delTimes = Arrays.copyOf(delTimes, newSize);
+        isRepaired = Arrays.copyOf(isRepaired, newSize);
 
         Arrays.fill(markedForDeleteAts, prevSize, newSize, Long.MIN_VALUE);
         Arrays.fill(delTimes, prevSize, newSize, Integer.MAX_VALUE);
+        Arrays.fill(isRepaired, prevSize, newSize, false); // not really needed
     }
 
     public boolean supersedes(int i, DeletionTime dt)
@@ -78,17 +84,20 @@ public class DeletionTimeArray
     {
         long m = markedForDeleteAts[j];
         int l = delTimes[j];
+        boolean repaired = isRepaired[j];
 
         move(i, j);
 
         markedForDeleteAts[i] = m;
         delTimes[i] = l;
+        isRepaired[i] = repaired;
     }
 
     public void move(int i, int j)
     {
         markedForDeleteAts[j] = markedForDeleteAts[i];
         delTimes[j] = delTimes[i];
+        isRepaired[j] = isRepaired[i];
     }
 
     public boolean isLive(int i)
@@ -100,17 +109,18 @@ public class DeletionTimeArray
     {
         Arrays.fill(markedForDeleteAts, Long.MIN_VALUE);
         Arrays.fill(delTimes, Integer.MAX_VALUE);
+        Arrays.fill(isRepaired, false);
     }
 
     public int dataSize()
     {
-        return 12 * markedForDeleteAts.length;
+        return (12 + 1) * markedForDeleteAts.length; // todo: verify that bool arrays take one byte per item
     }
 
     public long unsharedHeapSize()
     {
         return ObjectSizes.sizeOfArray(markedForDeleteAts)
-             + ObjectSizes.sizeOfArray(delTimes);
+             + ObjectSizes.sizeOfArray(delTimes) + isRepaired.length; // todo
     }
 
     public void copy(DeletionTimeArray other)
@@ -120,6 +130,7 @@ public class DeletionTimeArray
         {
             markedForDeleteAts[i] = other.markedForDeleteAts[i];
             delTimes[i] = other.delTimes[i];
+            isRepaired[i] = other.isRepaired[i];
         }
     }
 
@@ -148,6 +159,11 @@ public class DeletionTimeArray
         public DeletionTime takeAlias()
         {
             return new SimpleDeletionTime(markedForDeleteAt(), localDeletionTime());
+        }
+
+        public boolean isRepaired()
+        {
+            return array.isRepaired[i];
         }
     }
 }

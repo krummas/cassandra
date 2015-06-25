@@ -96,7 +96,8 @@ public class BigTableScanner implements ISSTableScanner
         this.dataRange = dataRange;
         this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata,
                                                                                                         sstable.descriptor.version,
-                                                                                                        sstable.header);
+                                                                                                        sstable.header,
+                                                                                                        sstable.isRepaired());
         this.isForThrift = isForThrift;
         this.rangeIterator = rangeIterator;
     }

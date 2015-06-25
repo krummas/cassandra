@@ -28,11 +28,13 @@ public class LivenessInfoArray
 {
     private long[] timestamps;
     private int[] delTimesAndTTLs;
+    private boolean[] repaired;
 
     public LivenessInfoArray(int initialCapacity)
     {
         this.timestamps = new long[initialCapacity];
         this.delTimesAndTTLs = new int[initialCapacity * 2];
+        this.repaired = new boolean[initialCapacity];
         clear();
     }
 
@@ -41,18 +43,20 @@ public class LivenessInfoArray
         timestamps[i] = LivenessInfo.NO_TIMESTAMP;
         delTimesAndTTLs[2 * i] = LivenessInfo.NO_DELETION_TIME;
         delTimesAndTTLs[2 * i + 1] = LivenessInfo.NO_TTL;
+        repaired[i] = false;
     }
 
     public void set(int i, LivenessInfo info)
     {
-        set(i, info.timestamp(), info.ttl(), info.localDeletionTime());
+        set(i, info.timestamp(), info.ttl(), info.localDeletionTime(), info.isRepaired());
     }
 
-    public void set(int i, long timestamp, int ttl, int localDeletionTime)
+    public void set(int i, long timestamp, int ttl, int localDeletionTime, boolean isRepaired)
     {
         this.timestamps[i] = timestamp;
         this.delTimesAndTTLs[2 * i] = localDeletionTime;
         this.delTimesAndTTLs[2 * i + 1] = ttl;
+        this.repaired[i] = isRepaired;
     }
 
     public long timestamp(int i)
@@ -77,6 +81,11 @@ public class LivenessInfoArray
             || (ttl(i) != LivenessInfo.NO_TTL && nowInSec < localDeletionTime(i));
     }
 
+    public boolean isRepaired(int i)
+    {
+        return repaired[i];
+    }
+
     public int size()
     {
         return timestamps.length;
@@ -88,6 +97,7 @@ public class LivenessInfoArray
 
         timestamps = Arrays.copyOf(timestamps, newSize);
         delTimesAndTTLs = Arrays.copyOf(delTimesAndTTLs, newSize * 2);
+        repaired = Arrays.copyOf(repaired, newSize * 2);
 
         clear(prevSize, newSize);
     }
@@ -97,12 +107,14 @@ public class LivenessInfoArray
         long ts = timestamps[j];
         int ldt = delTimesAndTTLs[2 * j];
         int ttl = delTimesAndTTLs[2 * j + 1];
+        boolean isRepaired = repaired[j];
 
         move(i, j);
 
         timestamps[i] = ts;
         delTimesAndTTLs[2 * i] = ldt;
         delTimesAndTTLs[2 * i + 1] = ttl;
+        repaired[i] = isRepaired;
     }
 
     public void move(int i, int j)
@@ -110,6 +122,7 @@ public class LivenessInfoArray
         timestamps[j] = timestamps[i];
         delTimesAndTTLs[2 * j] = delTimesAndTTLs[2 * i];
         delTimesAndTTLs[2 * j + 1] = delTimesAndTTLs[2 * i + 1];
+        repaired[j] = repaired[j];
     }
 
     public void clear()
@@ -120,6 +133,7 @@ public class LivenessInfoArray
     private void clear(int from, int to)
     {
         Arrays.fill(timestamps, from, to, LivenessInfo.NO_TIMESTAMP);
+        Arrays.fill(repaired, from, to, false);
         for (int i = from; i < to; i++)
         {
             delTimesAndTTLs[2 * i] = LivenessInfo.NO_DELETION_TIME;
@@ -135,7 +149,8 @@ public class LivenessInfoArray
     public long unsharedHeapSize()
     {
         return ObjectSizes.sizeOfArray(timestamps)
-             + ObjectSizes.sizeOfArray(delTimesAndTTLs);
+             + ObjectSizes.sizeOfArray(delTimesAndTTLs)
+                + repaired.length; // todo: fix
     }
 
     public static Cursor newCursor()
@@ -168,6 +183,11 @@ public class LivenessInfoArray
         public int ttl()
         {
             return array.delTimesAndTTLs[2 * i + 1];
+        }
+
+        public boolean isRepaired()
+        {
+            return array.isRepaired(i);
         }
     }
 }

@@ -29,14 +29,16 @@ public class SimpleLivenessInfo extends AbstractLivenessInfo
     private final long timestamp;
     private final int ttl;
     private final int localDeletionTime;
+    private final boolean isRepaired;
 
     // Note that while some code use this ctor, the two following static creation methods
     // are usually less error prone.
-    SimpleLivenessInfo(long timestamp, int ttl, int localDeletionTime)
+    SimpleLivenessInfo(long timestamp, int ttl, int localDeletionTime, boolean isRepaired)
     {
         this.timestamp = timestamp;
         this.ttl = ttl;
         this.localDeletionTime = localDeletionTime;
+        this.isRepaired = isRepaired;
     }
 
     public static SimpleLivenessInfo forUpdate(long timestamp, int ttl, int nowInSec, CFMetaData metadata)
@@ -44,12 +46,12 @@ public class SimpleLivenessInfo extends AbstractLivenessInfo
         if (ttl == NO_TTL)
             ttl = metadata.getDefaultTimeToLive();
 
-        return new SimpleLivenessInfo(timestamp, ttl, ttl == NO_TTL ? NO_DELETION_TIME : nowInSec + ttl);
+        return new SimpleLivenessInfo(timestamp, ttl, ttl == NO_TTL ? NO_DELETION_TIME : nowInSec + ttl, false);
     }
 
     public static SimpleLivenessInfo forDeletion(long timestamp, int localDeletionTime)
     {
-        return new SimpleLivenessInfo(timestamp, NO_TTL, localDeletionTime);
+        return new SimpleLivenessInfo(timestamp, NO_TTL, localDeletionTime, false);
     }
 
     public long timestamp()
@@ -71,5 +73,10 @@ public class SimpleLivenessInfo extends AbstractLivenessInfo
     public LivenessInfo takeAlias()
     {
         return this;
+    }
+
+    public boolean isRepaired()
+    {
+        return isRepaired;
     }
 }

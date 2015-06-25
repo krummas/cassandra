@@ -26,7 +26,6 @@ import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
-import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.metrics.CompactionMetrics;
 
 /**
@@ -259,7 +258,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
 
         private PurgingPartitionIterator(UnfilteredPartitionIterator toPurge, CompactionController controller)
         {
-            super(toPurge, controller.gcBefore);
+            // purgeTombstones = false -> we are compacting unrepaired and dont want to drop the tombstones -> setting onlyRepaired to true gives us correct behavior
+            super(toPurge, controller.gcBefore, !controller.purgeTombstones);
             this.controller = controller;
         }
 

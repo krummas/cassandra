@@ -174,11 +174,7 @@ public abstract class UnfilteredRowIterators
 
         while (iterator.hasNext())
         {
-            Unfiltered unfiltered = iterator.next();
-            if (unfiltered.kind() == Unfiltered.Kind.ROW)
-                ((Row) unfiltered).digest(digest);
-            else
-                ((RangeTombstoneMarker) unfiltered).digest(digest);
+            iterator.next().digest(digest);
         }
     }
 

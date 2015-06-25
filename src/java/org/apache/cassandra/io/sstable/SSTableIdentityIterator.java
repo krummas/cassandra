@@ -51,7 +51,7 @@ public class SSTableIdentityIterator extends AbstractIterator<Unfiltered> implem
 
         try
         {
-            this.partitionLevelDeletion = DeletionTime.serializer.deserialize(file);
+            this.partitionLevelDeletion = DeletionTime.serializer.deserialize(file, sstable.isRepaired());
             SerializationHelper helper = new SerializationHelper(sstable.descriptor.version.correspondingMessagingVersion(), SerializationHelper.Flag.LOCAL);
             this.iterator = SSTableSimpleIterator.create(sstable.metadata, file, sstable.header, helper, partitionLevelDeletion);
             this.staticRow = iterator.readStaticRow();

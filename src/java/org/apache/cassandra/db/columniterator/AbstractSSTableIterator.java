@@ -65,7 +65,7 @@ abstract class AbstractSSTableIterator implements SliceableUnfilteredRowIterator
         this.sstable = sstable;
         this.key = key;
         this.columns = columnFilter;
-        this.helper = new SerializationHelper(sstable.descriptor.version.correspondingMessagingVersion(), SerializationHelper.Flag.LOCAL, columnFilter);
+        this.helper = new SerializationHelper(sstable.descriptor.version.correspondingMessagingVersion(), SerializationHelper.Flag.LOCAL, columnFilter, sstable.isRepaired());
         this.isForThrift = isForThrift;
 
         if (indexEntry == null)
@@ -100,7 +100,7 @@ abstract class AbstractSSTableIterator implements SliceableUnfilteredRowIterator
                         file.seek(indexEntry.position);
 
                     ByteBufferUtil.skipShortLength(file); // Skip partition key
-                    this.partitionLevelDeletion = DeletionTime.serializer.deserialize(file);
+                    this.partitionLevelDeletion = DeletionTime.serializer.deserialize(file, sstable.isRepaired());
 
                     // Note that this needs to be called after file != null and after the partitionDeletion has been set, but before readStaticRow
                     // (since it uses it) so we can't move that up (but we'll be able to simplify as soon as we drop support for the old file format).
@@ -168,7 +168,7 @@ abstract class AbstractSSTableIterator implements SliceableUnfilteredRowIterator
 
             // As said above, if it's a CQL query and the table is a "static compact", the only exposed columns are the
             // static ones. So we don't have to mark the position to seek back later.
-            return LegacyLayout.extractStaticColumns(sstable.metadata, file, statics);
+            return LegacyLayout.extractStaticColumns(sstable.metadata, file, statics, sstable.isRepaired());
         }
 
         if (!sstable.header.hasStatic())

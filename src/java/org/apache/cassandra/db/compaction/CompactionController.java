@@ -24,8 +24,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.lifecycle.SSTableIntervalTree;
-import org.apache.cassandra.db.lifecycle.Tracker;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
@@ -45,7 +43,8 @@ public class CompactionController implements AutoCloseable
     public final ColumnFamilyStore cfs;
     private Refs<SSTableReader> overlappingSSTables;
     private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
-    private final Iterable<SSTableReader> compacting;
+    private final Collection<SSTableReader> compacting;
+    public final boolean purgeTombstones;
 
     public final int gcBefore;
 
@@ -54,12 +53,13 @@ public class CompactionController implements AutoCloseable
         this(cfs, null, maxValue);
     }
 
-    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting,  int gcBefore)
+    public CompactionController(ColumnFamilyStore cfs, Set<SSTableReader> compacting, int gcBefore)
     {
         assert cfs != null;
         this.cfs = cfs;
         this.gcBefore = gcBefore;
         this.compacting = compacting;
+        purgeTombstones = shouldPurgeTombstones(cfs, compacting);
         refreshOverlaps();
     }
 
@@ -92,6 +92,12 @@ public class CompactionController implements AutoCloseable
         return getFullyExpiredSSTables(cfs, compacting, overlappingSSTables, gcBefore);
     }
 
+    private static boolean shouldPurgeTombstones(ColumnFamilyStore cfs, Collection<SSTableReader> compacting)
+    {
+        boolean allRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
+        return !cfs.metadata.onlyPurgeRepairedTombstones() || allRepaired;
+    }
+
     /**
      * Finds expired sstables
      *
@@ -108,12 +114,14 @@ public class CompactionController implements AutoCloseable
      * @param gcBefore
      * @return
      */
-    public static Set<SSTableReader> getFullyExpiredSSTables(ColumnFamilyStore cfStore, Iterable<SSTableReader> compacting, Iterable<SSTableReader> overlapping, int gcBefore)
+    public static Set<SSTableReader> getFullyExpiredSSTables(ColumnFamilyStore cfStore, Collection<SSTableReader> compacting, Iterable<SSTableReader> overlapping, int gcBefore)
     {
         logger.debug("Checking droppable sstables in {}", cfStore);
-
         if (compacting == null)
             return Collections.<SSTableReader>emptySet();
+
+        if (!shouldPurgeTombstones(cfStore, compacting))
+            return Collections.emptySet();
 
         List<SSTableReader> candidates = new ArrayList<>();
 
@@ -150,8 +158,8 @@ public class CompactionController implements AutoCloseable
             }
             else
             {
-               logger.debug("Dropping expired SSTable {} (maxLocalDeletionTime={}, gcBefore={})",
-                        candidate, candidate.getSSTableMetadata().maxLocalDeletionTime, gcBefore);
+               logger.debug("Dropping expired SSTable {} (maxLocalDeletionTime={}, gcBefore={}, repaired={})",
+                        candidate, candidate.getSSTableMetadata().maxLocalDeletionTime, gcBefore, candidate.isRepaired());
             }
         }
         return new HashSet<>(candidates);
@@ -175,7 +183,11 @@ public class CompactionController implements AutoCloseable
      */
     public long maxPurgeableTimestamp(DecoratedKey key)
     {
+        if (!purgeTombstones)
+            return Long.MIN_VALUE;
+
         long min = Long.MAX_VALUE;
+
         overlapIterator.update(key);
         for (SSTableReader sstable : overlapIterator.overlaps())
         {

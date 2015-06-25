@@ -24,11 +24,13 @@ import org.apache.cassandra.db.rows.*;
 public abstract class TombstonePurgingPartitionIterator extends FilteringPartitionIterator
 {
     private final int gcBefore;
+    private final boolean onlyRepaired;
 
-    public TombstonePurgingPartitionIterator(UnfilteredPartitionIterator iterator, int gcBefore)
+    public TombstonePurgingPartitionIterator(UnfilteredPartitionIterator iterator, int gcBefore, boolean onlyRepaired)
     {
         super(iterator);
         this.gcBefore = gcBefore;
+        this.onlyRepaired = onlyRepaired;
     }
 
     protected abstract long getMaxPurgeableTimestamp();
@@ -40,6 +42,8 @@ public abstract class TombstonePurgingPartitionIterator extends FilteringPartiti
             @Override
             protected boolean include(LivenessInfo info)
             {
+                if (!info.isRepaired() && onlyRepaired)
+                    return true;
                 return !info.hasLocalDeletionTime() || !info.isPurgeable(getMaxPurgeableTimestamp(), gcBefore);
             }
 
@@ -59,6 +63,8 @@ public abstract class TombstonePurgingPartitionIterator extends FilteringPartiti
 
     private boolean includeDelTime(DeletionTime dt)
     {
+        if (!dt.isRepaired() && onlyRepaired)
+            return true;
         return dt.isLive() || !dt.isPurgeable(getMaxPurgeableTimestamp(), gcBefore);
     }
 

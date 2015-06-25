@@ -106,7 +106,7 @@ public abstract class AbstractLivenessInfo implements LivenessInfo
 
     public LivenessInfo takeAlias()
     {
-        return new SimpleLivenessInfo(timestamp(), ttl(), localDeletionTime());
+        return new SimpleLivenessInfo(timestamp(), ttl(), localDeletionTime(), isRepaired());
     };
 
     public LivenessInfo withUpdatedTimestamp(long newTimestamp)
@@ -114,7 +114,7 @@ public abstract class AbstractLivenessInfo implements LivenessInfo
         if (!hasTimestamp())
             return this;
 
-        return new SimpleLivenessInfo(newTimestamp, ttl(), localDeletionTime());
+        return new SimpleLivenessInfo(newTimestamp, ttl(), localDeletionTime(), isRepaired());
     }
 
     public boolean isPurgeable(long maxPurgeableTimestamp, int gcBefore)

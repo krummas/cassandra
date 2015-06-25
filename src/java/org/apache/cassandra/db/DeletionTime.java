@@ -36,12 +36,12 @@ import org.apache.cassandra.utils.ObjectSizes;
  */
 public abstract class DeletionTime implements Comparable<DeletionTime>, IMeasurableMemory, Aliasable<DeletionTime>
 {
-    private static final long EMPTY_SIZE = ObjectSizes.measure(new SimpleDeletionTime(0, 0));
+    private static final long EMPTY_SIZE = ObjectSizes.measure(new SimpleDeletionTime(0, 0, false));
 
     /**
      * A special DeletionTime that signifies that there is no top-level (row) tombstone.
      */
-    public static final DeletionTime LIVE = new SimpleDeletionTime(Long.MIN_VALUE, Integer.MAX_VALUE);
+    public static final DeletionTime LIVE = new SimpleDeletionTime(Long.MIN_VALUE, Integer.MAX_VALUE, false);
 
     public static final Serializer serializer = new Serializer();
 
@@ -57,6 +57,8 @@ public abstract class DeletionTime implements Comparable<DeletionTime>, IMeasura
      * only used for purposes of purging the tombstone after gc_grace_seconds have elapsed.
      */
     public abstract int localDeletionTime();
+
+    public abstract boolean isRepaired();
 
     /**
      * Returns whether this DeletionTime is live, that is deletes no columns.
@@ -137,7 +139,7 @@ public abstract class DeletionTime implements Comparable<DeletionTime>, IMeasura
         return EMPTY_SIZE;
     }
 
-    public static class Serializer implements ISerializer<DeletionTime>
+    public static class Serializer
     {
         public void serialize(DeletionTime delTime, DataOutputPlus out) throws IOException
         {
@@ -145,13 +147,13 @@ public abstract class DeletionTime implements Comparable<DeletionTime>, IMeasura
             out.writeLong(delTime.markedForDeleteAt());
         }
 
-        public DeletionTime deserialize(DataInputPlus in) throws IOException
+        public DeletionTime deserialize(DataInput in, boolean isRepaired) throws IOException
         {
             int ldt = in.readInt();
             long mfda = in.readLong();
             return mfda == Long.MIN_VALUE && ldt == Integer.MAX_VALUE
                  ? LIVE
-                 : new SimpleDeletionTime(mfda, ldt);
+                 : new SimpleDeletionTime(mfda, ldt, isRepaired);
         }
 
         public void skip(DataInput in) throws IOException

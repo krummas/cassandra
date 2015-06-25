@@ -36,12 +36,19 @@ public class SimpleDeletionTime extends DeletionTime
 {
     public final long markedForDeleteAt;
     public final int localDeletionTime;
+    public final boolean isRepaired;
+
+    public SimpleDeletionTime(long markedForDeleteAt, int localDeletionTime)
+    {
+        this(markedForDeleteAt, localDeletionTime, false);
+    }
 
     @VisibleForTesting
-    public SimpleDeletionTime(long markedForDeleteAt, int localDeletionTime)
+    public SimpleDeletionTime(long markedForDeleteAt, int localDeletionTime, boolean isRepaired)
     {
         this.markedForDeleteAt = markedForDeleteAt;
         this.localDeletionTime = localDeletionTime;
+        this.isRepaired = isRepaired;
     }
 
     public long markedForDeleteAt()
@@ -52,6 +59,12 @@ public class SimpleDeletionTime extends DeletionTime
     public int localDeletionTime()
     {
         return localDeletionTime;
+    }
+
+    @Override
+    public boolean isRepaired()
+    {
+        return isRepaired;
     }
 
     public DeletionTime takeAlias()

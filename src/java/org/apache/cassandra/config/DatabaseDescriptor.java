@@ -18,7 +18,6 @@
 package org.apache.cassandra.config;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.*;
 import java.util.*;
 

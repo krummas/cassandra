@@ -656,7 +656,7 @@ public class PartitionUpdate extends AbstractPartitionData implements Sorting.So
                 assert present;
 
                 CFMetaData metadata = CFMetaData.serializer.deserialize(in, version);
-                LegacyLayout.LegacyDeletionInfo info = LegacyLayout.LegacyDeletionInfo.serializer.deserialize(metadata, in, version);
+                LegacyLayout.LegacyDeletionInfo info = LegacyLayout.LegacyDeletionInfo.serializer.deserialize(metadata, in, version, false);
                 int size = in.readInt();
                 Iterator<LegacyLayout.LegacyCell> cells = LegacyLayout.deserializeCells(metadata, in, flag, size);
                 SerializationHelper helper = new SerializationHelper(version, flag);

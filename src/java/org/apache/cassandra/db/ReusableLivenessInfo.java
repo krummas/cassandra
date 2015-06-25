@@ -30,13 +30,13 @@ public class ReusableLivenessInfo extends AbstractLivenessInfo
 
     public LivenessInfo setTo(LivenessInfo info)
     {
-        return setTo(info.timestamp(), info.ttl(), info.localDeletionTime());
+        return setTo(info.timestamp(), info.ttl(), info.localDeletionTime(), info.isRepaired());
     }
 
-    public LivenessInfo setTo(long timestamp, int ttl, int localDeletionTime)
+    public LivenessInfo setTo(long timestamp, int ttl, int localDeletionTime, boolean isRepaired)
     {
         this.timestamp = timestamp;
-        this.ttl = ttl;
+        this.ttl = isRepaired ? ttl | (1 << 31) : ttl;
         this.localDeletionTime = localDeletionTime;
         return this;
     }
@@ -48,12 +48,17 @@ public class ReusableLivenessInfo extends AbstractLivenessInfo
 
     public int ttl()
     {
-        return ttl;
+        return ttl & ~(1 << 31);
     }
 
     public int localDeletionTime()
     {
         return localDeletionTime;
+    }
+
+    public boolean isRepaired()
+    {
+        return (ttl & (1 << 31)) == (1 << 31);
     }
 
     public void reset()

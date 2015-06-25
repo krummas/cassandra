@@ -73,9 +73,9 @@ public class BigFormat implements SSTableFormat
     }
 
     @Override
-    public RowIndexEntry.IndexSerializer getIndexSerializer(CFMetaData metadata, Version version, SerializationHeader header)
+    public RowIndexEntry.IndexSerializer getIndexSerializer(CFMetaData metadata, Version version, SerializationHeader header, boolean isRepaired)
     {
-        return new RowIndexEntry.Serializer(metadata, version, header);
+        return new RowIndexEntry.Serializer(metadata, version, header, isRepaired);
     }
 
     static class WriterFactory extends SSTableWriter.Factory

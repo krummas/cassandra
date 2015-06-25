@@ -175,7 +175,7 @@ public class IndexHelper
                 long offset = in.readLong();
                 long width = in.readLong();
                 DeletionTime endOpenMarker = version.storeRows() && in.readBoolean()
-                                           ? DeletionTime.serializer.deserialize(in)
+                                           ? DeletionTime.serializer.deserialize(in, false /*todo*/)
                                            : null;
 
                 return new IndexInfo(firstName, lastName, offset, width, endOpenMarker);

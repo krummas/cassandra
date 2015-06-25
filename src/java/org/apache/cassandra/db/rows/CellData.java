@@ -156,9 +156,9 @@ class CellData
             default:
                 merged.values[iMerged] = Conflicts.mergeCounterValues(d1.values[i1], d2.values[i2]);
                 if (d1.livenessInfos.timestamp(i1) > d2.livenessInfos.timestamp(i2))
-                    merged.livenessInfos.set(iMerged, d1.livenessInfos.timestamp(i1), d1.livenessInfos.ttl(i1), d1.livenessInfos.localDeletionTime(i1));
+                    merged.livenessInfos.set(iMerged, d1.livenessInfos.timestamp(i1), d1.livenessInfos.ttl(i1), d1.livenessInfos.localDeletionTime(i1), d1.livenessInfos.isRepaired(i1));
                 else
-                    merged.livenessInfos.set(iMerged, d2.livenessInfos.timestamp(i2), d2.livenessInfos.ttl(i2), d2.livenessInfos.localDeletionTime(i2));
+                    merged.livenessInfos.set(iMerged, d2.livenessInfos.timestamp(i2), d2.livenessInfos.ttl(i2), d2.livenessInfos.localDeletionTime(i2), d2.livenessInfos.isRepaired(i2));
                 break;
         }
     }
@@ -179,7 +179,8 @@ class CellData
         target.values[j] = values[i];
         target.livenessInfos.set(j, livenessInfos.timestamp(i),
                                     livenessInfos.ttl(i),
-                                    livenessInfos.localDeletionTime(i));
+                                    livenessInfos.localDeletionTime(i),
+                                    livenessInfos.isRepaired(i));
     }
 
     public int dataSize()

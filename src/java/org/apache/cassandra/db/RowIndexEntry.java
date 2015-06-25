@@ -111,12 +111,14 @@ public class RowIndexEntry<T> implements IMeasurableMemory
         private final CFMetaData metadata;
         private final Version version;
         private final SerializationHeader header;
+        private final boolean isRepaired;
 
-        public Serializer(CFMetaData metadata, Version version, SerializationHeader header)
+        public Serializer(CFMetaData metadata, Version version, SerializationHeader header, boolean isRepaired)
         {
             this.metadata = metadata;
             this.version = version;
             this.header = header;
+            this.isRepaired = isRepaired;
         }
 
         public void serialize(RowIndexEntry<IndexHelper.IndexInfo> rie, DataOutputPlus out) throws IOException
@@ -141,7 +143,7 @@ public class RowIndexEntry<T> implements IMeasurableMemory
             int size = in.readInt();
             if (size > 0)
             {
-                DeletionTime deletionTime = DeletionTime.serializer.deserialize(in);
+                DeletionTime deletionTime = DeletionTime.serializer.deserialize(in, isRepaired);
 
                 int entries = in.readInt();
                 IndexHelper.IndexInfo.Serializer idxSerializer = metadata.serializers().indexSerializer(version);

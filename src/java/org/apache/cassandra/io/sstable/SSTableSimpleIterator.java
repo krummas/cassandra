@@ -130,7 +130,7 @@ public abstract class SSTableSimpleIterator extends AbstractIterator<Unfiltered>
                     assert in instanceof FileDataInput;
                     FileDataInput file = (FileDataInput)in;
                     FileMark mark = file.mark();
-                    Row staticRow = LegacyLayout.extractStaticColumns(metadata, file, metadata.partitionColumns().statics);
+                    Row staticRow = LegacyLayout.extractStaticColumns(metadata, file, metadata.partitionColumns().statics, helper.isRepaired);
                     file.reset(mark);
 
                     // We've extracted the static columns, so we must ignore them on the 2nd pass

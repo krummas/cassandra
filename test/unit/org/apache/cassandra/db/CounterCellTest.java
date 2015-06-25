@@ -145,7 +145,7 @@ public class CounterCellTest
     {
         ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
         ByteBuffer val = CounterContext.instance().createLocal(count);
-        LivenessInfo li = new SimpleLivenessInfo(ts, ttl, localDeletion);
+        LivenessInfo li = new SimpleLivenessInfo(ts, ttl, localDeletion, false);
         return new TestCounterCell(cDef, val, li);
     }
 
@@ -159,7 +159,7 @@ public class CounterCellTest
     {
         ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
         ByteBuffer val = CounterContext.instance().createGlobal(id, ts, count);
-        LivenessInfo li = new SimpleLivenessInfo(ts, ttl, localDeletion);
+        LivenessInfo li = new SimpleLivenessInfo(ts, ttl, localDeletion, false);
         return new TestCounterCell(cDef, val, li);
     }
 
@@ -171,7 +171,7 @@ public class CounterCellTest
                                                          int localDeletion)
     {
         ColumnDefinition cDef = cfs.metadata.getColumnDefinition(colName);
-        LivenessInfo li = new SimpleLivenessInfo(ts, ttl, localDeletion);
+        LivenessInfo li = new SimpleLivenessInfo(ts, ttl, localDeletion, false);
         return new TestCounterCell(cDef, context.context, li);
     }
 
@@ -329,7 +329,7 @@ public class CounterCellTest
         TestCounterCell original = createCounterCellFromContext(cfs, col, state, 5, 0, Integer.MAX_VALUE);
 
         ColumnDefinition cDef = cfs.metadata.getColumnDefinition(col);
-        LivenessInfo li = new SimpleLivenessInfo(5, 0, Integer.MAX_VALUE);
+        LivenessInfo li = new SimpleLivenessInfo(5, 0, Integer.MAX_VALUE, false);
         TestCounterCell cleared = new TestCounterCell(cDef, CounterContext.instance().clearAllLocal(state.context), li);
 
         CounterContext.instance().updateDigest(digest1, original.value);

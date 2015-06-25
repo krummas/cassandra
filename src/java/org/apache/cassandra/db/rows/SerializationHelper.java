@@ -52,25 +52,27 @@ public class SerializationHelper
     private long rowTimestamp;
     private int rowTTL;
     private int rowLocalDeletionTime;
+    public final boolean isRepaired;
 
     private final ColumnFilter columnsToFetch;
     private ColumnFilter.Tester tester;
 
-    public SerializationHelper(int version, Flag flag, ColumnFilter columnsToFetch)
+    public SerializationHelper(int version, Flag flag, ColumnFilter columnsToFetch, boolean isRepaired)
     {
         this.flag = flag;
         this.version = version;
         this.columnsToFetch = columnsToFetch;
+        this.isRepaired = isRepaired;
     }
 
     public SerializationHelper(int version, Flag flag)
     {
-        this(version, flag, null);
+        this(version, flag, null, false);
     }
 
     public void writePartitionKeyLivenessInfo(Row.Writer writer, long timestamp, int ttl, int localDeletionTime)
     {
-        livenessInfo.setTo(timestamp, ttl, localDeletionTime);
+        livenessInfo.setTo(timestamp, ttl, localDeletionTime, isRepaired);
         writer.writePartitionKeyLivenessInfo(livenessInfo);
 
         rowTimestamp = timestamp;
@@ -122,7 +124,7 @@ public class SerializationHelper
                           int ttl,
                           CellPath path)
     {
-        livenessInfo.setTo(timestamp, ttl, localDelTime);
+        livenessInfo.setTo(timestamp, ttl, localDelTime, isRepaired);
 
         if (isCounter && ((flag == Flag.FROM_REMOTE || (flag == Flag.LOCAL && CounterContext.instance().shouldClearLocal(value)))))
             value = CounterContext.instance().clearAllLocal(value);

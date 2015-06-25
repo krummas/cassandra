@@ -331,7 +331,7 @@ public abstract class LegacyLayout
         };
     }
 
-    public static Row extractStaticColumns(CFMetaData metadata, DataInputPlus in, Columns statics) throws IOException
+    public static Row extractStaticColumns(CFMetaData metadata, DataInputPlus in, Columns statics, boolean isRepaired) throws IOException
     {
         assert !statics.isEmpty();
         assert metadata.isCompactTable();
@@ -348,7 +348,7 @@ public abstract class LegacyLayout
 
         boolean foundOne = false;
         LegacyAtom atom;
-        while ((atom = readLegacyAtom(metadata, in, false)) != null)
+        while ((atom = readLegacyAtom(metadata, in, false, isRepaired)) != null)
         {
             if (atom.isCell())
             {
@@ -610,7 +610,7 @@ public abstract class LegacyLayout
         };
     }
 
-    public static LegacyAtom readLegacyAtom(CFMetaData metadata, DataInputPlus in, boolean readAllAsDynamic) throws IOException
+    public static LegacyAtom readLegacyAtom(CFMetaData metadata, DataInputPlus in, boolean readAllAsDynamic, boolean isRepaired) throws IOException
     {
         while (true)
         {
@@ -622,7 +622,7 @@ public abstract class LegacyLayout
             {
                 int b = in.readUnsignedByte();
                 return (b & RANGE_TOMBSTONE_MASK) != 0
-                    ? readLegacyRangeTombstoneBody(metadata, in, cellname)
+                    ? readLegacyRangeTombstoneBody(metadata, in, cellname, isRepaired)
                     : readLegacyCellBody(metadata, in, cellname, b, SerializationHelper.Flag.LOCAL, readAllAsDynamic);
             }
             catch (UnknownColumnException e)
@@ -678,18 +678,18 @@ public abstract class LegacyLayout
         }
     }
 
-    public static LegacyRangeTombstone readLegacyRangeTombstone(CFMetaData metadata, DataInputPlus in) throws IOException
+    public static LegacyRangeTombstone readLegacyRangeTombstone(CFMetaData metadata, DataInputPlus in, boolean isRepaired) throws IOException
     {
         ByteBuffer boundname = ByteBufferUtil.readWithShortLength(in);
         in.readUnsignedByte();
-        return readLegacyRangeTombstoneBody(metadata, in, boundname);
+        return readLegacyRangeTombstoneBody(metadata, in, boundname, isRepaired);
     }
 
-    public static LegacyRangeTombstone readLegacyRangeTombstoneBody(CFMetaData metadata, DataInputPlus in, ByteBuffer boundname) throws IOException
+    public static LegacyRangeTombstone readLegacyRangeTombstoneBody(CFMetaData metadata, DataInputPlus in, ByteBuffer boundname, boolean isRepaired) throws IOException
     {
         LegacyBound min = decodeBound(metadata, boundname, true);
         LegacyBound max = decodeBound(metadata, ByteBufferUtil.readWithShortLength(in), false);
-        DeletionTime dt = DeletionTime.serializer.deserialize(in);
+        DeletionTime dt = DeletionTime.serializer.deserialize(in, isRepaired);
         return new LegacyRangeTombstone(min, max, dt);
     }
 
@@ -1215,9 +1215,9 @@ public abstract class LegacyLayout
                 //rtlSerializer.serialize(info.ranges, out, version);
             }
 
-            public LegacyDeletionInfo deserialize(CFMetaData metadata, DataInputPlus in, int version) throws IOException
+            public LegacyDeletionInfo deserialize(CFMetaData metadata, DataInputPlus in, int version, boolean isRepaired) throws IOException
             {
-                DeletionTime topLevel = DeletionTime.serializer.deserialize(in);
+                DeletionTime topLevel = DeletionTime.serializer.deserialize(in, isRepaired);
 
                 int rangeCount = in.readInt();
                 if (rangeCount == 0)

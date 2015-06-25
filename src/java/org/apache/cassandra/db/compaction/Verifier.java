@@ -72,7 +72,10 @@ public class Verifier implements Closeable
         this.cfs = cfs;
         this.sstable = sstable;
         this.outputHandler = outputHandler;
-        this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata, sstable.descriptor.version, sstable.header);
+        this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata,
+                                                                                                        sstable.descriptor.version,
+                                                                                                        sstable.header,
+                                                                                                        sstable.isRepaired());
 
         this.controller = new VerifyController(cfs);
 

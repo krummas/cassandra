@@ -351,7 +351,7 @@ public class UnfilteredSerializer
         if (kind(flags) == Unfiltered.Kind.RANGE_TOMBSTONE_MARKER)
         {
             RangeTombstone.Bound.Kind kind = RangeTombstone.Bound.serializer.deserialize(in, helper.version, header.clusteringTypes(), markerWriter);
-            deserializeMarkerBody(in, header, kind.isBoundary(), markerWriter);
+            deserializeMarkerBody(in, header, helper, kind.isBoundary(), markerWriter);
             return Unfiltered.Kind.RANGE_TOMBSTONE_MARKER;
         }
         else
@@ -382,14 +382,15 @@ public class UnfilteredSerializer
 
     public void deserializeMarkerBody(DataInput in,
                                       SerializationHeader header,
+                                      SerializationHelper helper,
                                       boolean isBoundary,
                                       RangeTombstoneMarker.Writer writer)
     throws IOException
     {
         if (isBoundary)
-            writer.writeBoundaryDeletion(UnfilteredRowIteratorSerializer.readDelTime(in, header), UnfilteredRowIteratorSerializer.readDelTime(in, header));
+            writer.writeBoundaryDeletion(UnfilteredRowIteratorSerializer.readDelTime(in, header, helper.isRepaired), UnfilteredRowIteratorSerializer.readDelTime(in, header, helper.isRepaired));
         else
-            writer.writeBoundDeletion(UnfilteredRowIteratorSerializer.readDelTime(in, header));
+            writer.writeBoundDeletion(UnfilteredRowIteratorSerializer.readDelTime(in, header, helper.isRepaired));
         writer.endOfMarker();
     }
 
@@ -422,7 +423,7 @@ public class UnfilteredSerializer
         long timestamp = hasTimestamp ? header.decodeTimestamp(in.readLong()) : LivenessInfo.NO_TIMESTAMP;
         int ttl = hasTTL ? header.decodeTTL(in.readInt()) : LivenessInfo.NO_TTL;
         int localDeletionTime = hasTTL ? header.decodeDeletionTime(in.readInt()) : LivenessInfo.NO_DELETION_TIME;
-        DeletionTime deletion = hasDeletion ? UnfilteredRowIteratorSerializer.readDelTime(in, header) : DeletionTime.LIVE;
+        DeletionTime deletion = hasDeletion ? UnfilteredRowIteratorSerializer.readDelTime(in, header, helper.isRepaired) : DeletionTime.LIVE;
 
         helper.writePartitionKeyLivenessInfo(writer, timestamp, ttl, localDeletionTime);
         writer.writeRowDeletion(deletion);
@@ -473,7 +474,7 @@ public class UnfilteredSerializer
             helper.startOfComplexColumn(column);
 
             if (hasComplexDeletion)
-                writer.writeComplexDeletion(column, UnfilteredRowIteratorSerializer.readDelTime(in, header));
+                writer.writeComplexDeletion(column, UnfilteredRowIteratorSerializer.readDelTime(in, header, helper.isRepaired));
 
             while (readCell(column, in, header, helper, writer));
 

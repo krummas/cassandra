@@ -99,7 +99,8 @@ public class Scrubber implements Closeable
         this.isOffline = isOffline;
         this.rowIndexEntrySerializer = sstable.descriptor.version.getSSTableFormat().getIndexSerializer(sstable.metadata,
                                                                                                         sstable.descriptor.version,
-                                                                                                        sstable.header);
+                                                                                                        sstable.header,
+                                                                                                        sstable.isRepaired());
 
         List<SSTableReader> toScrub = Collections.singletonList(sstable);
 

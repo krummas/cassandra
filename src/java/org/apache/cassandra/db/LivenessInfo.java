@@ -38,7 +38,7 @@ public interface LivenessInfo extends Aliasable<LivenessInfo>
     public static final int NO_TTL = 0;
     public static final int NO_DELETION_TIME = Integer.MAX_VALUE;
 
-    public static final LivenessInfo NONE = new SimpleLivenessInfo(NO_TIMESTAMP, NO_TTL, NO_DELETION_TIME);
+    public static final LivenessInfo NONE = new SimpleLivenessInfo(NO_TIMESTAMP, NO_TTL, NO_DELETION_TIME, false);
 
     /**
      * The timestamp at which the data was inserted or {@link NO_TIMESTAMP}
@@ -183,4 +183,6 @@ public interface LivenessInfo extends Aliasable<LivenessInfo>
      * unchanged.
      */
     public LivenessInfo withUpdatedTimestamp(long newTimestamp);
+
+    public boolean isRepaired();
 }

@@ -43,7 +43,7 @@ public interface SSTableFormat
     SSTableWriter.Factory getWriterFactory();
     SSTableReader.Factory getReaderFactory();
 
-    RowIndexEntry.IndexSerializer<?> getIndexSerializer(CFMetaData cfm, Version version, SerializationHeader header);
+    RowIndexEntry.IndexSerializer<?> getIndexSerializer(CFMetaData cfm, Version version, SerializationHeader header, boolean isRepaired);
 
     public static enum Type
     {
