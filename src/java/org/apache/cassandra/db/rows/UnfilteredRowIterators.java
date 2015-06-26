@@ -444,7 +444,7 @@ public abstract class UnfilteredRowIterators
                             return Cells.create(filtered.column(),
                                                 filtered.isCounterCell(),
                                                 ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                                                SimpleLivenessInfo.forDeletion(info.timestamp(), info.localDeletionTime() - info.ttl()),
+                                                SimpleLivenessInfo.forDeletion(info.timestamp(), info.localDeletionTime() - info.ttl(), info.isRepaired()),
                                                 filtered.path());
                         }
                         else

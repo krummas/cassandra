@@ -17,28 +17,21 @@
  */
 package org.apache.cassandra.db;
 
-import java.util.Objects;
-import java.security.MessageDigest;
-
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.serializers.MarshalException;
-import org.apache.cassandra.utils.FBUtilities;
 
 public class SimpleLivenessInfo extends AbstractLivenessInfo
 {
     private final long timestamp;
     private final int ttl;
     private final int localDeletionTime;
-    private final boolean isRepaired;
 
     // Note that while some code use this ctor, the two following static creation methods
     // are usually less error prone.
     SimpleLivenessInfo(long timestamp, int ttl, int localDeletionTime, boolean isRepaired)
     {
         this.timestamp = timestamp;
-        this.ttl = ttl;
         this.localDeletionTime = localDeletionTime;
-        this.isRepaired = isRepaired;
+        this.ttl = isRepaired ? ttl | (1 << 31) : ttl;
     }
 
     public static SimpleLivenessInfo forUpdate(long timestamp, int ttl, int nowInSec, CFMetaData metadata)
@@ -48,10 +41,14 @@ public class SimpleLivenessInfo extends AbstractLivenessInfo
 
         return new SimpleLivenessInfo(timestamp, ttl, ttl == NO_TTL ? NO_DELETION_TIME : nowInSec + ttl, false);
     }
-
     public static SimpleLivenessInfo forDeletion(long timestamp, int localDeletionTime)
     {
         return new SimpleLivenessInfo(timestamp, NO_TTL, localDeletionTime, false);
+    }
+
+    public static SimpleLivenessInfo forDeletion(long timestamp, int localDeletionTime, boolean isRepaired)
+    {
+        return new SimpleLivenessInfo(timestamp, NO_TTL, localDeletionTime, isRepaired);
     }
 
     public long timestamp()
@@ -61,7 +58,7 @@ public class SimpleLivenessInfo extends AbstractLivenessInfo
 
     public int ttl()
     {
-        return ttl;
+        return ttl & ~(1 << 31);
     }
 
     public int localDeletionTime()
@@ -77,6 +74,6 @@ public class SimpleLivenessInfo extends AbstractLivenessInfo
 
     public boolean isRepaired()
     {
-        return isRepaired;
+        return (ttl & (1 << 31)) == (1 << 31) ;
     }
 }
