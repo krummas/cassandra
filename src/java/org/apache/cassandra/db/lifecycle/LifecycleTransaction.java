@@ -43,6 +43,7 @@ import static java.util.Collections.singleton;
 import static org.apache.cassandra.db.lifecycle.Helpers.*;
 import static org.apache.cassandra.db.lifecycle.View.updateCompacting;
 import static org.apache.cassandra.db.lifecycle.View.updateLiveSet;
+import static org.apache.cassandra.io.sstable.format.SSTableReader.OpenReason.NORMAL;
 import static org.apache.cassandra.utils.Throwables.maybeFail;
 import static org.apache.cassandra.utils.concurrent.Refs.release;
 import static org.apache.cassandra.utils.concurrent.Refs.selfRefs;
@@ -414,7 +415,7 @@ public class LifecycleTransaction extends Transactional.AbstractTransactional
     private List<SSTableReader> restoreUpdatedOriginals()
     {
         Iterable<SSTableReader> torestore = filterIn(originals, logged.update, logged.obsolete);
-        return ImmutableList.copyOf(transform(torestore, (reader) -> current(reader).cloneWithNewStart(reader.first, null)));
+        return ImmutableList.copyOf(transform(torestore, (reader) -> current(reader).cloneWithRestoredStart(reader.first)));
     }
 
     /**
