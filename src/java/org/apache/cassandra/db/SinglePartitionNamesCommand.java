@@ -43,6 +43,7 @@ import org.apache.cassandra.utils.memory.HeapAllocator;
  */
 public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<ClusteringIndexNamesFilter>
 {
+    private int oldestUnrepairedDeletionTime = Integer.MAX_VALUE;
     protected SinglePartitionNamesCommand(boolean isDigest,
                                           boolean isForThrift,
                                           CFMetaData metadata,
@@ -72,6 +73,12 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Clus
         return new SinglePartitionNamesCommand(isDigestQuery(), isForThrift(), metadata(), nowInSec(), columnFilter(), rowFilter(), limits(), partitionKey(), clusteringIndexFilter());
     }
 
+    @Override
+    protected int oldestUnrepairedTombstone()
+    {
+        return oldestUnrepairedDeletionTime;
+    }
+
     protected UnfilteredRowIterator queryMemtableAndDiskInternal(ColumnFamilyStore cfs, boolean copyOnHeap)
     {
         Tracing.trace("Acquiring sstable references");
@@ -95,7 +102,7 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Clus
                 UnfilteredRowIterator clonedFilter = copyOnHeap
                                                    ? UnfilteredRowIterators.cloningIterator(iter, HeapAllocator.instance)
                                                    : iter;
-                result = add(isForThrift() ? ThriftResultsMerger.maybeWrap(clonedFilter, nowInSec()) : clonedFilter, result);
+                result = add(isForThrift() ? ThriftResultsMerger.maybeWrap(clonedFilter, nowInSec()) : clonedFilter, result, false);
             }
         }
 
@@ -125,7 +132,7 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Clus
                     continue;
 
                 sstablesIterated++;
-                result = add(isForThrift() ? ThriftResultsMerger.maybeWrap(iter, nowInSec()) : iter, result);
+                result = add(isForThrift() ? ThriftResultsMerger.maybeWrap(iter, nowInSec()) : iter, result, sstable.isRepaired());
             }
         }
 
@@ -163,8 +170,11 @@ public class SinglePartitionNamesCommand extends SinglePartitionReadCommand<Clus
         return result.unfilteredIterator(columnFilter(), Slices.ALL, clusteringIndexFilter().isReversed());
     }
 
-    private ArrayBackedPartition add(UnfilteredRowIterator iter, ArrayBackedPartition result)
+    private ArrayBackedPartition add(UnfilteredRowIterator iter, ArrayBackedPartition result, boolean isRepaired)
     {
+        if (!isRepaired)
+            oldestUnrepairedDeletionTime = Math.min(oldestUnrepairedDeletionTime, iter.stats().minLocalDeletionTime);
+
         int maxRows = Math.max(clusteringIndexFilter().requestedRows().size(), 1);
         if (result == null)
             return ArrayBackedPartition.create(iter, maxRows);

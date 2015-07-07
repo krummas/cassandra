@@ -36,7 +36,6 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Memtable;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
-import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -57,6 +56,7 @@ import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
 public class CompactionStrategyManager implements INotificationConsumer
 {
     protected static final String COMPACTION_ENABLED = "enabled";
+
     private static final Logger logger = LoggerFactory.getLogger(CompactionStrategyManager.class);
     private final ColumnFamilyStore cfs;
     private volatile AbstractCompactionStrategy repaired;
@@ -457,5 +457,10 @@ public class CompactionStrategyManager implements INotificationConsumer
     public List<AbstractCompactionStrategy> getStrategies()
     {
         return Arrays.asList(repaired, unrepaired);
+    }
+
+    public boolean onlyPurgeRepairedTombstones()
+    {
+        return Boolean.parseBoolean(options.get(AbstractCompactionStrategy.ONLY_PURGE_REPAIRED_TOMBSTONES));
     }
 }
