@@ -114,6 +114,7 @@ public final class LegacySchemaTables
                 + "speculative_retry text,"
                 + "subcomparator text,"
                 + "type text,"
+                + "only_purge_repaired_tombstones boolean,"
                 + "PRIMARY KEY ((keyspace_name), columnfamily_name))");
 
     private static final CFMetaData Columns =
@@ -828,6 +829,7 @@ public final class LegacySchemaTables
         adder.add("min_index_interval", table.getMinIndexInterval());
         adder.add("read_repair_chance", table.getReadRepairChance());
         adder.add("speculative_retry", table.getSpeculativeRetry().toString());
+        adder.add("only_purge_repaired_tombstones", table.onlyPurgeRepairedTombstones());
 
         for (Map.Entry<ColumnIdentifier, CFMetaData.DroppedColumn> entry : table.getDroppedColumns().entrySet())
         {
@@ -1060,6 +1062,8 @@ public final class LegacySchemaTables
                                       : Collections.<String, String>emptyMap();
             addDroppedColumns(cfm, result.getMap("dropped_columns", UTF8Type.instance, LongType.instance), types);
         }
+        if (result.has("only_purge_repaired_tombstones"))
+            cfm.onlyPurgeRepairedTombstones(result.getBoolean("only_purge_repaired_tombstones"));
 
         return cfm;
     }

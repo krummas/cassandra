@@ -311,6 +311,8 @@ public class ThriftConversion
                 newCFMD.speculativeRetry(CFMetaData.SpeculativeRetry.fromString(cf_def.speculative_retry));
             if (cf_def.isSetTriggers())
                 newCFMD.triggers(triggerDefinitionsFromThrift(cf_def.triggers));
+            if (cf_def.isSetOnly_purge_repaired_tombstones())
+                newCFMD.onlyPurgeRepairedTombstones(cf_def.only_purge_repaired_tombstones);
 
             return newCFMD.comment(cf_def.comment)
                           .compressionParameters(CompressionParameters.create(cf_def.compression_options));
@@ -397,6 +399,9 @@ public class ThriftConversion
             // ensure the max is at least as large as the min
             cf_def.setMax_index_interval(Math.max(cf_def.min_index_interval, CFMetaData.DEFAULT_MAX_INDEX_INTERVAL));
         }
+
+        if (!cf_def.isSetOnly_purge_repaired_tombstones())
+            cf_def.setOnly_purge_repaired_tombstones(CFMetaData.DEFAULT_ONLY_PURGE_REPAIRED_TOMBSTONES);
     }
 
     /**
@@ -464,6 +469,7 @@ public class ThriftConversion
         def.setDefault_time_to_live(cfm.getDefaultTimeToLive());
         def.setSpeculative_retry(cfm.getSpeculativeRetry().toString());
         def.setTriggers(triggerDefinitionsToThrift(cfm.getTriggers().values()));
+        def.setOnly_purge_repaired_tombstones(cfm.onlyPurgeRepairedTombstones());
 
         return def;
     }

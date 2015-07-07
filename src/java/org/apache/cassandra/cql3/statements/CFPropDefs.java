@@ -46,6 +46,7 @@ public class CFPropDefs extends PropertyDefinitions
     public static final String KW_SPECULATIVE_RETRY = "speculative_retry";
     public static final String KW_BF_FP_CHANCE = "bloom_filter_fp_chance";
     public static final String KW_MEMTABLE_FLUSH_PERIOD = "memtable_flush_period_in_ms";
+    public static final String KW_ONLY_PURGE_REPAIRED_TOMBSTONES = "only_purge_repaired_tombstones";
 
     public static final String KW_COMPACTION = "compaction";
     public static final String KW_COMPRESSION = "compression";
@@ -70,6 +71,7 @@ public class CFPropDefs extends PropertyDefinitions
         keywords.add(KW_COMPACTION);
         keywords.add(KW_COMPRESSION);
         keywords.add(KW_MEMTABLE_FLUSH_PERIOD);
+        keywords.add(KW_ONLY_PURGE_REPAIRED_TOMBSTONES);
 
         obsoleteKeywords.add("index_interval");
         obsoleteKeywords.add("replicate_on_write");
@@ -204,6 +206,8 @@ public class CFPropDefs extends PropertyDefinitions
         CachingOptions cachingOptions = getCachingOptions();
         if (cachingOptions != null)
             cfm.caching(cachingOptions);
+
+        cfm.onlyPurgeRepairedTombstones(getBoolean(KW_ONLY_PURGE_REPAIRED_TOMBSTONES, cfm.onlyPurgeRepairedTombstones()));
     }
 
     @Override

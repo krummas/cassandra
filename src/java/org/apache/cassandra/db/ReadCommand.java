@@ -414,7 +414,7 @@ public abstract class ReadCommand implements ReadQuery
     // are to some extend an artefact of compaction lagging behind and hence counting them is somewhat unintuitive).
     protected UnfilteredPartitionIterator withoutExpiredTombstones(UnfilteredPartitionIterator iterator, ColumnFamilyStore cfs)
     {
-        return new TombstonePurgingPartitionIterator(iterator, cfs.gcBefore(nowInSec()))
+        return new TombstonePurgingPartitionIterator(iterator, cfs.gcBefore(nowInSec()), cfs.metadata.onlyPurgeRepairedTombstones())
         {
             protected long getMaxPurgeableTimestamp()
             {

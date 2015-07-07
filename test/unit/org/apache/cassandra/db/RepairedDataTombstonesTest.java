@@ -42,22 +42,44 @@ import static org.junit.Assert.assertTrue;
 
 public class RepairedDataTombstonesTest extends CQLTester
 {
-    @Before
-    public void setup() throws Throwable
-    {
-        DatabaseDescriptor.setOnlyPurgeRepairedTombstones(true);
-    }
     @Test
     public void compactionTest() throws Throwable
     {
-        createTable("create table %s (id int, id2 int, t text, primary key (id, id2)) with gc_grace_seconds=0");
+        createTable("create table %s (id int, id2 int, t text, primary key (id, id2)) with gc_grace_seconds=0 and only_purge_repaired_tombstones=true");
+        execute("insert into %s (id, id2, t) values (999,999,'live')");
+
         for (int i = 0; i < 10; i++)
         {
             execute("delete from %s where id=? and id2=?", 1, i);
         }
         flush();
         SSTableReader repairedSSTable = getCurrentColumnFamilyStore().getSSTables().iterator().next();
-        repair(repairedSSTable);
+        repair(getCurrentColumnFamilyStore(), repairedSSTable);
+
+        execute("insert into %s (id, id2, t) values (999,999,'live')");
+        for (int i = 10; i < 20; i++)
+        {
+            execute("delete from %s where id=? and id2=?", 1, i);
+        }
+        flush();
+        Thread.sleep(1000);
+        getCurrentColumnFamilyStore().forceMajorCompaction();
+        verify();
+        assertEquals(2, getCurrentColumnFamilyStore().getSSTables().size());
+
+    }
+
+    @Test
+    public void compactionDropExpiredSSTableTest() throws Throwable
+    {
+        createTable("create table %s (id int, id2 int, t text, primary key (id, id2)) with gc_grace_seconds=0 and only_purge_repaired_tombstones=true");
+        for (int i = 0; i < 10; i++)
+        {
+            execute("delete from %s where id=? and id2=?", 1, i);
+        }
+        flush();
+        SSTableReader repairedSSTable = getCurrentColumnFamilyStore().getSSTables().iterator().next();
+        repair(getCurrentColumnFamilyStore(), repairedSSTable);
 
         for (int i = 10; i < 20; i++)
         {
@@ -75,14 +97,14 @@ public class RepairedDataTombstonesTest extends CQLTester
     @Test
     public void readTest() throws Throwable
     {
-        createTable("create table %s (id int, id2 int, t text, t2 text, primary key (id, id2)) with gc_grace_seconds=0");
+        createTable("create table %s (id int, id2 int, t text, t2 text, primary key (id, id2)) with gc_grace_seconds=0 and only_purge_repaired_tombstones=true");
         for (int i = 0; i < 10; i++)
         {
             execute("update %s set t2=null where id=? and id2=?", 123, i);
         }
         flush();
         SSTableReader repairedSSTable = getCurrentColumnFamilyStore().getSSTables().iterator().next();
-        repair(repairedSSTable);
+        repair(getCurrentColumnFamilyStore(), repairedSSTable);
         for (int i = 10; i < 20; i++)
         {
             execute("update %s set t2=null where id=? and id2=?", 123, i);
@@ -99,14 +121,14 @@ public class RepairedDataTombstonesTest extends CQLTester
     @Test
     public void readTestRowTombstones() throws Throwable
     {
-        createTable("create table %s (id int, id2 int, t text, t2 text, primary key (id, id2)) with gc_grace_seconds=0");
+        createTable("create table %s (id int, id2 int, t text, t2 text, primary key (id, id2)) with gc_grace_seconds=0 and only_purge_repaired_tombstones=true");
         for (int i = 0; i < 10; i++)
         {
             execute("delete from %s where id=? and id2=?", 1, i);
         }
         flush();
         SSTableReader repairedSSTable = getCurrentColumnFamilyStore().getSSTables().iterator().next();
-        repair(repairedSSTable);
+        repair(getCurrentColumnFamilyStore(), repairedSSTable);
         for (int i = 10; i < 20; i++)
         {
             execute("delete from %s where id=? and id2=?", 1, i);
@@ -119,7 +141,7 @@ public class RepairedDataTombstonesTest extends CQLTester
     @Test
     public void readTestPartitionTombstones() throws Throwable
     {
-        createTable("create table %s (id int, id2 int, t text, t2 text, primary key (id, id2)) with gc_grace_seconds=0");
+        createTable("create table %s (id int, id2 int, t text, t2 text, primary key (id, id2)) with gc_grace_seconds=0 and only_purge_repaired_tombstones=true");
         for (int i = 0; i < 10; i++)
         {
             execute("delete from %s where id=?", i);
@@ -178,10 +200,10 @@ public class RepairedDataTombstonesTest extends CQLTester
         assertEquals(foundRows, 10);
     }
 
-    private void repair(SSTableReader sstable) throws IOException
+    public static void repair(ColumnFamilyStore cfs, SSTableReader sstable) throws IOException
     {
         sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, 1);
         sstable.reloadSSTableMetadata();
-        getCurrentColumnFamilyStore().getTracker().notifySSTableRepairedStatusChanged(Collections.singleton(sstable));
+        cfs.getTracker().notifySSTableRepairedStatusChanged(Collections.singleton(sstable));
     }
 }

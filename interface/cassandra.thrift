@@ -474,6 +474,7 @@ struct CfDef {
     44: optional string cells_per_row_to_cache = "100",
     45: optional i32 min_index_interval,
     46: optional i32 max_index_interval,
+    47: optional bool only_purge_repaired_tombstones=false,
 
     /* All of the following are now ignored and unsupplied. */
 

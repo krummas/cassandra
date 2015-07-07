@@ -76,6 +76,7 @@ public final class CFMetaData
     public final static SpeculativeRetry DEFAULT_SPECULATIVE_RETRY = new SpeculativeRetry(SpeculativeRetry.RetryType.PERCENTILE, 0.99);
     public final static int DEFAULT_MIN_INDEX_INTERVAL = 128;
     public final static int DEFAULT_MAX_INDEX_INTERVAL = 2048;
+    public final static boolean DEFAULT_ONLY_PURGE_REPAIRED_TOMBSTONES = false;
 
     // Note that this is the default only for user created tables
     public final static String DEFAULT_COMPRESSOR = LZ4Compressor.class.getCanonicalName();
@@ -193,6 +194,7 @@ public final class CFMetaData
     private volatile Map<ColumnIdentifier, DroppedColumn> droppedColumns = new HashMap();
     private volatile Map<String, TriggerDefinition> triggers = new HashMap<>();
     private volatile boolean isPurged = false;
+    private volatile boolean onlyPurgeRepairedTombstones = false;
     /*
      * All CQL3 columns definition are stored in the columnMetadata map.
      * On top of that, we keep separated collection of each kind of definition, to
@@ -238,6 +240,7 @@ public final class CFMetaData
     public CFMetaData speculativeRetry(SpeculativeRetry prop) {speculativeRetry = prop; return this;}
     public CFMetaData droppedColumns(Map<ColumnIdentifier, DroppedColumn> cols) {droppedColumns = cols; return this;}
     public CFMetaData triggers(Map<String, TriggerDefinition> prop) {triggers = prop; return this;}
+    public CFMetaData onlyPurgeRepairedTombstones(boolean prop) {onlyPurgeRepairedTombstones = prop; return this;}
 
     private CFMetaData(String keyspace,
                        String name,
@@ -467,7 +470,8 @@ public final class CFMetaData
                       .speculativeRetry(oldCFMD.speculativeRetry)
                       .memtableFlushPeriod(oldCFMD.memtableFlushPeriod)
                       .droppedColumns(new HashMap<>(oldCFMD.droppedColumns))
-                      .triggers(new HashMap<>(oldCFMD.triggers));
+                      .triggers(new HashMap<>(oldCFMD.triggers))
+                      .onlyPurgeRepairedTombstones(oldCFMD.onlyPurgeRepairedTombstones);
     }
 
     /**
@@ -524,6 +528,11 @@ public final class CFMetaData
     public double getDcLocalReadRepairChance()
     {
         return dcLocalReadRepairChance;
+    }
+
+    public boolean onlyPurgeRepairedTombstones()
+    {
+        return onlyPurgeRepairedTombstones;
     }
 
     public ReadRepairDecision newReadRepairDecision()
@@ -747,7 +756,8 @@ public final class CFMetaData
             && Objects.equal(maxIndexInterval, other.maxIndexInterval)
             && Objects.equal(speculativeRetry, other.speculativeRetry)
             && Objects.equal(droppedColumns, other.droppedColumns)
-            && Objects.equal(triggers, other.triggers);
+            && Objects.equal(triggers, other.triggers)
+            && Objects.equal(onlyPurgeRepairedTombstones, other.onlyPurgeRepairedTombstones);
     }
 
     @Override
@@ -782,6 +792,7 @@ public final class CFMetaData
             .append(speculativeRetry)
             .append(droppedColumns)
             .append(triggers)
+            .append(onlyPurgeRepairedTombstones)
             .toHashCode();
     }
 
@@ -843,6 +854,8 @@ public final class CFMetaData
         compressionParameters = cfm.compressionParameters;
 
         triggers = cfm.triggers;
+
+        onlyPurgeRepairedTombstones = cfm.onlyPurgeRepairedTombstones;
 
         logger.debug("application result is {}", this);
 
@@ -1367,6 +1380,7 @@ public final class CFMetaData
             .append("speculativeRetry", speculativeRetry)
             .append("droppedColumns", droppedColumns)
             .append("triggers", triggers.values())
+            .append("onlyPurgeRepairedTombstones", onlyPurgeRepairedTombstones)
             .toString();
     }
 
