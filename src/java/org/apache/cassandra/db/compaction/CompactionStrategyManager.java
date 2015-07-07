@@ -450,4 +450,9 @@ public class CompactionStrategyManager implements INotificationConsumer
     {
         return Arrays.asList(repaired, unrepaired);
     }
+
+    public boolean onlyPurgeRepairedTombstones()
+    {
+        return Boolean.parseBoolean(params.options().get(AbstractCompactionStrategy.ONLY_PURGE_REPAIRED_TOMBSTONES));
+    }
 }
