@@ -150,18 +150,23 @@ public final class WrappingCompactionStrategy extends AbstractCompactionStrategy
             && repaired.options.equals(metadata.compactionStrategyOptions)
             && unrepaired.options.equals(metadata.compactionStrategyOptions))
             return;
-
         reloadCompactionStrategy(metadata);
     }
 
     public synchronized void reloadCompactionStrategy(CFMetaData metadata)
     {
+        boolean disabledWithJMX = !isEnabled() && shouldBeEnabled();
         if (repaired != null)
             repaired.shutdown();
         if (unrepaired != null)
             unrepaired.shutdown();
         repaired = metadata.createCompactionStrategyInstance(cfs);
         unrepaired = metadata.createCompactionStrategyInstance(cfs);
+        options = metadata.compactionStrategyOptions;
+        if (disabledWithJMX || !shouldBeEnabled())
+            disable();
+        else
+            enable();
         startup();
     }
 
@@ -341,6 +346,28 @@ public final class WrappingCompactionStrategy extends AbstractCompactionStrategy
         super.shutdown();
         repaired.shutdown();
         unrepaired.shutdown();
+    }
+
+    @Override
+    public void enable()
+    {
+        if (repaired != null)
+            repaired.enable();
+        if (unrepaired != null)
+            unrepaired.enable();
+        // enable this last to make sure the strategies are ready to get calls.
+        super.enable();
+    }
+
+    @Override
+    public void disable()
+    {
+        // disable this first avoid asking disabled strategies for compaction tasks
+        super.disable();
+        if (repaired != null)
+            repaired.disable();
+        if (unrepaired != null)
+            unrepaired.disable();
     }
 
     @Override
