@@ -625,7 +625,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         logger.info("Loading new SSTables for {}/{}...", keyspace.getName(), name);
 
         Set<Descriptor> currentDescriptors = new HashSet<>();
-        for (SSTableReader sstable : data.getView().sstables(SSTableSet.CANONICAL, (s) -> true))
+        for (SSTableReader sstable : getSSTables(SSTableSet.CANONICAL))
             currentDescriptors.add(sstable.descriptor);
         Set<SSTableReader> newSSTables = new HashSet<>();
 
@@ -1399,11 +1399,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return nowInSec - metadata.getGcGraceSeconds();
     }
 
-    public Set<SSTableReader> getUnrepairedSSTables(SSTableSet sstableSet)
-    {
-        return ImmutableSet.copyOf(data.getView().sstables(sstableSet, (s) -> !s.isRepaired()));
-    }
-
     @SuppressWarnings("resource")
     public RefViewFragment selectAndReference(Function<View, Iterable<SSTableReader>> filter)
     {
@@ -1600,7 +1595,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public Refs<SSTableReader> getSnapshotSSTableReader(String tag) throws IOException
     {
         Map<Integer, SSTableReader> active = new HashMap<>();
-        for (SSTableReader sstable : data.getView().sstables(SSTableSet.CANONICAL, (s) -> true))
+        for (SSTableReader sstable : getSSTables(SSTableSet.CANONICAL))
             active.put(sstable.descriptor.generation, sstable);
         Map<Descriptor, Set<Component>> snapshots = directories.sstableLister().snapshots(tag).list();
         Refs<SSTableReader> refs = new Refs<>();

@@ -443,8 +443,6 @@ public class CompactionsTest
         assertEquals(keys, k);
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testCompactionLog() throws Exception
     {
@@ -474,7 +472,6 @@ public class CompactionsTest
         assertFalse(compactionLogs.containsKey(Pair.create(KEYSPACE1, cf)));
     }
 
->>>>>>> wip
     private void testDontPurgeAccidentaly(String k, String cfname) throws InterruptedException
     {
         // This test catches the regression of CASSANDRA-2786

@@ -22,7 +22,9 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.RateLimiter;
 import org.junit.BeforeClass;
@@ -83,7 +85,7 @@ public class AntiCompactionTest
     public void antiCompactOne() throws Exception
     {
         ColumnFamilyStore store = prepareColumnFamilyStore();
-        Collection<SSTableReader> sstables = store.getUnrepairedSSTables(SSTableSet.LIVE);
+        Collection<SSTableReader> sstables = getUnrepairedSSTables(store);
         assertEquals(store.getLiveSSTables().size(), sstables.size());
         Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("4".getBytes()));
         List<Range<Token>> ranges = Arrays.asList(range);
@@ -209,7 +211,7 @@ public class AntiCompactionTest
         {
             generateSStable(store,Integer.toString(table));
         }
-        Collection<SSTableReader> sstables = store.getUnrepairedSSTables(SSTableSet.LIVE);
+        Collection<SSTableReader> sstables = getUnrepairedSSTables(store);
         assertEquals(store.getLiveSSTables().size(), sstables.size());
 
         Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("4".getBytes()));
@@ -260,7 +262,7 @@ public class AntiCompactionTest
     public void shouldMutateRepairedAt() throws InterruptedException, IOException
     {
         ColumnFamilyStore store = prepareColumnFamilyStore();
-        Collection<SSTableReader> sstables = store.getUnrepairedSSTables(SSTableSet.LIVE);
+        Collection<SSTableReader> sstables = getUnrepairedSSTables(store);
         assertEquals(store.getLiveSSTables().size(), sstables.size());
         Range<Token> range = new Range<Token>(new BytesToken("0".getBytes()), new BytesToken("9999".getBytes()));
         List<Range<Token>> ranges = Arrays.asList(range);
@@ -289,7 +291,7 @@ public class AntiCompactionTest
         {
             generateSStable(store,Integer.toString(table));
         }
-        Collection<SSTableReader> sstables = store.getUnrepairedSSTables(SSTableSet.LIVE);
+        Collection<SSTableReader> sstables = getUnrepairedSSTables(store);
         assertEquals(store.getLiveSSTables().size(), sstables.size());
         
         Range<Token> range = new Range<Token>(new BytesToken("-10".getBytes()), new BytesToken("-1".getBytes()));
@@ -330,4 +332,11 @@ public class AntiCompactionTest
         ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF);
         store.truncateBlocking();
     }
+
+    private static Set<SSTableReader> getUnrepairedSSTables(ColumnFamilyStore cfs)
+    {
+        return ImmutableSet.copyOf(cfs.getTracker().getView().sstables(SSTableSet.LIVE, (s) -> !s.isRepaired()));
+    }
+
+
 }

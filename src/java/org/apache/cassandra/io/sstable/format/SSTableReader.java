@@ -1072,7 +1072,6 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         return replacement;
     }
 
-    // runOnClose must NOT be an anonymous or non-static inner class, nor must it retain a reference chain to this reader
     public SSTableReader cloneWithRestoredStart(DecoratedKey restoredStart)
     {
         synchronized (tidy.global)
@@ -1081,6 +1080,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         }
     }
 
+    // runOnClose must NOT be an anonymous or non-static inner class, nor must it retain a reference chain to this reader
     public SSTableReader cloneWithNewStart(DecoratedKey newStart, final Runnable runOnClose)
     {
         synchronized (tidy.global)
