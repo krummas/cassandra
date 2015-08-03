@@ -132,7 +132,8 @@ public class NodeTool
                 SetLoggingLevel.class,
                 GetLoggingLevels.class,
                 DisableHintsForDC.class,
-                EnableHintsForDC.class
+                EnableHintsForDC.class,
+                RebalanceDisks.class
         );
 
         Cli.CliBuilder<Runnable> builder = Cli.builder("nodetool");
