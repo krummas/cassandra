@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.db.compaction.writers;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -26,6 +27,7 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.compaction.CompactionTask;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.concurrent.Transactional;
@@ -35,9 +37,10 @@ import org.apache.cassandra.utils.concurrent.Transactional;
  * Class that abstracts away the actual writing of files to make it possible to use CompactionTask for more
  * use cases.
  */
-public abstract class CompactionAwareWriter extends Transactional.AbstractTransactional implements Transactional
+public abstract class CompactionAwareWriter extends Transactional.AbstractTransactional implements ICompactionAwareWriter
 {
     protected final ColumnFamilyStore cfs;
+    protected final Directories directories;
     protected final Set<SSTableReader> nonExpiredSSTables;
     protected final long estimatedTotalKeys;
     protected final long maxAge;
@@ -47,19 +50,22 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     protected final SSTableRewriter sstableWriter;
 
     public CompactionAwareWriter(ColumnFamilyStore cfs,
+                                 Directories directories,
                                  LifecycleTransaction txn,
                                  Set<SSTableReader> nonExpiredSSTables)
     {
-        this(cfs, txn, nonExpiredSSTables, false, false);
+        this(cfs, directories, txn, nonExpiredSSTables, false, false);
     }
 
     public CompactionAwareWriter(ColumnFamilyStore cfs,
+                                 Directories directories,
                                  LifecycleTransaction txn,
                                  Set<SSTableReader> nonExpiredSSTables,
                                  boolean offline,
                                  boolean keepOriginals)
     {
         this.cfs = cfs;
+        this.directories = directories;
         this.nonExpiredSSTables = nonExpiredSSTables;
         this.estimatedTotalKeys = SSTableReader.getApproximateKeyCount(nonExpiredSSTables);
         this.maxAge = CompactionTask.getMaxDataAge(nonExpiredSSTables);
@@ -67,13 +73,6 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         this.txn = txn;
         this.sstableWriter = new SSTableRewriter(cfs, txn, maxAge, offline).keepOriginals(keepOriginals);
     }
-
-    /**
-     * Writes a partition in an implementation specific way
-     * @param partition the partition to append
-     * @return true if the partition was written, false otherwise
-     */
-    public abstract boolean append(UnfilteredRowIterator partition);
 
     @Override
     protected Throwable doAbort(Throwable accumulate)
@@ -98,7 +97,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
      * @return all the written sstables sstables
      */
     @Override
-    public List<SSTableReader> finish()
+    public Collection<SSTableReader> finish()
     {
         super.finish();
         return sstableWriter.finished();
@@ -117,7 +116,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
      */
     public Directories getDirectories()
     {
-        return cfs.directories;
+        return directories;
     }
 
     /**

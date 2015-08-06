@@ -40,6 +40,7 @@ import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
+import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
@@ -68,7 +69,7 @@ public class StreamReceiveTask extends StreamTask
     private boolean done = false;
 
     //  holds references to SSTables received
-    protected Collection<SSTableWriter> sstables;
+    protected Collection<SSTableMultiWriter> sstables;
 
     public StreamReceiveTask(StreamSession session, UUID cfId, int totalFiles, long totalSize)
     {
@@ -86,12 +87,12 @@ public class StreamReceiveTask extends StreamTask
      *
      * @param sstable SSTable file received.
      */
-    public synchronized void received(SSTableWriter sstable)
+    public synchronized void received(SSTableMultiWriter sstable)
     {
         if (done)
             return;
 
-        assert cfId.equals(sstable.metadata.cfId);
+        assert cfId.equals(sstable.getCfId());
 
         sstables.add(sstable);
         if (sstables.size() == totalFiles)
@@ -126,8 +127,11 @@ public class StreamReceiveTask extends StreamTask
             if (kscf == null)
             {
                 // schema was dropped during streaming
-                for (SSTableWriter writer : task.sstables)
-                    writer.abort();
+                for (SSTableMultiWriter writer : task.sstables)
+                {
+                    SSTableMultiWriter.abortOrDie(writer);
+                }
+
                 task.sstables.clear();
                 task.txn.abort();
                 return;
@@ -138,11 +142,11 @@ public class StreamReceiveTask extends StreamTask
             try
             {
                 List<SSTableReader> readers = new ArrayList<>();
-                for (SSTableWriter writer : task.sstables)
+                for (SSTableMultiWriter writer : task.sstables)
                 {
-                    SSTableReader reader = writer.finish(true);
-                    readers.add(reader);
-                    task.txn.update(reader, false);
+                    Collection<SSTableReader> newReaders = writer.finish(true);
+                    readers.addAll(newReaders);
+                    task.txn.update(newReaders, false);
                 }
 
                 task.sstables.clear();
@@ -211,8 +215,10 @@ public class StreamReceiveTask extends StreamTask
             return;
 
         done = true;
-        for (SSTableWriter writer : sstables)
-            writer.abort();
+        for (SSTableMultiWriter writer : sstables)
+        {
+            SSTableMultiWriter.abortOrDie(writer);
+        }
         txn.abort();
         sstables.clear();
     }

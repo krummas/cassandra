@@ -95,6 +95,11 @@ public class Descriptor
         return new Descriptor(newType.info.getLatestVersion(), directory, ksname, cfname, generation, newType);
     }
 
+    public Descriptor withDirectory(File newDirectory)
+    {
+        return new Descriptor(version, newDirectory, ksname, cfname, generation, formatType);
+    }
+
     public String tmpFilenameFor(Component component)
     {
         return filenameFor(component) + TMP_EXT;

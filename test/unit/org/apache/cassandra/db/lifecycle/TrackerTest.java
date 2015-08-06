@@ -296,7 +296,7 @@ public class TrackerTest
         Assert.assertTrue(tracker.getView().flushingMemtables.contains(prev2));
 
         SSTableReader reader = MockSchema.sstable(0, 10, false, cfs);
-        tracker.replaceFlushed(prev2, reader);
+        tracker.replaceFlushed(prev2, Collections.singleton(reader));
         Assert.assertEquals(1, tracker.getView().sstables.size());
         Assert.assertEquals(1, listener.received.size());
         Assert.assertEquals(reader, ((SSTableAddedNotification) listener.received.get(0)).added);
@@ -313,7 +313,7 @@ public class TrackerTest
         tracker.markFlushing(prev1);
         reader = MockSchema.sstable(0, 10, true, cfs);
         cfs.invalidate(false);
-        tracker.replaceFlushed(prev1, reader);
+        tracker.replaceFlushed(prev1, Collections.singleton(reader));
         Assert.assertEquals(0, tracker.getView().sstables.size());
         Assert.assertEquals(0, tracker.getView().flushingMemtables.size());
         Assert.assertEquals(0, cfs.metric.liveDiskSpaceUsed.getCount());

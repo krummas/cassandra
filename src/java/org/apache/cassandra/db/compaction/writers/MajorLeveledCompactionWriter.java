@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
@@ -47,28 +48,30 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     private int sstablesWritten = 0;
 
     public MajorLeveledCompactionWriter(ColumnFamilyStore cfs,
+                                        Directories directories,
                                         LifecycleTransaction txn,
                                         Set<SSTableReader> nonExpiredSSTables,
                                         long maxSSTableSize)
     {
-        this(cfs, txn, nonExpiredSSTables, maxSSTableSize, false, false);
+        this(cfs, directories, txn, nonExpiredSSTables, maxSSTableSize, false, false);
     }
 
     @SuppressWarnings("resource")
     public MajorLeveledCompactionWriter(ColumnFamilyStore cfs,
+                                        Directories directories,
                                         LifecycleTransaction txn,
                                         Set<SSTableReader> nonExpiredSSTables,
                                         long maxSSTableSize,
                                         boolean offline,
                                         boolean keepOriginals)
     {
-        super(cfs, txn, nonExpiredSSTables, offline, keepOriginals);
+        super(cfs, directories, txn, nonExpiredSSTables, offline, keepOriginals);
         this.maxSSTableSize = maxSSTableSize;
         this.allSSTables = txn.originals();
         expectedWriteSize = Math.min(maxSSTableSize, cfs.getExpectedCompactedFileSize(nonExpiredSSTables, txn.opType()));
         long estimatedSSTables = Math.max(1, SSTableReader.getTotalBytes(nonExpiredSSTables) / maxSSTableSize);
         long keysPerSSTable = estimatedTotalKeys / estimatedSSTables;
-        File sstableDirectory = cfs.directories.getLocationForDisk(getWriteDirectory(expectedWriteSize));
+        File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
 
         @SuppressWarnings("resource")
         SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
@@ -98,7 +101,7 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
             }
 
             averageEstimatedKeysPerSSTable = Math.round(((double) averageEstimatedKeysPerSSTable * sstablesWritten + partitionsWritten) / (sstablesWritten + 1));
-            File sstableDirectory = cfs.directories.getLocationForDisk(getWriteDirectory(expectedWriteSize));
+            File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
             SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
                                                         averageEstimatedKeysPerSSTable,
                                                         minRepairedAt,

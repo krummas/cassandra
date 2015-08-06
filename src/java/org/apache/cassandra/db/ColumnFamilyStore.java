@@ -58,6 +58,7 @@ import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.*;
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.TableMetrics.Sampler;
 import org.apache.cassandra.metrics.TableMetrics;
@@ -75,6 +76,15 @@ import static org.apache.cassandra.utils.Throwables.maybeFail;
 
 public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 {
+    private static volatile Directories.DataDirectory[] initialDirectories = Directories.dataDirectories;
+
+    public static void setInitialDirectories(Directories.DataDirectory[] directories)
+    {
+        assert directories != null;
+        assert directories.length > 0;
+        initialDirectories = directories;
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(ColumnFamilyStore.class);
 
     private static final ExecutorService flushExecutor = new JMXEnabledThreadPoolExecutor(DatabaseDescriptor.getFlushWriters(),
@@ -164,7 +174,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     private volatile DefaultInteger maxCompactionThreshold;
     private final CompactionStrategyManager compactionStrategyManager;
 
-    public final Directories directories;
+    private volatile Directories directories;
 
     public final TableMetrics metric;
     public volatile long sampleLatencyNanos;
@@ -189,6 +199,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 cfs.maxCompactionThreshold = new DefaultInteger(metadata.params.compaction.maxCompactionThreshold());
 
         compactionStrategyManager.maybeReload(metadata);
+        directories = compactionStrategyManager.getDirectories();
 
         scheduleFlush();
 
@@ -330,6 +341,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                               boolean loadSSTables,
                               boolean registerBookkeeping)
     {
+        assert directories != null;
         assert metadata != null : "null metadata for " + keyspace + ":" + columnFamilyName;
 
         this.keyspace = keyspace;
@@ -363,6 +375,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         // compaction strategy should be created after the CFS has been prepared
         this.compactionStrategyManager = new CompactionStrategyManager(this);
+        this.directories = this.compactionStrategyManager.getDirectories();
 
         if (maxCompactionThreshold.value() <= 0 || minCompactionThreshold.value() <=0)
         {
@@ -424,6 +437,22 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             mbeanName = null;
             oldMBeanName= null;
         }
+    }
+
+    public Directories getDirectories()
+    {
+        return directories;
+    }
+
+    public SSTableMultiWriter createSSTableMultiWriter(Descriptor descriptor, long keyCount, long repairedAt, int sstableLevel, SerializationHeader header, LifecycleTransaction txn)
+    {
+        MetadataCollector collector = new MetadataCollector(metadata.comparator).sstableLevel(sstableLevel);
+        return createSSTableMultiWriter(descriptor, keyCount, repairedAt, collector, header, txn);
+    }
+
+    public SSTableMultiWriter createSSTableMultiWriter(Descriptor descriptor, long keyCount, long repairedAt, MetadataCollector metadataCollector, SerializationHeader header, LifecycleTransaction txn)
+    {
+        return getCompactionStrategyManager().createSSTableMultiWriter(descriptor, keyCount, repairedAt, metadataCollector, header, txn);
     }
 
     /** call when dropping or renaming a CF. Performs mbean housekeeping and invalidates CFS to other operations */
@@ -499,7 +528,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                          boolean loadSSTables)
     {
         // get the max generation number, to prevent generation conflicts
-        Directories directories = new Directories(metadata);
+        Directories directories = new Directories(metadata, initialDirectories);
         Directories.SSTableLister lister = directories.sstableLister(Directories.OnTxnErr.IGNORE).includeBackups(true);
         List<Integer> generations = new ArrayList<Integer>();
         for (Map.Entry<Descriptor, Set<Component>> entry : lister.list().entrySet())
@@ -633,7 +662,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             currentDescriptors.add(sstable.descriptor);
         Set<SSTableReader> newSSTables = new HashSet<>();
 
-        Directories.SSTableLister lister = directories.sstableLister(Directories.OnTxnErr.IGNORE).skipTemporary(true);
+        Directories.SSTableLister lister = getDirectories().sstableLister(Directories.OnTxnErr.IGNORE).skipTemporary(true);
         for (Map.Entry<Descriptor, Set<Component>> entry : lister.list().entrySet())
         {
             Descriptor descriptor = entry.getKey();
@@ -1378,9 +1407,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         maybeFail(data.dropSSTables(Predicates.in(sstables), compactionType, null));
     }
 
-    void replaceFlushed(Memtable memtable, SSTableReader sstable)
+    void replaceFlushed(Memtable memtable, Collection<SSTableReader> sstables)
     {
-        compactionStrategyManager.replaceFlushed(memtable, sstable);
+        compactionStrategyManager.replaceFlushed(memtable, sstables);
     }
 
     public boolean isValid()
@@ -1580,7 +1609,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     private void writeSnapshotManifest(final JSONArray filesJSONArr, final String snapshotName)
     {
-        final File manifestFile = directories.getSnapshotManifestFile(snapshotName);
+        final File manifestFile = getDirectories().getSnapshotManifestFile(snapshotName);
 
         try
         {
@@ -1602,7 +1631,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     private void createEphemeralSnapshotMarkerFile(final String snapshot)
     {
-        final File ephemeralSnapshotMarker = directories.getNewEphemeralSnapshotMarkerFile(snapshot);
+        final File ephemeralSnapshotMarker = getDirectories().getNewEphemeralSnapshotMarkerFile(snapshot);
 
         try
         {
@@ -1635,7 +1664,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         Map<Integer, SSTableReader> active = new HashMap<>();
         for (SSTableReader sstable : getSSTables(SSTableSet.CANONICAL))
             active.put(sstable.descriptor.generation, sstable);
-        Map<Descriptor, Set<Component>> snapshots = directories.sstableLister(Directories.OnTxnErr.IGNORE).snapshots(tag).list();
+        Map<Descriptor, Set<Component>> snapshots = getDirectories().sstableLister(Directories.OnTxnErr.IGNORE).snapshots(tag).list();
         Refs<SSTableReader> refs = new Refs<>();
         try
         {
@@ -1692,12 +1721,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public boolean snapshotExists(String snapshotName)
     {
-        return directories.snapshotExists(snapshotName);
+        return getDirectories().snapshotExists(snapshotName);
     }
 
     public long getSnapshotCreationTime(String snapshotName)
     {
-        return directories.snapshotCreationTime(snapshotName);
+        return getDirectories().snapshotCreationTime(snapshotName);
     }
 
     /**
@@ -1708,7 +1737,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      */
     public void clearSnapshot(String snapshotName)
     {
-        List<File> snapshotDirs = directories.getCFDirectories();
+        List<File> snapshotDirs = getDirectories().getCFDirectories();
         Directories.clearSnapshot(snapshotName, snapshotDirs);
     }
     /**
@@ -1718,7 +1747,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      */
     public Map<String, Pair<Long,Long>> getSnapshotDetails()
     {
-        return directories.getSnapshotDetails();
+        return getDirectories().getSnapshotDetails();
     }
 
     /**
@@ -2251,7 +2280,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public long trueSnapshotsSize()
     {
-        return directories.trueSnapshotsSize();
+        return getDirectories().trueSnapshotsSize();
     }
 
     @VisibleForTesting

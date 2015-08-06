@@ -387,6 +387,12 @@ public class CQLSSTableWriter implements Closeable
         {
             Schema.instance.load(table);
             Schema.instance.setKeyspaceMetadata(keyspace.withSwapped(keyspace.tables.with(table)));
+
+            Keyspace ks = Keyspace.open(keyspace.name);
+            if (!ks.hasColumnFamilyStore(Schema.instance.getId(keyspace.name, table.cfName)))
+            {
+                ks.initCf(table.cfId, table.cfName, true);
+            }
         }
 
         /**
