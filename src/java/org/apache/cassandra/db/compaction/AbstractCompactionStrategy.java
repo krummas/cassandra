@@ -65,31 +65,16 @@ public abstract class AbstractCompactionStrategy
     protected static final String UNCHECKED_TOMBSTONE_COMPACTION_OPTION = "unchecked_tombstone_compaction";
     protected static final String COMPACTION_ENABLED = "enabled";
 
-    protected Map<String, String> options;
-
     protected final ColumnFamilyStore cfs;
     protected float tombstoneThreshold;
     protected long tombstoneCompactionInterval;
     protected boolean uncheckedTombstoneCompaction;
     protected boolean disableTombstoneCompactions = false;
 
-    /**
-     * pause/resume/getNextBackgroundTask must synchronize.  This guarantees that after pause completes,
-     * no new tasks will be generated; or put another way, pause can't run until in-progress tasks are
-     * done being created.
-     *
-     * This allows runWithCompactionsDisabled to be confident that after pausing, once in-progress
-     * tasks abort, it's safe to proceed with truncate/cleanup/etc.
-     *
-     * See CASSANDRA-3430
-     */
-    protected boolean isActive = false;
-
     protected AbstractCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
     {
         assert cfs != null;
         this.cfs = cfs;
-        this.options = ImmutableMap.copyOf(options);
 
         /* checks must be repeated here, as user supplied strategies might not call validateOptions directly */
 
@@ -102,8 +87,6 @@ public abstract class AbstractCompactionStrategy
             tombstoneCompactionInterval = optionValue == null ? DEFAULT_TOMBSTONE_COMPACTION_INTERVAL : Long.parseLong(optionValue);
             optionValue = options.get(UNCHECKED_TOMBSTONE_COMPACTION_OPTION);
             uncheckedTombstoneCompaction = optionValue == null ? DEFAULT_UNCHECKED_TOMBSTONE_COMPACTION_OPTION : Boolean.parseBoolean(optionValue);
-            if (!shouldBeEnabled())
-                this.disable();
         }
         catch (ConfigurationException e)
         {
@@ -118,18 +101,16 @@ public abstract class AbstractCompactionStrategy
      * For internal, temporary suspension of background compactions so that we can do exceptional
      * things like truncate or major compaction
      */
-    public synchronized void pause()
+    public void pause()
     {
-        isActive = false;
     }
 
     /**
      * For internal, temporary suspension of background compactions so that we can do exceptional
      * things like truncate or major compaction
      */
-    public synchronized void resume()
+    public void resume()
     {
-        isActive = true;
     }
 
     /**
@@ -137,7 +118,6 @@ public abstract class AbstractCompactionStrategy
      */
     public void startup()
     {
-        isActive = true;
     }
 
     /**
@@ -145,7 +125,6 @@ public abstract class AbstractCompactionStrategy
      */
     public void shutdown()
     {
-        isActive = false;
     }
 
     /**
@@ -455,14 +434,6 @@ public abstract class AbstractCompactionStrategy
         uncheckedOptions.remove(COMPACTION_ENABLED);
         return uncheckedOptions;
     }
-
-    public boolean shouldBeEnabled()
-    {
-        String optionValue = options.get(COMPACTION_ENABLED);
-
-        return optionValue == null || Boolean.parseBoolean(optionValue);
-    }
-
 
     /**
      * Method for grouping similar SSTables together, This will be used by

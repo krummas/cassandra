@@ -107,6 +107,10 @@ public class CompactionStrategyManager implements INotificationConsumer
 
     public synchronized void resume()
     {
+        if (repaired != null)
+            repaired.resume();
+        if (unrepaired != null)
+            unrepaired.resume();
         isActive = true;
     }
 
@@ -118,6 +122,10 @@ public class CompactionStrategyManager implements INotificationConsumer
     public synchronized void pause()
     {
         isActive = false;
+        if (repaired != null)
+            repaired.pause();
+        if (unrepaired != null)
+            unrepaired.pause();
     }
 
 
