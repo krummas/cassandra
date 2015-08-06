@@ -387,6 +387,14 @@ public class CQLSSTableWriter implements Closeable
         {
             Schema.instance.load(table);
             Schema.instance.setKeyspaceMetadata(keyspace.withSwapped(keyspace.tables.with(table)));
+
+            // since CASSANDRA-8671 needs a ColumnFamilyStoreInstance to create an
+            // SSTableWriter, we need to make sure the cfs instance has been initialized
+            Keyspace ks = Keyspace.open(keyspace.name);
+            if (!ks.hasColumnFamilyStore(Schema.instance.getId(keyspace.name, table.cfName)))
+            {
+                ks.initCf(table.cfId, table.cfName, true);
+            }
         }
 
         /**
