@@ -39,7 +39,8 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 
 /**
  * During compaction we can drop entire sstables if they only contain expired tombstones and if it is guaranteed
- * to not cover anything in other sstables.
+ * to not cover anything in other sstables. An expired sstable can be blocked from getting dropped if its newest
+ * timestamp is newer than the oldest data in another sstable.
  *
  * This class outputs all sstables that are blocking other sstables from getting dropped so that a user can
  * figure out why certain sstables are still on disk.
@@ -51,7 +52,7 @@ public class SSTableExpiredBlockers
         PrintStream out = System.out;
         if (args.length < 2)
         {
-            out.println("Usage: sstableexpiredblockers <keyspace> <columnfamily>");
+            out.println("Usage: sstableexpiredblockers <keyspace> <table>");
             System.exit(1);
         }
         String keyspace = args[args.length - 2];
@@ -60,7 +61,7 @@ public class SSTableExpiredBlockers
 
         CFMetaData metadata = Schema.instance.getCFMetaData(keyspace, columnfamily);
         if (metadata == null)
-            throw new IllegalArgumentException(String.format("Unknown keyspace/columnFamily %s.%s",
+            throw new IllegalArgumentException(String.format("Unknown keyspace/table %s.%s",
                     keyspace,
                     columnfamily));
 
