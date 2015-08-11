@@ -18,6 +18,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
@@ -38,6 +39,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
     private final DateTieredCompactionStrategyOptions options;
     protected volatile int estimatedRemainingTasks;
     private final Set<SSTableReader> sstables = new HashSet<>();
+    private long lastExpiredCheck;
 
     public DateTieredCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
     {
@@ -82,7 +84,12 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         Set<SSTableReader> uncompacting = Sets.intersection(sstables, cfs.getUncompactingSSTables());
 
         // Find fully expired SSTables. Those will be included no matter what.
-        Set<SSTableReader> expired = CompactionController.getFullyExpiredSSTables(cfs, uncompacting, cfs.getOverlappingSSTables(uncompacting), gcBefore);
+        Set<SSTableReader> expired = Collections.emptySet();
+        if (System.currentTimeMillis() - lastExpiredCheck > TimeUnit.MINUTES.toMillis(10))
+        {
+            lastExpiredCheck = System.currentTimeMillis();
+            expired = CompactionController.getFullyExpiredSSTables(cfs, uncompacting, cfs.getOverlappingSSTables(uncompacting), gcBefore);
+        }
         Set<SSTableReader> candidates = Sets.newHashSet(filterSuspectSSTables(uncompacting));
 
         List<SSTableReader> compactionCandidates = new ArrayList<>(getNextNonExpiredSSTables(Sets.difference(candidates, expired), gcBefore));
