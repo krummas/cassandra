@@ -39,7 +39,8 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
     private final DateTieredCompactionStrategyOptions options;
     protected volatile int estimatedRemainingTasks;
     private final Set<SSTableReader> sstables = new HashSet<>();
-    private long lastExpiredCheck;
+    @VisibleForTesting
+    long lastExpiredCheck;
 
     public DateTieredCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
     {
@@ -87,8 +88,8 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         Set<SSTableReader> expired = Collections.emptySet();
         if (System.currentTimeMillis() - lastExpiredCheck > TimeUnit.MINUTES.toMillis(10))
         {
-            lastExpiredCheck = System.currentTimeMillis();
             expired = CompactionController.getFullyExpiredSSTables(cfs, uncompacting, cfs.getOverlappingSSTables(uncompacting), gcBefore);
+            lastExpiredCheck = System.currentTimeMillis();
         }
         Set<SSTableReader> candidates = Sets.newHashSet(filterSuspectSSTables(uncompacting));
 
