@@ -38,6 +38,7 @@ import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.INotificationConsumer;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableListChangedNotification;
+import org.apache.cassandra.utils.Pair;
 
 public class LeveledCompactionStrategy extends AbstractCompactionStrategy implements INotificationConsumer
 {
@@ -105,7 +106,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
      * the only difference between background and maximal in LCS is that maximal is still allowed
      * (by explicit user request) even when compaction is disabled.
      */
-    public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
+    public AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
         if (!isEnabled())
             return null;
@@ -117,34 +118,42 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
     {
         while (true)
         {
-            OperationType op;
-            LeveledManifest.CompactionCandidate candidate = manifest.getCompactionCandidates();
-            if (candidate == null)
-            {
-                // if there is no sstable to compact in standard way, try compacting based on droppable tombstone ratio
-                SSTableReader sstable = findDroppableSSTable(gcBefore);
-                if (sstable == null)
-                {
-                    logger.debug("No compaction necessary for {}", this);
-                    return null;
-                }
-                candidate = new LeveledManifest.CompactionCandidate(Collections.singleton(sstable),
-                                                                    sstable.getSSTableLevel(),
-                                                                    getMaxSSTableBytes());
-                op = OperationType.TOMBSTONE_COMPACTION;
-            }
-            else
-            {
-                op = OperationType.COMPACTION;
-            }
-
-            if (cfs.getDataTracker().markCompacting(candidate.sstables))
-            {
-                LeveledCompactionTask newTask = new LeveledCompactionTask(cfs, candidate.sstables, candidate.level, gcBefore, candidate.maxSSTableBytes);
-                newTask.setCompactionType(op);
-                return newTask;
-            }
+            Pair<Boolean, AbstractCompactionTask> task = getMaximalTaskInternal(gcBefore);
+            if (task.left)
+                return task.right;
         }
+    }
+
+    public synchronized Pair<Boolean, AbstractCompactionTask> getMaximalTaskInternal(int gcBefore)
+    {
+        OperationType op;
+        LeveledManifest.CompactionCandidate candidate = manifest.getCompactionCandidates();
+        if (candidate == null)
+        {
+            // if there is no sstable to compact in standard way, try compacting based on droppable tombstone ratio
+            SSTableReader sstable = findDroppableSSTable(gcBefore);
+            if (sstable == null)
+            {
+                logger.debug("No compaction necessary for {}", this);
+                return Pair.create(true, null);
+            }
+            candidate = new LeveledManifest.CompactionCandidate(Collections.singleton(sstable),
+                                                                sstable.getSSTableLevel(),
+                                                                getMaxSSTableBytes());
+            op = OperationType.TOMBSTONE_COMPACTION;
+        }
+        else
+        {
+            op = OperationType.COMPACTION;
+        }
+
+        if (cfs.getDataTracker().markCompacting(candidate.sstables))
+        {
+            LeveledCompactionTask newTask = new LeveledCompactionTask(cfs, candidate.sstables, candidate.level, gcBefore, candidate.maxSSTableBytes);
+            newTask.setCompactionType(op);
+            return Pair.create(true, newTask);
+        }
+        return Pair.create(false, null);
     }
 
     public AbstractCompactionTask getUserDefinedTask(Collection<SSTableReader> sstables, int gcBefore)
