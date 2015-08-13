@@ -239,14 +239,23 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
 
         while (true)
         {
-            List<SSTableReader> hottestBucket = getNextBackgroundSSTables(gcBefore);
-
-            if (hottestBucket.isEmpty())
-                return null;
-
-            if (cfs.getDataTracker().markCompacting(hottestBucket))
-                return new CompactionTask(cfs, hottestBucket, gcBefore);
+            Pair<Boolean, AbstractCompactionTask> nextBackgroundTask = getNextBackgroundTaskInternal(gcBefore);
+            if (nextBackgroundTask.left)
+                return nextBackgroundTask.right;
         }
+    }
+
+    private synchronized Pair<Boolean, AbstractCompactionTask> getNextBackgroundTaskInternal(int gcBefore)
+    {
+        List<SSTableReader> hottestBucket = getNextBackgroundSSTables(gcBefore);
+
+        if (hottestBucket.isEmpty())
+            return Pair.<Boolean, AbstractCompactionTask>create(true, null);
+
+        if (cfs.getDataTracker().markCompacting(hottestBucket))
+            return Pair.<Boolean, AbstractCompactionTask>create(true, new CompactionTask(cfs, hottestBucket, gcBefore));
+
+        return Pair.<Boolean, AbstractCompactionTask>create(false, null);
     }
 
     public AbstractCompactionTask getMaximalTask(final int gcBefore)

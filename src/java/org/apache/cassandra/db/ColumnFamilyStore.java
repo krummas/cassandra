@@ -1021,24 +1021,56 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      */
     public Set<SSTableReader> getOverlappingSSTables(Collection<SSTableReader> sstables)
     {
-        logger.debug("Checking for sstables overlapping {}", sstables);
-
-        // a normal compaction won't ever have an empty sstables list, but we create a skeleton
-        // compaction controller for streaming, and that passes an empty list.
-        if (sstables.isEmpty())
-            return ImmutableSet.of();
-
-        DataTracker.SSTableIntervalTree tree = data.getView().intervalTree;
-
-        Set<SSTableReader> results = null;
-        for (SSTableReader sstable : sstables)
+        List<SSTableReader> sortedByFirst = new ArrayList<>(sstables);
+        Collections.sort(sortedByFirst, new Comparator<SSTableReader>()
         {
-            Set<SSTableReader> overlaps = ImmutableSet.copyOf(tree.search(Interval.<RowPosition, SSTableReader>create(sstable.first, sstable.last)));
-            results = results == null ? overlaps : Sets.union(results, overlaps).immutableCopy();
+            @Override
+            public int compare(SSTableReader o1, SSTableReader o2)
+            {
+                return o1.first.compareTo(o2.first);
+            }
+        });
+        List<Interval<RowPosition, SSTableReader>> intervals = new ArrayList<>();
+        DecoratedKey first = null, last = null;
+        /*
+        normalize the intervals covered by the sstables
+        assume we have sstables like this (brackets representing first/last key in the sstable);
+        [   ] [   ]    [   ]   [  ]
+           [   ]         [       ]
+        then we can, instead of searching the interval tree 6 times, normalize the intervals and
+        only query the tree 2 times, for these intervals;
+        [         ]    [          ]
+         */
+        for (SSTableReader sstable : sortedByFirst)
+        {
+            if (first == null)
+            {
+                first = sstable.first;
+                last = sstable.last;
+            }
+            else
+            {
+                if (sstable.first.compareTo(last) <= 0) // we do overlap
+                {
+                    if (sstable.last.compareTo(last) > 0)
+                        last = sstable.last;
+                }
+                else
+                {
+                    intervals.add(Interval.<RowPosition, SSTableReader>create(first, last));
+                    first = sstable.first;
+                    last = sstable.last;
+                }
+            }
         }
-        results = Sets.difference(results, ImmutableSet.copyOf(sstables));
+        intervals.add(Interval.<RowPosition, SSTableReader>create(first, last));
+        DataTracker.SSTableIntervalTree tree = data.getView().intervalTree;
+        Set<SSTableReader> results = new HashSet<>();
 
-        return results;
+        for (Interval<RowPosition, SSTableReader> interval : intervals)
+            results.addAll(tree.search(interval));
+
+        return Sets.difference(results, ImmutableSet.copyOf(sstables));
     }
 
     /**
