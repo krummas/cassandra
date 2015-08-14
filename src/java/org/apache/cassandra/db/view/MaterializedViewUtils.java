@@ -26,6 +26,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
+import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.utils.FBUtilities;
 
 public final class MaterializedViewUtils
@@ -55,20 +56,19 @@ public final class MaterializedViewUtils
      *
      * @throws RuntimeException if this method is called using a base token which does not belong to this replica
      */
-    public static InetAddress getViewNaturalEndpoint(String keyspaceName, Token baseToken, Token viewToken)
+    public static InetAddress getViewNaturalEndpoint(String keyspaceName, TokenMetadata tmd, Token baseToken, Token viewToken)
     {
         AbstractReplicationStrategy replicationStrategy = Keyspace.open(keyspaceName).getReplicationStrategy();
-
         String localDataCenter = DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddress());
         List<InetAddress> localBaseEndpoints = new ArrayList<>();
         List<InetAddress> localViewEndpoints = new ArrayList<>();
-        for (InetAddress baseEndpoint : replicationStrategy.getNaturalEndpoints(baseToken))
+        for (InetAddress baseEndpoint : replicationStrategy.calculateNaturalEndpoints(baseToken, tmd))
         {
             if (DatabaseDescriptor.getEndpointSnitch().getDatacenter(baseEndpoint).equals(localDataCenter))
                 localBaseEndpoints.add(baseEndpoint);
         }
 
-        for (InetAddress viewEndpoint : replicationStrategy.getNaturalEndpoints(viewToken))
+        for (InetAddress viewEndpoint : replicationStrategy.calculateNaturalEndpoints(viewToken, tmd))
         {
             // If we are a base endpoint which is also a view replica, we use ourselves as our view replica
             if (viewEndpoint.equals(FBUtilities.getBroadcastAddress()))

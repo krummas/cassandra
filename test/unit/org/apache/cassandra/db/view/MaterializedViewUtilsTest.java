@@ -74,7 +74,7 @@ public class MaterializedViewUtilsTest
         KeyspaceMetadata meta = KeyspaceMetadata.create("Keyspace1", KeyspaceParams.create(false, replicationMap));
         Schema.instance.setKeyspaceMetadata(meta);
 
-        InetAddress naturalEndpoint = MaterializedViewUtils.getViewNaturalEndpoint("Keyspace1",
+        InetAddress naturalEndpoint = MaterializedViewUtils.getViewNaturalEndpoint("Keyspace1", StorageService.instance.getTokenMetadata(),
                                                                                    new StringToken("CA"),
                                                                                    new StringToken("BB"));
 
@@ -106,7 +106,7 @@ public class MaterializedViewUtilsTest
         KeyspaceMetadata meta = KeyspaceMetadata.create("Keyspace1", KeyspaceParams.create(false, replicationMap));
         Schema.instance.setKeyspaceMetadata(meta);
 
-        InetAddress naturalEndpoint = MaterializedViewUtils.getViewNaturalEndpoint("Keyspace1",
+        InetAddress naturalEndpoint = MaterializedViewUtils.getViewNaturalEndpoint("Keyspace1", StorageService.instance.getTokenMetadata(),
                                                                                    new StringToken("CA"),
                                                                                    new StringToken("BB"));
 
