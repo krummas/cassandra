@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.compaction.CompactionTask;
@@ -37,7 +38,7 @@ import org.apache.cassandra.utils.concurrent.Transactional;
  * Class that abstracts away the actual writing of files to make it possible to use CompactionTask for more
  * use cases.
  */
-public abstract class CompactionAwareWriter extends Transactional.AbstractTransactional implements ICompactionAwareWriter
+public abstract class CompactionAwareWriter extends Transactional.AbstractTransactional implements Transactional
 {
     protected final ColumnFamilyStore cfs;
     protected final Directories directories;
@@ -48,14 +49,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
     protected final LifecycleTransaction txn;
     protected final SSTableRewriter sstableWriter;
-
-    public CompactionAwareWriter(ColumnFamilyStore cfs,
-                                 Directories directories,
-                                 LifecycleTransaction txn,
-                                 Set<SSTableReader> nonExpiredSSTables)
-    {
-        this(cfs, directories, txn, nonExpiredSSTables, false, false);
-    }
+    private boolean isInitialized = false;
 
     public CompactionAwareWriter(ColumnFamilyStore cfs,
                                  Directories directories,
@@ -72,6 +66,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         this.minRepairedAt = CompactionTask.getMinRepairedAt(nonExpiredSSTables);
         this.txn = txn;
         this.sstableWriter = new SSTableRewriter(cfs, txn, maxAge, offline).keepOriginals(keepOriginals);
+
     }
 
     @Override
@@ -110,6 +105,33 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     {
         return estimatedTotalKeys;
     }
+
+    public final boolean append(UnfilteredRowIterator partition)
+    {
+        maybeSwitchWriter(partition.partitionKey());
+        return realAppend(partition);
+    }
+
+    protected abstract boolean realAppend(UnfilteredRowIterator partition);
+
+    /**
+     * Guaranteed to be called before the first call to realAppend.
+     * @param key
+     */
+    protected void maybeSwitchWriter(DecoratedKey key)
+    {
+        if (!isInitialized)
+            switchCompactionLocation(getDirectories().getWriteableLocation(cfs.getExpectedCompactedFileSize(nonExpiredSSTables, txn.opType())));
+        isInitialized = true;
+    }
+
+    /**
+     * Implementations of this method should finish the current sstable writer and start writing to this directory.
+     *
+     * Called once before starting to append and then whenever we see a need to start writing to another directory.
+     * @param directory
+     */
+    protected abstract void switchCompactionLocation(Directories.DataDirectory directory);
 
     /**
      * The directories we can write to

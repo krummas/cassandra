@@ -69,24 +69,11 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
         this.maxSSTableSize = maxSSTableSize;
         this.allSSTables = txn.originals();
         expectedWriteSize = Math.min(maxSSTableSize, cfs.getExpectedCompactedFileSize(nonExpiredSSTables, txn.opType()));
-        long estimatedSSTables = Math.max(1, SSTableReader.getTotalBytes(nonExpiredSSTables) / maxSSTableSize);
-        long keysPerSSTable = estimatedTotalKeys / estimatedSSTables;
-        File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
-
-        @SuppressWarnings("resource")
-        SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
-                                                    keysPerSSTable,
-                                                    minRepairedAt,
-                                                    cfs.metadata,
-                                                    new MetadataCollector(allSSTables, cfs.metadata.comparator, currentLevel),
-                                                    SerializationHeader.make(cfs.metadata, nonExpiredSSTables),
-                                                    txn);
-        sstableWriter.switchWriter(writer);
     }
 
     @Override
     @SuppressWarnings("resource")
-    public boolean append(UnfilteredRowIterator partition)
+    public boolean realAppend(UnfilteredRowIterator partition)
     {
         long posBefore = sstableWriter.currentWriter().getOnDiskFilePointer();
         RowIndexEntry rie = sstableWriter.append(partition);
@@ -101,19 +88,25 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
             }
 
             averageEstimatedKeysPerSSTable = Math.round(((double) averageEstimatedKeysPerSSTable * sstablesWritten + partitionsWritten) / (sstablesWritten + 1));
-            File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
-            SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
-                                                        averageEstimatedKeysPerSSTable,
-                                                        minRepairedAt,
-                                                        cfs.metadata,
-                                                        new MetadataCollector(allSSTables, cfs.metadata.comparator, currentLevel),
-                                                        SerializationHeader.make(cfs.metadata, nonExpiredSSTables),
-                                                        txn);
-            sstableWriter.switchWriter(writer);
+            switchCompactionLocation(getWriteDirectory(expectedWriteSize));
             partitionsWritten = 0;
             sstablesWritten++;
         }
         return rie != null;
 
+    }
+
+    public void switchCompactionLocation(Directories.DataDirectory directory)
+    {
+        File sstableDirectory = getDirectories().getLocationForDisk(directory);
+        @SuppressWarnings("resource")
+        SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
+                                                    averageEstimatedKeysPerSSTable,
+                                                    minRepairedAt,
+                                                    cfs.metadata,
+                                                    new MetadataCollector(allSSTables, cfs.metadata.comparator, currentLevel),
+                                                    SerializationHeader.make(cfs.metadata, nonExpiredSSTables),
+                                                    txn);
+        sstableWriter.switchWriter(writer);
     }
 }

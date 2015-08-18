@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db.compaction.writers;
 
-import java.io.File;
 import java.util.Set;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -68,37 +67,30 @@ public class MaxSSTableSizeWriter extends CompactionAwareWriter
         expectedWriteSize = Math.min(maxSSTableSize, totalSize);
         estimatedTotalKeys = SSTableReader.getApproximateKeyCount(nonExpiredSSTables);
         estimatedSSTables = Math.max(1, estimatedTotalKeys / maxSSTableSize);
-        File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
+    }
+
+    @Override
+    public boolean realAppend(UnfilteredRowIterator partition)
+    {
+        RowIndexEntry rie = sstableWriter.append(partition);
+        if (sstableWriter.currentWriter().getOnDiskFilePointer() > maxSSTableSize)
+            switchCompactionLocation(getWriteDirectory(expectedWriteSize));
+        return rie != null;
+    }
+
+    public void switchCompactionLocation(Directories.DataDirectory location)
+    {
         @SuppressWarnings("resource")
-        SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
+        SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(getDirectories().getLocationForDisk(location))),
                                                     estimatedTotalKeys / estimatedSSTables,
                                                     minRepairedAt,
                                                     cfs.metadata,
                                                     new MetadataCollector(allSSTables, cfs.metadata.comparator, level),
                                                     SerializationHeader.make(cfs.metadata, nonExpiredSSTables),
                                                     txn);
+
         sstableWriter.switchWriter(writer);
-    }
 
-    @Override
-    public boolean append(UnfilteredRowIterator partition)
-    {
-        RowIndexEntry rie = sstableWriter.append(partition);
-        if (sstableWriter.currentWriter().getOnDiskFilePointer() > maxSSTableSize)
-        {
-            File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
-            @SuppressWarnings("resource")
-            SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
-                                                        estimatedTotalKeys / estimatedSSTables,
-                                                        minRepairedAt,
-                                                        cfs.metadata,
-                                                        new MetadataCollector(allSSTables, cfs.metadata.comparator, level),
-                                                        SerializationHeader.make(cfs.metadata, nonExpiredSSTables),
-                                                        txn);
-
-            sstableWriter.switchWriter(writer);
-        }
-        return rie != null;
     }
 
     @Override

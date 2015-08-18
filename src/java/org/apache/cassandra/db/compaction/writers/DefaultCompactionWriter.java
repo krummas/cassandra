@@ -18,7 +18,6 @@
 package org.apache.cassandra.db.compaction.writers;
 
 
-import java.io.File;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -50,11 +49,19 @@ public class DefaultCompactionWriter extends CompactionAwareWriter
     public DefaultCompactionWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, boolean offline, boolean keepOriginals)
     {
         super(cfs, directories, txn, nonExpiredSSTables, offline, keepOriginals);
-        logger.debug("Expected bloom filter size : {}", estimatedTotalKeys);
-        long expectedWriteSize = cfs.getExpectedCompactedFileSize(nonExpiredSSTables, txn.opType());
-        File sstableDirectory = getDirectories().getLocationForDisk(getWriteDirectory(expectedWriteSize));
+    }
+
+    @Override
+    public boolean realAppend(UnfilteredRowIterator partition)
+    {
+        return sstableWriter.append(partition) != null;
+    }
+
+    @Override
+    protected void switchCompactionLocation(Directories.DataDirectory directory)
+    {
         @SuppressWarnings("resource")
-        SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(sstableDirectory)),
+        SSTableWriter writer = SSTableWriter.create(Descriptor.fromFilename(cfs.getSSTablePath(getDirectories().getLocationForDisk(directory))),
                                                     estimatedTotalKeys,
                                                     minRepairedAt,
                                                     cfs.metadata,
@@ -62,12 +69,6 @@ public class DefaultCompactionWriter extends CompactionAwareWriter
                                                     SerializationHeader.make(cfs.metadata, nonExpiredSSTables),
                                                     txn);
         sstableWriter.switchWriter(writer);
-    }
-
-    @Override
-    public boolean append(UnfilteredRowIterator partition)
-    {
-        return sstableWriter.append(partition) != null;
     }
 
     @Override
