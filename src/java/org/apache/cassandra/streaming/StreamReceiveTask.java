@@ -127,10 +127,7 @@ public class StreamReceiveTask extends StreamTask
             if (kscf == null)
             {
                 // schema was dropped during streaming
-                for (SSTableMultiWriter writer : task.sstables)
-                {
-                    SSTableMultiWriter.abortOrDie(writer);
-                }
+                task.sstables.forEach(SSTableMultiWriter::abortOrDie);
 
                 task.sstables.clear();
                 task.txn.abort();
@@ -215,10 +212,7 @@ public class StreamReceiveTask extends StreamTask
             return;
 
         done = true;
-        for (SSTableMultiWriter writer : sstables)
-        {
-            SSTableMultiWriter.abortOrDie(writer);
-        }
+        sstables.forEach(SSTableMultiWriter::abortOrDie);
         txn.abort();
         sstables.clear();
     }
