@@ -122,7 +122,7 @@ public abstract class AbstractCompactionStrategy
 
     public Directories getDirectories()
     {
-        return new Directories(cfs.metadata);
+        return cfs.getDirectories();
     }
 
     /**
