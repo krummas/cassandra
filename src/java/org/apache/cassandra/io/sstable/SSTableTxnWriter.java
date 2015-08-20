@@ -28,6 +28,7 @@ import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
 /**
@@ -93,8 +94,17 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
 
     public static SSTableTxnWriter create(CFMetaData cfm, Descriptor descriptor, long keyCount, long repairedAt, int sstableLevel, SerializationHeader header)
     {
-        ColumnFamilyStore cfs = Keyspace.open(cfm.ksName).getColumnFamilyStore(cfm.cfName);
-        return create(cfs, descriptor, keyCount, repairedAt, sstableLevel, header);
+        if (Keyspace.open(cfm.ksName).hasColumnFamilyStore(cfm.cfId))
+        {
+            ColumnFamilyStore cfs = Keyspace.open(cfm.ksName).getColumnFamilyStore(cfm.cfId);
+            return create(cfs, descriptor, keyCount, repairedAt, sstableLevel, header);
+        }
+
+        // if the column family store does not exist, we create a new default SSTableMultiWriter to use:
+        LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.WRITE, descriptor.directory);
+        MetadataCollector collector = new MetadataCollector(cfm.comparator).sstableLevel(sstableLevel);
+        SSTableMultiWriter writer = SimpleSSTableMultiWriter.create(descriptor, keyCount, repairedAt, cfm, collector, header, txn);
+        return new SSTableTxnWriter(txn, writer);
     }
 
     public static SSTableTxnWriter create(ColumnFamilyStore cfs, String filename, long keyCount, long repairedAt, int sstableLevel, SerializationHeader header)
