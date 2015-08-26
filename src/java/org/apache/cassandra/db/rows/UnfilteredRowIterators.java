@@ -47,7 +47,7 @@ public abstract class UnfilteredRowIterators
     {
         public void onMergedPartitionLevelDeletion(DeletionTime mergedDeletion, DeletionTime[] versions);
 
-        public void onMergedRows(Row merged, Columns columns, Row[] versions);
+        public void onMergedRows(Row merged, Row[] versions);
         public void onMergedRangeTombstoneMarkers(RangeTombstoneMarker merged, RangeTombstoneMarker[] versions);
 
         public void close();
@@ -229,7 +229,7 @@ public abstract class UnfilteredRowIterators
             @Override
             protected Row computeNextStatic(Row row)
             {
-                Row.Builder staticBuilder = allocator.cloningBTreeRowBuilder(columns().statics);
+                Row.Builder staticBuilder = allocator.cloningBTreeRowBuilder();
                 return Rows.copy(row, staticBuilder).build();
             }
 
@@ -237,7 +237,7 @@ public abstract class UnfilteredRowIterators
             protected Row computeNext(Row row)
             {
                 if (regularBuilder == null)
-                    regularBuilder = allocator.cloningBTreeRowBuilder(columns().regulars);
+                    regularBuilder = allocator.cloningBTreeRowBuilder();
 
                 return Rows.copy(row, regularBuilder).build();
             }
@@ -459,7 +459,7 @@ public abstract class UnfilteredRowIterators
             if (merged == null)
                 merged = Rows.EMPTY_STATIC_ROW;
             if (listener != null)
-                listener.onMergedRows(merged, columns, merger.mergedRows());
+                listener.onMergedRows(merged, merger.mergedRows());
             return merged;
         }
 
@@ -545,7 +545,7 @@ public abstract class UnfilteredRowIterators
                 {
                     Row merged = rowMerger.merge(markerMerger.activeDeletion());
                     if (listener != null)
-                        listener.onMergedRows(merged == null ? BTreeRow.emptyRow(rowMerger.mergedClustering()) : merged, columns().regulars, rowMerger.mergedRows());
+                        listener.onMergedRows(merged == null ? BTreeRow.emptyRow(rowMerger.mergedClustering()) : merged, rowMerger.mergedRows());
                     return merged;
                 }
                 else

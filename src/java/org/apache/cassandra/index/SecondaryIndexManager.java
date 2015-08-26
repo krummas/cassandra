@@ -662,9 +662,9 @@ public class SecondaryIndexManager implements IndexRegistry
 
         public void onUpdated(Row existing, Row updated)
         {
-            final Row.Builder toRemove = BTreeRow.sortedBuilder(existing.columns());
+            final Row.Builder toRemove = BTreeRow.sortedBuilder();
             toRemove.newRow(existing.clustering());
-            final Row.Builder toInsert = BTreeRow.sortedBuilder(updated.columns());
+            final Row.Builder toInsert = BTreeRow.sortedBuilder();
             toInsert.newRow(updated.clustering());
             // diff listener collates the columns to be added & removed from the indexes
             RowDiffListener diffListener = new RowDiffListener()
@@ -693,7 +693,7 @@ public class SecondaryIndexManager implements IndexRegistry
 
                 }
             };
-            Rows.diff(diffListener, updated, updated.columns().mergeTo(existing.columns()), existing);
+            Rows.diff(diffListener, updated, existing);
             Row oldRow = toRemove.build();
             Row newRow = toInsert.build();
             Arrays.stream(indexers).forEach(i -> i.updateRow(oldRow, newRow));
@@ -754,7 +754,7 @@ public class SecondaryIndexManager implements IndexRegistry
                 rows = new Row[versions];
         }
 
-        public void onRowMerge(Columns columns, Row merged, Row...versions)
+        public void onRowMerge(Row merged, Row...versions)
         {
             // Diff listener constructs rows representing deltas between the merged and original versions
             // These delta rows are then passed to registered indexes for removal processing
@@ -779,7 +779,7 @@ public class SecondaryIndexManager implements IndexRegistry
                     {
                         if (builders[i] == null)
                         {
-                            builders[i] = BTreeRow.sortedBuilder(columns);
+                            builders[i] = BTreeRow.sortedBuilder();
                             builders[i].newRow(clustering);
                         }
                         builders[i].addCell(original);
@@ -787,7 +787,7 @@ public class SecondaryIndexManager implements IndexRegistry
                 }
             };
 
-            Rows.diff(diffListener, merged, columns, versions);
+            Rows.diff(diffListener, merged, versions);
 
             for(int i = 0; i < builders.length; i++)
                 if (builders[i] != null)

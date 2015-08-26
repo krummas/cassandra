@@ -46,7 +46,7 @@ import org.apache.cassandra.utils.btree.UpdateFunction;
  * Note that in practice, it will either store only static columns, or only regular ones. When
  * we need both type of columns, we use a {@link PartitionColumns} object.
  */
-public class Columns implements Iterable<ColumnDefinition>
+public class Columns extends AbstractCollection<ColumnDefinition> implements Collection<ColumnDefinition>
 {
     public static final Serializer serializer = new Serializer();
     public static final Columns NONE = new Columns(BTree.empty(), 0);
@@ -86,7 +86,7 @@ public class Columns implements Iterable<ColumnDefinition>
      * @param s the set from which to create the new {@code Columns}.
      * @return the newly created {@code Columns} containing the columns from {@code s}.
      */
-    public static Columns from(Set<ColumnDefinition> s)
+    public static Columns from(Collection<ColumnDefinition> s)
     {
         Object[] tree = BTree.<ColumnDefinition>builder(Comparator.naturalOrder()).addAll(s).build();
         return new Columns(tree, findFirstComplexIdx(tree));
@@ -136,7 +136,7 @@ public class Columns implements Iterable<ColumnDefinition>
      *
      * @return the total number of columns in this object.
      */
-    public int columnCount()
+    public int size()
     {
         return BTree.size(columns);
     }
@@ -261,13 +261,13 @@ public class Columns implements Iterable<ColumnDefinition>
      *
      * @return whether all the columns of {@code other} are contained by this object.
      */
-    public boolean contains(Columns other)
+    public boolean contains(Collection<ColumnDefinition> other)
     {
-        if (other.columns.length > columns.length)
+        if (other.size() > columns.length)
             return false;
 
         BTreeSearchIterator<ColumnDefinition, ColumnDefinition> iter = BTree.slice(columns, Comparator.naturalOrder(), BTree.Dir.ASC);
-        for (ColumnDefinition def : BTree.<ColumnDefinition>iterable(other.columns))
+        for (ColumnDefinition def : other)
             if (iter.next(def) == null)
                 return false;
         return true;
@@ -393,14 +393,14 @@ public class Columns implements Iterable<ColumnDefinition>
     {
         public void serialize(Columns columns, DataOutputPlus out) throws IOException
         {
-            out.writeVInt(columns.columnCount());
+            out.writeVInt(columns.size());
             for (ColumnDefinition column : columns)
                 ByteBufferUtil.writeWithVIntLength(column.name.bytes, out);
         }
 
         public long serializedSize(Columns columns)
         {
-            long size = TypeSizes.sizeofVInt(columns.columnCount());
+            long size = TypeSizes.sizeofVInt(columns.size());
             for (ColumnDefinition column : columns)
                 size += ByteBufferUtil.serializedSizeWithVIntLength(column.name.bytes);
             return size;
@@ -447,8 +447,8 @@ public class Columns implements Iterable<ColumnDefinition>
              * to a vint encoded set of deltas, either adding or subtracting (whichever is most efficient).
              * We indicate this switch by sending our bitmap with every bit set, i.e. -1L
              */
-            int columnCount = columns.columnCount();
-            int supersetCount = superset.columnCount();
+            int columnCount = columns.size();
+            int supersetCount = superset.size();
             if (columnCount == supersetCount)
             {
                 out.writeUnsignedVInt(0);
@@ -465,8 +465,8 @@ public class Columns implements Iterable<ColumnDefinition>
 
         public long serializedSubsetSize(Columns columns, Columns superset)
         {
-            int columnCount = columns.columnCount();
-            int supersetCount = superset.columnCount();
+            int columnCount = columns.size();
+            int supersetCount = superset.size();
             if (columnCount == supersetCount)
             {
                 return TypeSizes.sizeofUnsignedVInt(0);
@@ -488,7 +488,7 @@ public class Columns implements Iterable<ColumnDefinition>
             {
                 return superset;
             }
-            else if (superset.columnCount() >= 64)
+            else if (superset.size() >= 64)
             {
                 return deserializeLargeSubset(in, superset, (int) encoded);
             }
@@ -572,7 +572,7 @@ public class Columns implements Iterable<ColumnDefinition>
         @DontInline
         private Columns deserializeLargeSubset(DataInputPlus in, Columns superset, int delta) throws IOException
         {
-            int supersetCount = superset.columnCount();
+            int supersetCount = superset.size();
             int columnCount = supersetCount - delta;
 
             BTree.Builder<ColumnDefinition> builder = BTree.builder(Comparator.naturalOrder());

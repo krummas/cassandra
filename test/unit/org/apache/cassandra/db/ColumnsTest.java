@@ -255,7 +255,7 @@ public class ColumnsTest
             Columns subset = columns;
             for (ColumnDefinition def : remove)
                 subset = subset.without(def);
-            Assert.assertEquals(columns.columnCount() - remove.size(), subset.columnCount());
+            Assert.assertEquals(columns.size() - remove.size(), subset.size());
             List<ColumnDefinition> remainingDefs = Lists.newArrayList(columns);
             remainingDefs.removeAll(remove);
             return new ColumnsCheck(subset, remainingDefs);

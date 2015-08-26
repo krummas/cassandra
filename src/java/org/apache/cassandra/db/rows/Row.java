@@ -43,7 +43,7 @@ import org.apache.cassandra.utils.btree.UpdateFunction;
  * it's own data. For instance, a {@code Row} cannot contains a cell that is deleted by its own
  * row deletion.
  */
-public interface Row extends Unfiltered, Iterable<ColumnData>
+public interface Row extends Unfiltered, Collection<ColumnData>
 {
     /**
      * The clustering values for this row.
@@ -60,7 +60,7 @@ public interface Row extends Unfiltered, Iterable<ColumnData>
      *
      * @return a superset of the columns contained in this row.
      */
-    public Columns columns();
+    public Collection<ColumnDefinition> columns();
 
     /**
      * The row deletion.
@@ -161,6 +161,11 @@ public interface Row extends Unfiltered, Iterable<ColumnData>
      * Whether the row stores any (non-live) complex deletion for any complex column.
      */
     public boolean hasComplexDeletion();
+
+    /**
+     * Whether the row stores any (non-RT) data for any complex column.
+     */
+    boolean hasComplex();
 
     /**
      * Whether the row has any deletion info (row deletion, cell tombstone, expired cell or complex deletion).

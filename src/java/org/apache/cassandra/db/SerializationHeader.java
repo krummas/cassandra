@@ -23,7 +23,6 @@ import java.util.*;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.base.Function;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
@@ -74,7 +73,7 @@ public class SerializationHeader
         // only for the columns after the 128th one and for simplicity we assume that once you have that many column,
         // you'll tend towards a clearly dense or clearly sparse case so that the heurstic above shouldn't still be
         // too inapropriate). So if on average more than half of our columns are set per row, we better go for sparse.
-        this.useSparseColumnLayout = stats.avgColumnSetPerRow <= (columns.regulars.columnCount()/ 2);
+        this.useSparseColumnLayout = stats.avgColumnSetPerRow <= (columns.regulars.size()/ 2);
     }
 
     public boolean useSparseColumnLayout(boolean isStatic)

@@ -34,7 +34,7 @@ public abstract class MemtableBufferAllocator extends MemtableAllocator
     public Row.Builder rowBuilder(CFMetaData metadata, OpOrder.Group writeOp, boolean isStatic)
     {
         Columns columns = isStatic ? metadata.partitionColumns().statics : metadata.partitionColumns().regulars;
-        return allocator(writeOp).cloningBTreeRowBuilder(columns);
+        return allocator(writeOp).cloningBTreeRowBuilder();
     }
 
     public DecoratedKey clone(DecoratedKey key, OpOrder.Group writeOp)

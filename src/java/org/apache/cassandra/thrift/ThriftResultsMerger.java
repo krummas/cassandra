@@ -32,6 +32,7 @@ import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.partitions.*;
+import org.apache.cassandra.utils.btree.BTree;
 
 /**
  * Given an iterator on a partition of a compact table, this return an iterator that merges the
@@ -112,14 +113,14 @@ public class ThriftResultsMerger extends WrappingUnfilteredPartitionIterator
             super(results);
             assert results.metadata().isStaticCompactTable();
             this.nowInSec = nowInSec;
-            this.builder = BTreeRow.sortedBuilder(results.columns().regulars);
+            this.builder = BTreeRow.sortedBuilder();
         }
 
         private void init()
         {
             assert !isInit;
             Row staticRow = super.staticRow();
-            assert staticRow.columns().complexColumnCount() == 0;
+            assert !staticRow.hasComplex();
 
             staticCells = staticRow.cells().iterator();
             updateNextToMerge();
@@ -220,7 +221,7 @@ public class ThriftResultsMerger extends WrappingUnfilteredPartitionIterator
             this.superColumnMapColumn = results.metadata().compactValueColumn();
             assert superColumnMapColumn != null && superColumnMapColumn.type instanceof MapType;
 
-            this.builder = BTreeRow.sortedBuilder(Columns.of(superColumnMapColumn));
+            this.builder = BTreeRow.sortedBuilder();
             this.columnComparator = ((MapType)superColumnMapColumn.type).nameComparator();
         }
 

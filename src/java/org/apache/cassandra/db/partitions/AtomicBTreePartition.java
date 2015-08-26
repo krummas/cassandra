@@ -285,10 +285,8 @@ public class AtomicBTreePartition extends AbstractBTreePartition
 
         public Row apply(Row existing, Row update)
         {
-            Columns mergedColumns = existing.columns().mergeTo(update.columns());
-
             Row.Builder builder = builder(existing.clustering());
-            colUpdateTimeDelta = Math.min(colUpdateTimeDelta, Rows.merge(existing, update, mergedColumns, builder, nowInSec));
+            colUpdateTimeDelta = Math.min(colUpdateTimeDelta, Rows.merge(existing, update, builder, nowInSec));
 
             Row reconciled = builder.build();
 

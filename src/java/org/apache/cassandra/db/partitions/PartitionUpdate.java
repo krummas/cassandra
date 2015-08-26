@@ -168,12 +168,12 @@ public class PartitionUpdate extends AbstractBTreePartition
         if (row.isStatic())
         {
             Holder holder = new Holder(BTree.empty(), deletionInfo, row, EncodingStats.NO_STATS);
-            return new PartitionUpdate(metadata, key, new PartitionColumns(row.columns(), Columns.NONE), holder, deletionInfo, false);
+            return new PartitionUpdate(metadata, key, new PartitionColumns(Columns.from(row.columns()), Columns.NONE), holder, deletionInfo, false);
         }
         else
         {
             Holder holder = new Holder(BTree.singleton(row), deletionInfo, Rows.EMPTY_STATIC_ROW, EncodingStats.NO_STATS);
-            return new PartitionUpdate(metadata, key, new PartitionColumns(Columns.NONE, row.columns()), holder, deletionInfo, false);
+            return new PartitionUpdate(metadata, key, new PartitionColumns(Columns.NONE, Columns.from(row.columns())), holder, deletionInfo, false);
         }
     }
 
@@ -529,7 +529,7 @@ public class PartitionUpdate extends AbstractBTreePartition
         if (row.isStatic())
         {
             // We test for == first because in most case it'll be true and that is faster
-            assert columns().statics == row.columns() || columns().statics.contains(row.columns());
+            assert columns().statics.contains(row.columns());
             Row staticRow = holder.staticRow.isEmpty()
                       ? row
                       : Rows.merge(holder.staticRow, row, createdAtInSec);
@@ -538,7 +538,7 @@ public class PartitionUpdate extends AbstractBTreePartition
         else
         {
             // We test for == first because in most case it'll be true and that is faster
-            assert columns().regulars == row.columns() || columns().regulars.contains(row.columns());
+            assert columns().regulars.contains(row.columns());
             rowBuilder.add(row);
         }
     }

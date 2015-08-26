@@ -24,6 +24,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.SearchIterator;
+import org.apache.cassandra.utils.btree.BTree;
 
 /**
  * Serialize/deserialize a single Unfiltered (both on-wire and on-disk).
@@ -142,7 +143,7 @@ public class UnfilteredSerializer
         for (int i = 0; i < simpleCount; i++)
             writeSimpleColumn(i, (Cell)cells.next(columns.getSimple(i)), pkLiveness, header, out, useSparse);
 
-        for (int i = simpleCount; i < columns.columnCount(); i++)
+        for (int i = simpleCount; i < columns.size(); i++)
             writeComplexColumn(i, (ComplexColumnData)cells.next(columns.getComplex(i - simpleCount)), hasComplexDeletion, pkLiveness, header, out, useSparse);
 
         if (useSparse)
@@ -240,7 +241,7 @@ public class UnfilteredSerializer
         for (int i = 0; i < simpleCount; i++)
             size += sizeOfSimpleColumn(i, (Cell)cells.next(columns.getSimple(i)), pkLiveness, header, useSparse);
 
-        for (int i = simpleCount; i < columns.columnCount(); i++)
+        for (int i = simpleCount; i < columns.size(); i++)
             size += sizeOfComplexColumn(i, (ComplexColumnData)cells.next(columns.getComplex(i - simpleCount)), hasComplexDeletion, pkLiveness, header, useSparse);
 
         if (useSparse)
@@ -341,7 +342,7 @@ public class UnfilteredSerializer
     {
         int flags = in.readUnsignedByte();
         assert !isEndOfPartition(flags) && kind(flags) == Unfiltered.Kind.ROW && isStatic(flags) : flags;
-        Row.Builder builder = BTreeRow.sortedBuilder(helper.fetchedStaticColumns(header));
+        Row.Builder builder = BTreeRow.sortedBuilder();
         builder.newRow(Clustering.STATIC_CLUSTERING);
         return deserializeRowBody(in, header, helper, flags, builder);
     }
@@ -385,7 +386,7 @@ public class UnfilteredSerializer
             Columns columns = header.columns(isStatic);
             if (header.useSparseColumnLayout(isStatic))
             {
-                int count = columns.columnCount();
+                int count = columns.size();
                 int simpleCount = columns.simpleColumnCount();
                 int i;
                 while ((i = (int)in.readVInt()) >= 0)
@@ -486,7 +487,7 @@ public class UnfilteredSerializer
         Columns columns = header.columns(isStatic);
         if (header.useSparseColumnLayout(isStatic))
         {
-            int count = columns.columnCount();
+            int count = columns.size();
             int simpleCount = columns.simpleColumnCount();
             int i;
             while ((i = (int)in.readVInt()) >= 0)
