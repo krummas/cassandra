@@ -432,11 +432,15 @@ public class SelectStatement implements CQLStatement
              * In practice, we want to return an empty result set if either startToken > endToken, or both are
              * equal but one of the bound is excluded (since [a, a] can contains something, but not (a, a], [a, a)
              * or (a, a)). Note though that in the case where startToken or endToken is the minimum token, then
-             * this special case rule should not apply.
+             * this special case will be also applyed (case CASSANDRA-7020).
              */
+
             int cmp = startToken.compareTo(endToken);
             if (!startToken.isMinimum() && !endToken.isMinimum() && (cmp > 0 || (cmp == 0 && (!includeStart || !includeEnd))))
                 return null;
+
+	   if (startToken.isMinimum() && endToken.isMinimum() && (cmp > 0 || (cmp == 0)))
+		return null;
 
             RowPosition start = includeStart ? startToken.minKeyBound() : startToken.maxKeyBound();
             RowPosition end = includeEnd ? endToken.maxKeyBound() : endToken.minKeyBound();
