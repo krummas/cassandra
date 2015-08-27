@@ -529,7 +529,7 @@ public class PartitionUpdate extends AbstractBTreePartition
         if (row.isStatic())
         {
             // We test for == first because in most case it'll be true and that is faster
-            assert columns().statics.contains(row.columns());
+            assert columns().statics.containsAll(row.columns());
             Row staticRow = holder.staticRow.isEmpty()
                       ? row
                       : Rows.merge(holder.staticRow, row, createdAtInSec);
@@ -538,7 +538,7 @@ public class PartitionUpdate extends AbstractBTreePartition
         else
         {
             // We test for == first because in most case it'll be true and that is faster
-            assert columns().regulars.contains(row.columns());
+            assert columns().regulars.containsAll(row.columns());
             rowBuilder.add(row);
         }
     }

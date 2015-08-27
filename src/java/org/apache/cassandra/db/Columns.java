@@ -261,14 +261,16 @@ public class Columns extends AbstractCollection<ColumnDefinition> implements Col
      *
      * @return whether all the columns of {@code other} are contained by this object.
      */
-    public boolean contains(Collection<ColumnDefinition> other)
+    public boolean containsAll(Collection<?> other)
     {
-        if (other.size() > columns.length)
+        if (other == this)
+            return true;
+        if (other.size() > this.size())
             return false;
 
         BTreeSearchIterator<ColumnDefinition, ColumnDefinition> iter = BTree.slice(columns, Comparator.naturalOrder(), BTree.Dir.ASC);
-        for (ColumnDefinition def : other)
-            if (iter.next(def) == null)
+        for (Object def : other)
+            if (iter.next((ColumnDefinition) def) == null)
                 return false;
         return true;
     }

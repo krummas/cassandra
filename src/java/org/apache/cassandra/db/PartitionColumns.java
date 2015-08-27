@@ -78,7 +78,7 @@ public class PartitionColumns implements Iterable<ColumnDefinition>
 
     public boolean includes(PartitionColumns columns)
     {
-        return statics.contains(columns.statics) && regulars.contains(columns.regulars);
+        return statics.containsAll(columns.statics) && regulars.containsAll(columns.regulars);
     }
 
     public Iterator<ColumnDefinition> iterator()
