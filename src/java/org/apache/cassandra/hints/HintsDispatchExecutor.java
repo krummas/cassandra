@@ -22,7 +22,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.slf4j.Logger;
@@ -42,6 +44,8 @@ import org.apache.cassandra.service.StorageService;
 final class HintsDispatchExecutor
 {
     private static final Logger logger = LoggerFactory.getLogger(HintsDispatchExecutor.class);
+
+    private static final int MAX_DECOMMISSION_STREAM_RETRIES = 12;
 
     private final File hintsDirectory;
     private final ExecutorService executor;
@@ -93,7 +97,12 @@ final class HintsDispatchExecutor
          *
          * It also simplifies reasoning about dispatch sessions.
          */
-        return scheduledDispatches.computeIfAbsent(store.hostId, uuid -> executor.submit(new DispatchHintsTask(store, hostId)));
+        return scheduledDispatches.computeIfAbsent(hostId, uuid -> executor.submit(new DispatchHintsTask(store, hostId)));
+    }
+
+    Future dispatchSerially(HintsCatalog catalog, Supplier<UUID> hostIdSupplier)
+    {
+        return executor.submit(new DecommissionHintsTask(catalog, hostIdSupplier));
     }
 
     void completeDispatchBlockingly(HintsStore store)
@@ -107,6 +116,63 @@ final class HintsDispatchExecutor
         catch (ExecutionException | InterruptedException e)
         {
             throw new RuntimeException(e);
+        }
+    }
+
+    private final class DecommissionHintsTask implements Runnable
+    {
+        private final HintsCatalog catalog;
+        /**
+         * Supplies target hosts to stream to. Generally returns the one the DynamicSnitch thinks is closest.
+         * We use a supplier here to be able to get a new host if the current one dies during streaming.
+         */
+        private final Supplier<UUID> hostIdSupplier;
+
+        private DecommissionHintsTask(HintsCatalog catalog, Supplier<UUID> hostIdSupplier)
+        {
+            this.catalog = catalog;
+            this.hostIdSupplier = hostIdSupplier;
+        }
+
+        @Override
+        public void run()
+        {
+            int retries = 0;
+
+            while (true)
+            {
+                UUID targetHostId = hostIdSupplier.get();
+                try
+                {
+                    logger.info("Streaming hints to {}", targetHostId);
+                    catalog.stores().filter(HintsStore::hasFiles).forEach((store) -> new DispatchHintsTask(store, targetHostId).run());
+                }
+                catch (Throwable t)
+                {
+                    logger.error("Got exception while dispatching hints to "+targetHostId, t);
+                }
+
+                if (!catalog.stores().anyMatch(HintsStore::hasFiles))
+                    return;
+
+                // TODO: back off on a per target basis? (ie, fine to retry on a new host immediately, but back of when trying the same)
+                if (retries >= MAX_DECOMMISSION_STREAM_RETRIES)
+                {
+                    logger.error("Unable to deliver hints to {} after {} retries", targetHostId, retries);
+                    return;
+                }
+                logger.warn("Failed delivering all hints to {}, retrying", targetHostId);
+                retries++;
+                try
+                {
+                    // wait between 2 and 8000 ms before retrying (with MAX_DECOMMISSION_STREAM_RETRIES == 12)
+                    Thread.sleep(1 << retries);
+                }
+                catch (InterruptedException e)
+                {
+                    throw new RuntimeException(e);
+                }
+            }
         }
     }
 
@@ -179,7 +245,7 @@ final class HintsDispatchExecutor
             File file = new File(hintsDirectory, descriptor.fileName());
             Long offset = store.getDispatchOffset(descriptor).orElse(null);
 
-            try (HintsDispatcher dispatcher = HintsDispatcher.create(file, rateLimiter, hostId, isPaused))
+            try (HintsDispatcher dispatcher = HintsDispatcher.create(file, rateLimiter, hostId, descriptor.hostId, isPaused))
             {
                 if (offset != null)
                     dispatcher.seek(offset);
