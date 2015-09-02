@@ -72,7 +72,7 @@ public class BTreeRow extends AbstractRow
     }
 
     // Note that it's often easier/safer to use the sortedBuilder/unsortedBuilder or one of the static creation method below. Only directly useful in a small amount of cases.
-    public static BTreeRow create(Clustering clustering, Columns columns, LivenessInfo primaryKeyLivenessInfo, DeletionTime deletion, Object[] btree)
+    public static BTreeRow create(Clustering clustering, LivenessInfo primaryKeyLivenessInfo, DeletionTime deletion, Object[] btree)
     {
         int minDeletionTime = Math.min(minDeletionTime(primaryKeyLivenessInfo), minDeletionTime(deletion));
         if (minDeletionTime != Integer.MIN_VALUE)
@@ -267,7 +267,7 @@ public class BTreeRow extends AbstractRow
 
     public boolean hasComplex()
     {
-        // We start by the end cause we know complex columns sort before simple ones
+        // We start by the end cause we know complex columns sort after the simple ones
         ColumnData cd = Iterables.getFirst(BTree.<ColumnData>iterable(btree, BTree.Dir.DESC), null);
         return cd != null && cd.column.isComplex();
     }

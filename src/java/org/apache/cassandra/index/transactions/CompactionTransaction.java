@@ -18,7 +18,6 @@
 
 package org.apache.cassandra.index.transactions;
 
-import org.apache.cassandra.db.Columns;
 import org.apache.cassandra.db.rows.Row;
 
 /**

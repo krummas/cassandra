@@ -32,7 +32,6 @@ import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.partitions.*;
-import org.apache.cassandra.utils.btree.BTree;
 
 /**
  * Given an iterator on a partition of a compact table, this return an iterator that merges the

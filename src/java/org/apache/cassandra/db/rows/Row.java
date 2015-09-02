@@ -317,7 +317,6 @@ public interface Row extends Unfiltered, Collection<ColumnData>
      */
     public static class Merger
     {
-        private final Columns columns;
         private final Row[] rows;
         private final List<Iterator<ColumnData>> columnDataIterators;
 
@@ -328,12 +327,11 @@ public interface Row extends Unfiltered, Collection<ColumnData>
         private final List<ColumnData> dataBuffer = new ArrayList<>();
         private final ColumnDataReducer columnDataReducer;
 
-        public Merger(int size, int nowInSec, Columns columns)
+        public Merger(int size, int nowInSec, boolean hasComplex)
         {
-            this.columns = columns;
             this.rows = new Row[size];
             this.columnDataIterators = new ArrayList<>(size);
-            this.columnDataReducer = new ColumnDataReducer(size, nowInSec, columns.hasComplex());
+            this.columnDataReducer = new ColumnDataReducer(size, nowInSec, hasComplex);
         }
 
         public void clear()
@@ -400,7 +398,7 @@ public interface Row extends Unfiltered, Collection<ColumnData>
             // Because some data might have been shadowed by the 'activeDeletion', we could have an empty row
             return rowInfo.isEmpty() && rowDeletion.isLive() && dataBuffer.isEmpty()
                  ? null
-                 : BTreeRow.create(clustering, columns, rowInfo, rowDeletion, BTree.build(dataBuffer, UpdateFunction.<ColumnData>noOp()));
+                 : BTreeRow.create(clustering, rowInfo, rowDeletion, BTree.build(dataBuffer, UpdateFunction.<ColumnData>noOp()));
         }
 
         public Clustering mergedClustering()

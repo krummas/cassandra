@@ -365,7 +365,7 @@ public abstract class UnfilteredRowIterators
                   iterators.get(0).partitionKey(),
                   partitionDeletion,
                   columns,
-                  mergeStaticRows(metadata, iterators, columns.statics, nowInSec, listener, partitionDeletion),
+                  mergeStaticRows(iterators, columns.statics, nowInSec, listener, partitionDeletion),
                   reversed,
                   mergeStats(iterators));
 
@@ -438,8 +438,7 @@ public abstract class UnfilteredRowIterators
             return delTime;
         }
 
-        private static Row mergeStaticRows(CFMetaData metadata,
-                                           List<UnfilteredRowIterator> iterators,
+        private static Row mergeStaticRows(List<UnfilteredRowIterator> iterators,
                                            Columns columns,
                                            int nowInSec,
                                            MergeListener listener,
@@ -451,7 +450,7 @@ public abstract class UnfilteredRowIterators
             if (iterators.stream().allMatch(iter -> iter.staticRow().isEmpty()))
                 return Rows.EMPTY_STATIC_ROW;
 
-            Row.Merger merger = new Row.Merger(iterators.size(), nowInSec, columns);
+            Row.Merger merger = new Row.Merger(iterators.size(), nowInSec, columns.hasComplex());
             for (int i = 0; i < iterators.size(); i++)
                 merger.add(i, iterators.get(i).staticRow());
 
@@ -518,7 +517,7 @@ public abstract class UnfilteredRowIterators
 
             private MergeReducer(int size, boolean reversed, int nowInSec, MergeListener listener)
             {
-                this.rowMerger = new Row.Merger(size, nowInSec, columns().regulars);
+                this.rowMerger = new Row.Merger(size, nowInSec, columns().regulars.hasComplex());
                 this.markerMerger = new RangeTombstoneMarker.Merger(size, partitionLevelDeletion(), reversed);
                 this.listener = listener;
             }

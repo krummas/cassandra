@@ -31,9 +31,8 @@ public abstract class MemtableBufferAllocator extends MemtableAllocator
         super(onHeap, offHeap);
     }
 
-    public Row.Builder rowBuilder(CFMetaData metadata, OpOrder.Group writeOp, boolean isStatic)
+    public Row.Builder rowBuilder(OpOrder.Group writeOp)
     {
-        Columns columns = isStatic ? metadata.partitionColumns().statics : metadata.partitionColumns().regulars;
         return allocator(writeOp).cloningBTreeRowBuilder();
     }
 

@@ -263,10 +263,10 @@ public class AtomicBTreePartition extends AbstractBTreePartition
             boolean isStatic = clustering == Clustering.STATIC_CLUSTERING;
             // We know we only insert/update one static per PartitionUpdate, so no point in saving the builder
             if (isStatic)
-                return allocator.rowBuilder(updating.metadata(), writeOp, true);
+                return allocator.rowBuilder(writeOp);
 
             if (regularBuilder == null)
-                regularBuilder = allocator.rowBuilder(updating.metadata(), writeOp, false);
+                regularBuilder = allocator.rowBuilder(writeOp);
             return regularBuilder;
         }
 
