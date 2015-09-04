@@ -22,6 +22,10 @@ Changed Defaults
    - commitlog_total_space_in_mb will use the smaller of 8192, and 1/4
      of the total space of the commitlog volume. (Before: always used
      8192)
+   - Incremental repair is now on by default, run full repairs by providing
+     '-full' parameter to nodetool repair.
+   - Parallel repairs are now the default, run sequential repairs by providing
+     '-seq' parameter to nodetool repair.
 
 
 2.2.1
