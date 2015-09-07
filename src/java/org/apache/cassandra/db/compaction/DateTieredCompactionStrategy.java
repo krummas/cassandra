@@ -40,6 +40,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
     protected volatile int estimatedRemainingTasks;
     private final Set<SSTableReader> sstables = new HashSet<>();
     private long lastExpiredCheck;
+    private final SizeTieredCompactionStrategyOptions stcsOptions;
 
     public DateTieredCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
     {
@@ -54,6 +55,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         else
             logger.debug("Enabling tombstone compactions for DTCS");
 
+        this.stcsOptions = new SizeTieredCompactionStrategyOptions(options);
     }
 
     @Override
@@ -137,7 +139,8 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
                                                            cfs.getMinimumCompactionThreshold(),
                                                            cfs.getMaximumCompactionThreshold(),
                                                            now,
-                                                           options.baseTime);
+                                                           options.baseTime,
+                                                           stcsOptions);
         if (!mostInteresting.isEmpty())
             return mostInteresting;
         return null;
@@ -341,7 +344,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
      * @return a bucket (list) of sstables to compact.
      */
     @VisibleForTesting
-    static List<SSTableReader> newestBucket(List<List<SSTableReader>> buckets, int minThreshold, int maxThreshold, long now, long baseTime)
+    static List<SSTableReader> newestBucket(List<List<SSTableReader>> buckets, int minThreshold, int maxThreshold, long now, long baseTime, SizeTieredCompactionStrategyOptions stcsOptions)
     {
         // If the "incoming window" has at least minThreshold SSTables, choose that one.
         // For any other bucket, at least 2 SSTables is enough.
@@ -351,7 +354,7 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
         {
             if (bucket.size() >= minThreshold ||
                     (bucket.size() >= 2 && !incomingWindow.onTarget(bucket.get(0).getMinTimestamp())))
-                return trimToThreshold(bucket, maxThreshold);
+                return trimToThreshold(bucket, minThreshold, maxThreshold, stcsOptions);
         }
         return Collections.emptyList();
     }
@@ -362,10 +365,22 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
      * @return A bucket trimmed to the <code>maxThreshold</code> newest sstables.
      */
     @VisibleForTesting
-    static List<SSTableReader> trimToThreshold(List<SSTableReader> bucket, int maxThreshold)
+    static List<SSTableReader> trimToThreshold(List<SSTableReader> bucket, int minThreshold, int maxThreshold, SizeTieredCompactionStrategyOptions stcsOptions)
     {
+        if (bucket.size() > maxThreshold)
+            return getSSTablesForSTCS(bucket, minThreshold, maxThreshold, stcsOptions);
         // Trim the oldest sstables off the end to meet the maxThreshold
         return bucket.subList(0, Math.min(bucket.size(), maxThreshold));
+    }
+
+    static List<SSTableReader> getSSTablesForSTCS(Collection<SSTableReader> sstables, int minThreshold, int maxThreshold, SizeTieredCompactionStrategyOptions stcsOptions)
+    {
+        List<Pair<SSTableReader,Long>> pairs = SizeTieredCompactionStrategy.createSSTableAndLengthPairs(AbstractCompactionStrategy.filterSuspectSSTables(sstables));
+        List<List<SSTableReader>> buckets = SizeTieredCompactionStrategy.getBuckets(pairs,
+                                                                                    stcsOptions.bucketHigh,
+                                                                                    stcsOptions.bucketLow,
+                                                                                    stcsOptions.minSSTableSize);
+        return SizeTieredCompactionStrategy.mostInterestingBucket(buckets, minThreshold, maxThreshold);
     }
 
     @Override
