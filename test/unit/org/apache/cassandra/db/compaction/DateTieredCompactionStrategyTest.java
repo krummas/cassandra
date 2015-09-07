@@ -213,10 +213,10 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
 
         List<SSTableReader> sstrs = new ArrayList<>(cfs.getSSTables());
 
-        List<SSTableReader> newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 9, 10);
+        List<SSTableReader> newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 9, 10, new SizeTieredCompactionStrategyOptions());
         assertTrue("incoming bucket should not be accepted when it has below the min threshold SSTables", newBucket.isEmpty());
 
-        newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 10, 10);
+        newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 10, 10, new SizeTieredCompactionStrategyOptions());
         assertFalse("non-incoming bucket should be accepted when it has at least 2 SSTables", newBucket.isEmpty());
 
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(0).getMinTimestamp(), sstrs.get(0).getMaxTimestamp());
@@ -230,7 +230,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
             }
         }));
 
-        List<SSTableReader> bucket = trimToThreshold(sstrs, 2);
+        List<SSTableReader> bucket = trimToThreshold(sstrs, 0, 2, new SizeTieredCompactionStrategyOptions());
         assertEquals("one bucket should have been dropped", 2, bucket.size());
         for (SSTableReader sstr : bucket)
             assertFalse("the oldest sstable should be dropped", sstr.getMinTimestamp() == 0);
@@ -318,6 +318,46 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         SSTableReader sstable = t.sstables.iterator().next();
         assertEquals(sstable, expiredSSTable);
         cfs.getDataTracker().unmarkCompacting(cfs.getSSTables());
+    }
+
+    @Test
+    public void testSTCSBigWindow()
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
+        cfs.truncateBlocking();
+        cfs.disableAutoCompaction();
+        ByteBuffer bigValue = ByteBuffer.wrap(new byte[10000]);
+        ByteBuffer value = ByteBuffer.wrap(new byte[100]);
+        int numSSTables = 40;
+        // create big sstabels out of half:
+        long timestamp = System.currentTimeMillis();
+        for (int r = 0; r < numSSTables / 2; r++)
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                DecoratedKey key = Util.dk(String.valueOf(r));
+                Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+                rm.add(CF_STANDARD1, Util.cellname("column"), bigValue, timestamp);
+                rm.apply();
+            }
+            cfs.forceBlockingFlush();
+        }
+        // and small ones:
+        for (int r = 0; r < numSSTables / 2; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+            rm.add(CF_STANDARD1, Util.cellname("column"), value, timestamp);
+            rm.apply();
+            cfs.forceBlockingFlush();
+        }
+        Map<String, String> options = new HashMap<>();
+        options.put(SizeTieredCompactionStrategyOptions.MIN_SSTABLE_SIZE_KEY, "1");
+        DateTieredCompactionStrategy dtcs = new DateTieredCompactionStrategy(cfs, options);
+        for (SSTableReader sstable : cfs.getSSTables())
+            dtcs.addSSTable(sstable);
+        assertEquals(20, dtcs.getNextBackgroundTask(0).sstables.size());
     }
 
 }
