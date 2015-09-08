@@ -132,7 +132,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
                 Pair.create("a", 1L),
                 Pair.create("b", 201L)
         );
-        List<List<String>> buckets = getBuckets(pairs, 100L, 2, 200L);
+        List<List<String>> buckets = getBuckets(pairs, 100L, 2, 200L, Long.MAX_VALUE);
         assertEquals(2, buckets.size());
 
         for (List<String> bucket : buckets)
@@ -151,7 +151,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
                 Pair.create("b", 3899L),
                 Pair.create("c", 3900L)
         );
-        buckets = getBuckets(pairs, 100L, 3, 4050L);
+        buckets = getBuckets(pairs, 100L, 3, 4050L, Long.MAX_VALUE);
         // targets (divPosition, size): (40, 100), (39, 100), (12, 300), (3, 900), (0, 2700)
         // in other words: 0 - 2699, 2700 - 3599, 3600 - 3899, 3900 - 3999, 4000 - 4099
         assertEquals(3, buckets.size());
@@ -177,7 +177,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
                 Pair.create("e", 3950L),
                 Pair.create("too new", 4125L)
         );
-        buckets = getBuckets(pairs, 100L, 1, 4050L);
+        buckets = getBuckets(pairs, 100L, 1, 4050L, Long.MAX_VALUE);
 
         assertEquals(5, buckets.size());
 
@@ -212,10 +212,10 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
 
         List<SSTableReader> sstrs = new ArrayList<>(cfs.getSSTables());
 
-        List<SSTableReader> newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 9, 10, new SizeTieredCompactionStrategyOptions());
+        List<SSTableReader> newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 9, 10, Long.MAX_VALUE, new SizeTieredCompactionStrategyOptions());
         assertTrue("incoming bucket should not be accepted when it has below the min threshold SSTables", newBucket.isEmpty());
 
-        newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 10, 10, new SizeTieredCompactionStrategyOptions());
+        newBucket = newestBucket(Collections.singletonList(sstrs.subList(0, 2)), 4, 32, 10, 10, Long.MAX_VALUE, new SizeTieredCompactionStrategyOptions());
         assertFalse("non-incoming bucket should be accepted when it has at least 2 SSTables", newBucket.isEmpty());
 
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(0).getMinTimestamp(), sstrs.get(0).getMaxTimestamp());
@@ -347,4 +347,22 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         assertEquals(20, dtcs.getNextBackgroundTask(0).sstables.size());
     }
 
+    @Test
+    public void testLimitWindowSizes()
+    {
+        long now = System.currentTimeMillis();
+        List<Pair<Long, Long>> sstables = new ArrayList<>();
+        // create fake sstables, one per minute for 1 year:
+        for (long i = (now - TimeUnit.DAYS.toMillis(365)); i < now; i+=60000)
+            sstables.add(Pair.create(i,i));
+        long base = TimeUnit.MILLISECONDS.convert(60, TimeUnit.SECONDS);
+        long maxWindowSize = TimeUnit.MILLISECONDS.convert(2, TimeUnit.DAYS);
+        List<List<Long>> buckets = getBuckets(sstables, base, 4, now, maxWindowSize);
+        System.out.println(buckets.size());
+        for (List<Long> bucket : buckets)
+        {
+            long bucketTimespan = Collections.max(bucket) - Collections.min(bucket);
+            assertTrue(bucketTimespan <= maxWindowSize);
+        }
+    }
 }
