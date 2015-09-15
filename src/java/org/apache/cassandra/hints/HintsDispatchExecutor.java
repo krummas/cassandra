@@ -45,7 +45,7 @@ final class HintsDispatchExecutor
 {
     private static final Logger logger = LoggerFactory.getLogger(HintsDispatchExecutor.class);
 
-    private static final int MAX_DECOMMISSION_STREAM_RETRIES = 12;
+    private static final int MAX_DECOMMISSION_STREAM_RETRIES = 14;
 
     private final File hintsDirectory;
     private final ExecutorService executor;
@@ -159,7 +159,7 @@ final class HintsDispatchExecutor
                 if (retries >= MAX_DECOMMISSION_STREAM_RETRIES)
                 {
                     logger.error("Unable to deliver hints to {} after {} retries", targetHostId, retries);
-                    return;
+                    throw new RuntimeException("Unable to stream hints");
                 }
                 logger.warn("Failed delivering all hints to {}, retrying", targetHostId);
                 retries++;
