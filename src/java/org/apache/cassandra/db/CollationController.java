@@ -147,25 +147,6 @@ public class CollationController
             Tracing.trace("Collating all results");
             filter.collateOnDiskAtom(returnCF, container.iterator(), gcBefore);
 
-            // "hoist up" the requested data into a more recent sstable
-            if (sstablesIterated > cfs.getMinimumCompactionThreshold()
-                && !cfs.isAutoCompactionDisabled()
-                && cfs.getCompactionStrategy().shouldDefragment())
-            {
-                // !!WARNING!!   if we stop copying our data to a heap-managed object,
-                //               we will need to track the lifetime of this mutation as well
-                Tracing.trace("Defragmenting requested data");
-                final Mutation mutation = new Mutation(cfs.keyspace.getName(), filter.key.getKey(), returnCF.cloneMe());
-                StageManager.getStage(Stage.MUTATION).execute(new Runnable()
-                {
-                    public void run()
-                    {
-                        // skipping commitlog and index updates is fine since we're just de-fragmenting existing data
-                        Keyspace.open(mutation.getKeyspaceName()).apply(mutation, false, false);
-                    }
-                });
-            }
-
             // Caller is responsible for final removeDeletedCF.  This is important for cacheRow to work correctly:
             return returnCF;
         }
