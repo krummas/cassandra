@@ -27,6 +27,7 @@ import java.util.Random;
 import org.apache.commons.lang.StringUtils;
 import org.junit.After;
 import org.junit.Before;
+import com.google.common.collect.Iterables;
 import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
@@ -254,8 +255,6 @@ public class CompactionsCQLTest extends CQLTester
         getCurrentColumnFamilyStore().setCompactionParameters(localOptions);
         assertTrue(getCurrentColumnFamilyStore().getCompactionStrategyManager().isEnabled());
     }
-
-
 
     @Test(expected = IllegalArgumentException.class)
     public void testBadLocalCompactionStrategyOptions()
@@ -574,7 +573,7 @@ public class CompactionsCQLTest extends CQLTester
     private void assertTombstones(SSTableReader sstable, boolean expectTS)
     {
         boolean foundTombstone = false;
-        try(ISSTableScanner scanner = sstable.getScanner())
+        try (ISSTableScanner scanner = sstable.getScanner())
         {
             while (scanner.hasNext())
             {
@@ -586,17 +585,32 @@ public class CompactionsCQLTest extends CQLTester
                     {
                         Unfiltered unfiltered = iter.next();
                         assertTrue(unfiltered instanceof Row);
-                        for (Cell c : ((Row)unfiltered).cells())
+                        for (Cell c : ((Row) unfiltered).cells())
                         {
                             if (c.isTombstone())
                                 foundTombstone = true;
                         }
-
                     }
                 }
             }
         }
         assertEquals(expectTS, foundTombstone);
+    }
+
+    @Test()
+    public void testSwitchToRangeAwareCompaction()
+    {
+        createTable("CREATE TABLE %s (id text PRIMARY KEY)");
+        Map<String, String> localOptions = new HashMap<>();
+        localOptions.put("class","SizeTieredCompactionStrategy");
+        localOptions.put("range_aware_compaction","true");
+        getCurrentColumnFamilyStore().setCompactionParameters(localOptions);
+        List<AbstractCompactionStrategy> strat = Iterables.getFirst(getCurrentColumnFamilyStore().getCompactionStrategyManager().getStrategies(), null);
+        assertTrue(Iterables.getFirst(strat, null) instanceof RangeAwareCompactionStrategy);
+        localOptions.remove("range_aware_compaction");
+        getCurrentColumnFamilyStore().setCompactionParameters(localOptions);
+        strat = Iterables.getFirst(getCurrentColumnFamilyStore().getCompactionStrategyManager().getStrategies(), null);
+        assertTrue(Iterables.getFirst(strat, null) instanceof SizeTieredCompactionStrategy);
     }
 
     public boolean verifyStrategies(CompactionStrategyManager manager, Class<? extends AbstractCompactionStrategy> expected)

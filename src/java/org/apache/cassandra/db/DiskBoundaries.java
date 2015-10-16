@@ -24,6 +24,8 @@ import java.util.List;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.service.StorageService;
@@ -32,22 +34,24 @@ public class DiskBoundaries
 {
     public final List<Directories.DataDirectory> directories;
     public final ImmutableList<PartitionPosition> positions;
+    public final List<Range<Token>> localRanges;
     final long ringVersion;
     final int directoriesVersion;
     private volatile boolean isInvalid = false;
 
     public DiskBoundaries(Directories.DataDirectory[] directories, int diskVersion)
     {
-        this(directories, null, -1, diskVersion);
+        this(directories, null, null, -1, diskVersion);
     }
 
     @VisibleForTesting
-    public DiskBoundaries(Directories.DataDirectory[] directories, List<PartitionPosition> positions, long ringVersion, int diskVersion)
+    public DiskBoundaries(Directories.DataDirectory[] directories, List<PartitionPosition> positions, List<Range<Token>> localRanges, long ringVersion, int diskVersion)
     {
         this.directories = directories == null ? null : ImmutableList.copyOf(directories);
         this.positions = positions == null ? null : ImmutableList.copyOf(positions);
         this.ringVersion = ringVersion;
         this.directoriesVersion = diskVersion;
+        this.localRanges = localRanges;
     }
 
     public boolean equals(Object o)

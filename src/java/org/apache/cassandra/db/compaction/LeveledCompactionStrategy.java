@@ -367,7 +367,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    protected Set<SSTableReader> getSSTables()
+    public Set<SSTableReader> getSSTables()
     {
         return manifest.getSSTables();
     }
@@ -600,4 +600,5 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
 
         return uncheckedOptions;
     }
+
 }

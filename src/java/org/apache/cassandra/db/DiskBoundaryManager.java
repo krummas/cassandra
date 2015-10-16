@@ -20,6 +20,7 @@ package org.apache.cassandra.db;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -104,12 +105,12 @@ public class DiskBoundaryManager
         while (directoriesVersion != BlacklistedDirectories.getDirectoriesVersion()); // if directoriesVersion has changed we need to recalculate
 
         if (localRanges == null || localRanges.isEmpty())
-            return new DiskBoundaries(dirs, null, ringVersion, directoriesVersion);
+            return new DiskBoundaries(dirs, null, Collections.emptyList(), ringVersion, directoriesVersion);
 
         List<Range<Token>> sortedLocalRanges = Range.sort(localRanges);
 
         List<PartitionPosition> positions = getDiskBoundaries(sortedLocalRanges, cfs.getPartitioner(), dirs);
-        return new DiskBoundaries(dirs, positions, ringVersion, directoriesVersion);
+        return new DiskBoundaries(dirs, positions, sortedLocalRanges, ringVersion, directoriesVersion);
     }
 
     /**
