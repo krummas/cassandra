@@ -45,7 +45,8 @@ public final class CompactionParams
         CLASS,
         ENABLED,
         MIN_THRESHOLD,
-        MAX_THRESHOLD;
+        MAX_THRESHOLD,
+        RANGE_AWARE_COMPACTION;
 
         @Override
         public String toString()
@@ -59,22 +60,26 @@ public final class CompactionParams
 
     public static final boolean DEFAULT_ENABLED = true;
 
+    public static final boolean DEFAULT_RANGE_AWARE_COMPACTION = false;
+
     public static final Map<String, String> DEFAULT_THRESHOLDS =
         ImmutableMap.of(Option.MIN_THRESHOLD.toString(), Integer.toString(DEFAULT_MIN_THRESHOLD),
                         Option.MAX_THRESHOLD.toString(), Integer.toString(DEFAULT_MAX_THRESHOLD));
 
     public static final CompactionParams DEFAULT =
-        new CompactionParams(SizeTieredCompactionStrategy.class, DEFAULT_THRESHOLDS, DEFAULT_ENABLED);
+        new CompactionParams(SizeTieredCompactionStrategy.class, DEFAULT_THRESHOLDS, DEFAULT_ENABLED, DEFAULT_RANGE_AWARE_COMPACTION);
 
     private final Class<? extends AbstractCompactionStrategy> klass;
     private final ImmutableMap<String, String> options;
     private final boolean isEnabled;
+    private final boolean rangeAwareCompaction;
 
-    private CompactionParams(Class<? extends AbstractCompactionStrategy> klass, Map<String, String> options, boolean isEnabled)
+    private CompactionParams(Class<? extends AbstractCompactionStrategy> klass, Map<String, String> options, boolean isEnabled, boolean rangeAwareCompaction)
     {
         this.klass = klass;
         this.options = ImmutableMap.copyOf(options);
         this.isEnabled = isEnabled;
+        this.rangeAwareCompaction = rangeAwareCompaction;
     }
 
     public static CompactionParams create(Class<? extends AbstractCompactionStrategy> klass, Map<String, String> options)
@@ -90,7 +95,11 @@ public final class CompactionParams
             allOptions.putIfAbsent(Option.MAX_THRESHOLD.toString(), Integer.toString(DEFAULT_MAX_THRESHOLD));
         }
 
-        return new CompactionParams(klass, allOptions, isEnabled);
+        boolean rangeAwareCompaction = options.containsKey(Option.RANGE_AWARE_COMPACTION.toString())
+                                     ? Boolean.parseBoolean(options.get(Option.RANGE_AWARE_COMPACTION.toString()))
+                                     : DEFAULT_RANGE_AWARE_COMPACTION;
+
+        return new CompactionParams(klass, allOptions, isEnabled, rangeAwareCompaction);
     }
 
     public static CompactionParams scts(Map<String, String> options)
@@ -213,6 +222,11 @@ public final class CompactionParams
     public boolean isEnabled()
     {
         return isEnabled;
+    }
+
+    public boolean rangeAwareCompaction()
+    {
+        return rangeAwareCompaction;
     }
 
     public static CompactionParams fromMap(Map<String, String> map)

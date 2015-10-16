@@ -44,6 +44,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 /**
@@ -468,6 +469,8 @@ public abstract class AbstractCompactionStrategy
         uncheckedOptions.remove(UNCHECKED_TOMBSTONE_COMPACTION_OPTION);
         uncheckedOptions.remove(COMPACTION_ENABLED);
         uncheckedOptions.remove(ONLY_PURGE_REPAIRED_TOMBSTONES);
+        uncheckedOptions.remove(CompactionParams.Option.RANGE_AWARE_COMPACTION.toString());
+        uncheckedOptions.remove(VNodeAwareCompactionStrategy.MIN_VNODE_SSTABLE_SIZE_MB); // TODO: refactor, global options somewhere else?
         return uncheckedOptions;
     }
 
@@ -512,5 +515,10 @@ public abstract class AbstractCompactionStrategy
     public SSTableMultiWriter createSSTableMultiWriter(Descriptor descriptor, long keyCount, long repairedAt, MetadataCollector meta, SerializationHeader header, LifecycleTransaction txn)
     {
         return SimpleSSTableMultiWriter.create(descriptor, keyCount, repairedAt, cfs.metadata, meta, header, txn);
+    }
+
+    public Iterable<SSTableReader> getSSTables()
+    {
+        return null;
     }
 }

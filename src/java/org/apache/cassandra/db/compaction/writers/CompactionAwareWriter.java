@@ -62,11 +62,22 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     private int locationIndex;
 
     public CompactionAwareWriter(ColumnFamilyStore cfs,
+                                    Directories directories,
+                                    LifecycleTransaction txn,
+                                    Set<SSTableReader> nonExpiredSSTables,
+                                    boolean offline,
+                                    boolean keepOriginals)
+    {
+        this(cfs, directories, txn, nonExpiredSSTables, offline, keepOriginals, true);
+    }
+
+    public CompactionAwareWriter(ColumnFamilyStore cfs,
                                  Directories directories,
                                  LifecycleTransaction txn,
                                  Set<SSTableReader> nonExpiredSSTables,
                                  boolean offline,
-                                 boolean keepOriginals)
+                                 boolean keepOriginals,
+                                 boolean openEarly)
     {
         this.cfs = cfs;
         this.directories = directories;
@@ -75,7 +86,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
         estimatedTotalKeys = SSTableReader.getApproximateKeyCount(nonExpiredSSTables);
         maxAge = CompactionTask.getMaxDataAge(nonExpiredSSTables);
-        sstableWriter = SSTableRewriter.constructKeepingOriginals(txn, keepOriginals, maxAge, offline);
+        sstableWriter = SSTableRewriter.constructKeepingOriginals(txn, keepOriginals, maxAge, offline, openEarly);
         minRepairedAt = CompactionTask.getMinRepairedAt(nonExpiredSSTables);
         locations = cfs.getDirectories().getWriteableLocations();
         diskBoundaries = StorageService.getDiskBoundaries(cfs);

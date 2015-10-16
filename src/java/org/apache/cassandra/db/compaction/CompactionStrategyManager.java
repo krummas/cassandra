@@ -59,11 +59,12 @@ public class CompactionStrategyManager implements INotificationConsumer
 {
     private static final Logger logger = LoggerFactory.getLogger(CompactionStrategyManager.class);
     private final ColumnFamilyStore cfs;
-    private volatile List<AbstractCompactionStrategy> repaired = new ArrayList<>();
-    private volatile List<AbstractCompactionStrategy> unrepaired = new ArrayList<>();
+    private final List<AbstractCompactionStrategy> repaired = new ArrayList<>();
+    private final List<AbstractCompactionStrategy> unrepaired = new ArrayList<>();
     private volatile boolean enabled = true;
     public boolean isActive = true;
     private volatile CompactionParams params;
+    private boolean rangeAwareCompaction;
     /*
         We keep a copy of the schema compaction parameters here to be able to decide if we
         should update the compaction strategy in maybeReloadCompactionStrategy() due to an ALTER.
@@ -73,16 +74,19 @@ public class CompactionStrategyManager implements INotificationConsumer
      */
     private CompactionParams schemaCompactionParams;
     private Directories.DataDirectory[] locations;
+    private int nextCompactionStrategy = 0;
 
     public CompactionStrategyManager(ColumnFamilyStore cfs)
     {
         cfs.getTracker().subscribe(this);
         logger.trace("{} subscribed to the data tracker.", this);
         this.cfs = cfs;
+        rangeAwareCompaction = cfs.metadata.params.compaction.rangeAwareCompaction();
         reload(cfs.metadata);
         params = cfs.metadata.params.compaction;
         locations = getDirectories().getWriteableLocations();
         enabled = params.isEnabled();
+
     }
 
     /**
@@ -98,17 +102,40 @@ public class CompactionStrategyManager implements INotificationConsumer
 
         maybeReload(cfs.metadata);
 
-        List<AbstractCompactionStrategy> strategies = new ArrayList<>(repaired.size() + unrepaired.size());
-        strategies.addAll(repaired);
-        strategies.addAll(unrepaired);
-        Collections.sort(strategies, (o1, o2) -> Ints.compare(o2.getEstimatedRemainingTasks(), o1.getEstimatedRemainingTasks()));
-        for (AbstractCompactionStrategy strategy : strategies)
+        assert repaired.size() == unrepaired.size();
+        for (int i = 0; i < repaired.size(); i++)
         {
-            AbstractCompactionTask task = strategy.getNextBackgroundTask(gcBefore);
-            if (task != null)
-                return task;
+            int strategyIndex = (i + nextCompactionStrategy) % repaired.size();
+            AbstractCompactionStrategy repStrategy = repaired.get(strategyIndex);
+            AbstractCompactionStrategy unrepStrategy = unrepaired.get(strategyIndex);
+            if (repStrategy.getEstimatedRemainingTasks() > unrepStrategy.getEstimatedRemainingTasks())
+            {
+                AbstractCompactionTask task = getTask(repStrategy, unrepStrategy, gcBefore);
+                if (task != null)
+                {
+                    nextCompactionStrategy = strategyIndex + 1;
+                    return task;
+                }
+            }
+            else
+            {
+                AbstractCompactionTask task = getTask(repStrategy, unrepStrategy, gcBefore);
+                if (task != null)
+                {
+                    nextCompactionStrategy = strategyIndex + 1;
+                    return task;
+                }
+            }
         }
         return null;
+    }
+
+    private AbstractCompactionTask getTask(AbstractCompactionStrategy strategy1, AbstractCompactionStrategy strategy2, int gcBefore)
+    {
+        AbstractCompactionTask repairedTask = strategy1.getNextBackgroundTask(gcBefore);
+        if (repairedTask != null)
+            return repairedTask;
+        return strategy2.getNextBackgroundTask(gcBefore);
     }
 
     public boolean isEnabled()
@@ -199,6 +226,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         if (metadata.params.compaction.equals(schemaCompactionParams) &&
             Arrays.equals(locations, cfs.getDirectories().getWriteableLocations())) // any drives broken?
             return;
+        rangeAwareCompaction = metadata.params.compaction.rangeAwareCompaction();
         reload(metadata);
     }
 
@@ -587,8 +615,16 @@ public class CompactionStrategyManager implements INotificationConsumer
             locations = cfs.getDirectories().getWriteableLocations();
             for (int i = 0; i < locations.length; i++)
             {
-                repaired.add(CFMetaData.createCompactionStrategyInstance(cfs, params));
-                unrepaired.add(CFMetaData.createCompactionStrategyInstance(cfs, params));
+                if (rangeAwareCompaction)
+                {
+                    repaired.add(new VNodeAwareCompactionStrategy(cfs, params));
+                    unrepaired.add(new VNodeAwareCompactionStrategy(cfs, params));
+                }
+                else
+                {
+                    repaired.add(CFMetaData.createCompactionStrategyInstance(cfs, params));
+                    unrepaired.add(CFMetaData.createCompactionStrategyInstance(cfs, params));
+                }
             }
         }
         else
@@ -612,12 +648,8 @@ public class CompactionStrategyManager implements INotificationConsumer
     public SSTableMultiWriter createSSTableMultiWriter(Descriptor descriptor, long keyCount, long repairedAt, MetadataCollector collector, SerializationHeader header, LifecycleTransaction txn)
     {
         if (repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
-        {
             return unrepaired.get(0).createSSTableMultiWriter(descriptor, keyCount, repairedAt, collector, header, txn);
-        }
         else
-        {
             return repaired.get(0).createSSTableMultiWriter(descriptor, keyCount, repairedAt, collector, header, txn);
-        }
     }
 }

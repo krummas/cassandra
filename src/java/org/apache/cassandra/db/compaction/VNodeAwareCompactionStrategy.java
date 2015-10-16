@@ -19,15 +19,12 @@ package org.apache.cassandra.db.compaction;
 
 import java.io.File;
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import com.google.common.collect.Sets;
-import com.google.common.primitives.Longs;
+import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
@@ -43,35 +40,36 @@ import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Pair;
 
 public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
 {
-    private static final String MIN_VNODE_SSTABLE_SIZE_MB = "min_vnode_sstable_size_in_mb";
+    public static final String MIN_VNODE_SSTABLE_SIZE_MB = "min_vnode_sstable_size_in_mb";
 
     private static final Logger logger = LoggerFactory.getLogger(VNodeAwareCompactionStrategy.class);
     private final Set<SSTableReader> l0sstables = new HashSet<>();
-    private final SizeTieredCompactionStrategyOptions sizeTieredOptions;
-    private final List<Set<SSTableReader>> sstables = new ArrayList<>();
+    private final List<AbstractCompactionStrategy> strategies = new ArrayList<>();
     private List<Token> vnodeBoundaries = null;
     private final Set<SSTableReader> unknownSSTables = new HashSet<>();
     private final long vnodeSSTableSize;
+    private final SizeTieredCompactionStrategyOptions sizeTieredOptions;
     private List<Range<Token>> localRanges;
-    private int estimatedL1compactions = 0;
     private int estimatedL0compactions = 0;
+    private CompactionParams compactionParams;
+    private int nextVNodeToCompact = 0;
 
-    public VNodeAwareCompactionStrategy(ColumnFamilyStore cfs, Map<String, String> options)
+    public VNodeAwareCompactionStrategy(ColumnFamilyStore cfs, CompactionParams params)
     {
-        super(cfs, options);
+        super(cfs, params.options());
 
         if (options.containsKey(MIN_VNODE_SSTABLE_SIZE_MB))
             vnodeSSTableSize = Long.parseLong(options.get(MIN_VNODE_SSTABLE_SIZE_MB)) * (1L << 20);
         else
             vnodeSSTableSize = 10_000_000;
+        compactionParams = params;
         sizeTieredOptions = new SizeTieredCompactionStrategyOptions(options);
-        if (DatabaseDescriptor.getNumTokens() == 1)
-            throw new ConfigurationException("Can't use VNodeAwareCompactionStrategy without running VNodes");
     }
 
     private void refreshVnodeBoundaries()
@@ -79,40 +77,29 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         Collection<Range<Token>> lr = StorageService.instance.getLocalRanges(cfs.keyspace.getName());
         if (lr == null || lr.isEmpty())
         {
-            logger.warn("Don't know the vnode boundaries yet, not doing any compaction.");
+            logger.warn("Don't know the local ranges yet, not doing any compaction.");
             return;
         }
-        List<Range<Token>> oldLocalRanges = localRanges;
-        localRanges = Range.sort(lr);
-        if (oldLocalRanges != null && oldLocalRanges.equals(localRanges))
+        List<Range<Token>> newLocalRanges = Range.sort(lr);
+
+        if (localRanges != null && newLocalRanges.equals(localRanges))
         {
-            logger.debug("No change in local ranges");
+            logger.trace("No change in local ranges");
             return;
         }
 
-        if (vnodeBoundaries != null && !vnodeBoundaries.isEmpty())
-            return;
-
         localRanges = Range.sort(lr);
 
-        vnodeBoundaries = new ArrayList<>(localRanges.size() + 1);
-        for (Range<Token> r : localRanges)
-            vnodeBoundaries.add(r.right);
-        vnodeBoundaries.add(cfs.getPartitioner().getMaximumToken());
+        vnodeBoundaries = new ArrayList<>();
+        for (Range<Token> r : newLocalRanges)
+            vnodeBoundaries.add(r.right == cfs.getPartitioner().getMinimumToken() ? cfs.getPartitioner().getMaximumToken() : r.right);
+        vnodeBoundaries.set(vnodeBoundaries.size() - 1, cfs.getPartitioner().getMaximumToken());
         for (int i = 0; i < vnodeBoundaries.size(); i++)
-            sstables.add(new HashSet<>());
+            strategies.add(CFMetaData.createCompactionStrategyInstance(cfs, compactionParams));
         // unknown sstables are the ones added before we knew the vnode boundaries:
-        for (SSTableReader sstable : unknownSSTables)
-            addSSTable(sstable);
+        unknownSSTables.forEach(this::addSSTable);
 
         unknownSSTables.clear();
-        StringBuilder sb = new StringBuilder();
-        sb.append("ks=").append(cfs.keyspace.getName()).append(" cf=").append(cfs.getColumnFamilyName()).append(": ");
-        sb.append("L0=").append(l0sstables.size()).append(" ");
-        for (Set<SSTableReader> s : sstables)
-            sb.append(s.size());
-        logger.info(sb.toString());
-
     }
 
     @Override
@@ -122,71 +109,54 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         if (vnodeBoundaries == null || vnodeBoundaries.isEmpty())
             return null;
         // need to get both l0 and l1 before checking which to return in order to update estimatedRemainingCompactions
-        Set<SSTableReader> l0candidates = getL0Candidates();
-        Set<SSTableReader> l1candidates = getL1Candidates();
-
+        Iterable<SSTableReader> l0candidates = getL0Candidates();
 
         if (l0candidates != null)
         {
             LifecycleTransaction txn = cfs.getTracker().tryModify(l0candidates, OperationType.COMPACTION);
-            return new VNodeAwareCompactionTask(cfs, txn, gcBefore, vnodeBoundaries, localRanges, getDirectories().getWriteableLocations(), vnodeSSTableSize);
+            if (txn != null)
+                return new VNodeAwareCompactionTask(cfs, txn, gcBefore, vnodeBoundaries, localRanges, vnodeSSTableSize);
         }
-        if (l1candidates != null)
-        {
-            LifecycleTransaction txn = cfs.getTracker().tryModify(l1candidates, OperationType.COMPACTION);
-            return new VNodeAwareCompactionTask(cfs, txn, gcBefore, vnodeBoundaries, localRanges, getDirectories().getWriteableLocations(), vnodeSSTableSize);
-        }
-        return null;
+
+        return getL1Candidates(gcBefore);
     }
 
-    private Set<SSTableReader> getL0Candidates()
+    private Iterable<SSTableReader> getL0Candidates()
     {
-        Set<SSTableReader> nonCompactingL0 = Sets.difference(l0sstables, cfs.getTracker().getCompacting());
-        CompactionCandidates interesting = getSSTablesForSTCS(nonCompactingL0);
-        estimatedL0compactions = interesting.estimatedRemainingCompactions;
-        if (!interesting.sstables.isEmpty())
-            return nonCompactingL0;
-
-        return null;
-    }
-
-    private Set<SSTableReader> getL1Candidates()
-    {
-        final Set<SSTableReader> compacting = cfs.getTracker().getCompacting();
-        // for each vnodes sstables, get the most interesting STCS sstables to compact
-        List<CompactionCandidates> transformed = sstables.stream().map((mapper) -> getSSTablesForSTCS(Sets.difference(mapper, compacting))).collect(Collectors.toList());
-        estimatedL1compactions = transformed.stream().mapToInt((c) -> c.estimatedRemainingCompactions).sum();
-        // sort by the biggest one;
-        Optional<CompactionCandidates> candidate = transformed.stream().max((o1, o2) -> Longs.compare(SSTableReader.getTotalBytes(o1.sstables), SSTableReader.getTotalBytes(o2.sstables)));
-        if (candidate.isPresent() && !candidate.get().sstables.isEmpty())
-            return new HashSet<>(candidate.get().sstables);
-
-        return null;
-    }
-
-    private CompactionCandidates getSSTablesForSTCS(Set<SSTableReader> sstables)
-    {
-        Iterable<SSTableReader> candidates = cfs.getTracker().getUncompacting(sstables);
+        Iterable<SSTableReader> candidates = cfs.getTracker().getUncompacting(l0sstables);
         List<Pair<SSTableReader, Long>> pairs = SizeTieredCompactionStrategy.createSSTableAndLengthPairs(AbstractCompactionStrategy.filterSuspectSSTables(candidates));
         List<List<SSTableReader>> buckets = SizeTieredCompactionStrategy.getBuckets(pairs,
-                sizeTieredOptions.bucketHigh,
-                sizeTieredOptions.bucketLow,
-                sizeTieredOptions.minSSTableSize);
+                                                                                    sizeTieredOptions.bucketHigh,
+                                                                                    sizeTieredOptions.bucketLow,
+                                                                                    sizeTieredOptions.minSSTableSize);
         int minThreshold = cfs.getMinimumCompactionThreshold();
         int maxThreshold = cfs.getMaximumCompactionThreshold();
-        return new CompactionCandidates(SizeTieredCompactionStrategy.getEstimatedCompactionsByTasks(cfs, buckets), SizeTieredCompactionStrategy.mostInterestingBucket(buckets, minThreshold, maxThreshold));
+        estimatedL0compactions = SizeTieredCompactionStrategy.getEstimatedCompactionsByTasks(cfs, buckets);
+        Iterable<SSTableReader> interesting = SizeTieredCompactionStrategy.mostInterestingBucket(buckets, minThreshold, maxThreshold);
+
+
+        if (interesting != null && !Iterables.isEmpty(interesting))
+            return interesting;
+
+        return null;
     }
 
-    private static class CompactionCandidates
+    private AbstractCompactionTask getL1Candidates(int gcBefore)
     {
-        private final int estimatedRemainingCompactions;
-        private final List<SSTableReader> sstables;
-        public CompactionCandidates(int estimatedRemainingCompactions, List<SSTableReader> sstables)
+        for (int i = 0; i < strategies.size(); i++)
         {
-            this.estimatedRemainingCompactions = estimatedRemainingCompactions;
-            this.sstables = sstables;
+            int toCompactIndex = (i + nextVNodeToCompact) % strategies.size();
+            AbstractCompactionTask task = strategies.get(toCompactIndex).getNextBackgroundTask(gcBefore);
+
+            if (task != null)
+            {
+                nextVNodeToCompact = (toCompactIndex + 1) % strategies.size();
+                return task;
+            }
         }
+        return null;
     }
+
 
     @Override
     public Collection<AbstractCompactionTask> getMaximalTask(int gcBefore, boolean splitOutput)
@@ -203,7 +173,10 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
     @Override
     public int getEstimatedRemainingTasks()
     {
-        return estimatedL0compactions + estimatedL1compactions;
+        int remaining = 0;
+        for (AbstractCompactionStrategy strategy : strategies)
+            remaining += strategy.getEstimatedRemainingTasks();
+        return estimatedL0compactions + remaining;
     }
 
     @Override
@@ -221,43 +194,57 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
             return;
         }
 
-        if (added.getSSTableLevel() == 0)
+        if (!isSingleVNode(added))
             l0sstables.add(added);
         else
-            getSSTablesFor(added.first.getToken()).add(added);
+            getSSTablesFor(added.first.getToken()).addSSTable(added);
+    }
+
+    private boolean isSingleVNode(SSTableReader added)
+    {
+        int vnodeIndex = getVNodeIndex(added.first.getToken());
+        if (vnodeIndex == vnodeBoundaries.size() - 1)
+            return true; // the last boundary contains everything to maxtoken
+        return vnodeBoundaries.get(vnodeIndex + 1).compareTo(added.last.getToken()) > 0;
     }
 
     @Override
     public synchronized void removeSSTable(SSTableReader sstable)
     {
         unknownSSTables.remove(sstable);
-        if (sstable.getSSTableLevel() == 0)
+        if (vnodeBoundaries == null || vnodeBoundaries.isEmpty())
+            return;
+
+        if (!isSingleVNode(sstable))
             l0sstables.remove(sstable);
         else
-            getSSTablesFor(sstable.first.getToken()).remove(sstable);
+            getSSTablesFor(sstable.first.getToken()).removeSSTable(sstable);
     }
 
-    private Set<SSTableReader> getSSTablesFor(Token token)
+    private AbstractCompactionStrategy getSSTablesFor(Token token)
+    {
+        return strategies.get(getVNodeIndex(token));
+    }
+
+    private int getVNodeIndex(Token token)
     {
         int pos = Collections.binarySearch(vnodeBoundaries, token);
         if (pos < 0)
             pos = -pos - 1;
-        return sstables.get(pos);
+        return pos;
     }
 
     private static class VNodeAwareCompactionTask extends CompactionTask
     {
         private final List<Token> vnodeBoundaries;
         private final List<Range<Token>> localRanges;
-        private final Directories.DataDirectory[] locations;
         private final long vnodeSSTableSize;
 
-        public VNodeAwareCompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore, List<Token> vnodeBoundaries, List<Range<Token>> localRanges, Directories.DataDirectory[] locations, long vnodeSSTableSize)
+        public VNodeAwareCompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore, List<Token> vnodeBoundaries, List<Range<Token>> localRanges, long vnodeSSTableSize)
         {
             super(cfs, txn, gcBefore, false, false);
             this.vnodeBoundaries = vnodeBoundaries;
             this.localRanges = localRanges;
-            this.locations = locations;
             this.vnodeSSTableSize = vnodeSSTableSize;
         }
 
@@ -280,12 +267,15 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         private SSTableRewriter activeWriter;
         private int vnodeIndex = -1;
         private Directories.DataDirectory location;
+        private long lastEstimate = 0;
+        private long lastStart = 0;
 
         public VNodeAwareCompactionWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, List<Token> vnodeBoundaries, List<Range<Token>> localRanges, long vnodeSSTableSize)
         {
-            super(cfs, directories, txn, nonExpiredSSTables, false, false);
-
-            l1writer = new SSTableRewriter(txn, maxAge, false);
+            // note that we cant open early here as we are writing to two different files
+            super(cfs, directories, txn, nonExpiredSSTables, false, false, false);
+            txn.permitRedundantTransitions(); // we are writing to several files
+            l1writer = new SSTableRewriter(txn, maxAge, false, false);
             this.vnodeBoundaries = vnodeBoundaries;
             compactionGain = SSTableReader.estimateCompactionGain(nonExpiredSSTables);
             this.vnodeSSTableSize = vnodeSSTableSize;
@@ -303,11 +293,11 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
         public void switchCompactionLocation(Directories.DataDirectory location)
         {
             this.location = location;
-            logger.info("Switching compaction location to {}", location);
+            logger.debug("Switching compaction location to {}", location.location);
             // note that we only switch the l0 writer if we switch compaction location
             sstableWriter.switchWriter(createWriter(location, estimatedTotalKeys, 0));
             if (l1writer.currentWriter() != null)
-                l1writer.switchWriter(createWriter(location, estimatedTotalKeys, 1));
+                l1writer.switchWriter(createWriter(location, estimatedTotalKeys, 0));
         }
 
         private void maybeSwitchVNode(DecoratedKey key)
@@ -321,31 +311,39 @@ public class VNodeAwareCompactionStrategy extends AbstractCompactionStrategy
             Token vnodeStart = vnodeIndex == 0 ? cfs.getPartitioner().getMinimumToken() : vnodeBoundaries.get(vnodeIndex - 1);
             Token vnodeEnd = vnodeIndex == vnodeBoundaries.size() ? cfs.getPartitioner().getMaximumToken() : vnodeBoundaries.get(vnodeIndex);
             long estimatedVNodeSize = estimateVNodeSize(nonExpiredSSTables, new Range<>(vnodeStart, vnodeEnd));
+            if (logger.isTraceEnabled() && lastEstimate != 0 && activeWriter != null)
+            {
+                long lastWriteSize = activeWriter.currentWriter().getOnDiskFilePointer() - lastStart;
+                logger.trace("Last estimate was: {} - actual write size was: {} ({})", lastEstimate, lastWriteSize, (double)lastWriteSize/lastEstimate);
+            }
+            lastEstimate = estimatedVNodeSize;
             if (estimatedVNodeSize >= vnodeSSTableSize)
             {
                 l1writer.switchWriter(createWriter(location, estimatedTotalKeys, 1)); // todo: better estimate of total keys
-                logger.info("writing vnode {} to L1, estimated size = {}, loc = {}", vnodeIndex, estimatedVNodeSize, l1writer.currentWriter().getFilename());
+                logger.debug("writing vnode {} to L1, estimated size = {}, loc = {}", vnodeIndex, estimatedVNodeSize, l1writer.currentWriter().getFilename());
+
                 activeWriter = l1writer;
             }
             else
             {
                 activeWriter = sstableWriter;
-                logger.info("writing vnode {} to L0, estimated size = {}, loc = {}", vnodeIndex, estimatedVNodeSize, sstableWriter.currentWriter().getFilename());
+                logger.debug("writing vnode {} to L0, estimated size = {}, loc = {}", vnodeIndex, estimatedVNodeSize, sstableWriter.currentWriter().getFilename());
             }
+            lastStart = activeWriter.currentWriter().getOnDiskFilePointer();
         }
 
-        private long estimateVNodeSize(Set<SSTableReader> nonExpiredSSTables, Range<Token> tokenRange)
+        private long estimateVNodeSize(Set<SSTableReader> sstables, Range<Token> tokenRange)
         {
             long sum = 0;
-            for (SSTableReader sstable : nonExpiredSSTables)
+            for (SSTableReader sstable : sstables)
             {
-                List<Pair<Long, Long>> positions = sstable.getPositionsForRanges(Arrays.asList(tokenRange));
+                List<Pair<Long, Long>> positions = sstable.getPositionsForRanges(Collections.singletonList(tokenRange));
                 for (Pair<Long, Long> pos : positions)
                     sum += pos.right - pos.left;
             }
             double compressionRatio = cfs.metric.compressionRatio.getValue();
             double uncompressedSize = compactionGain * sum;
-            return Math.round((compressionRatio > 0) ? compressionRatio * uncompressedSize : uncompressedSize);
+            return Math.round((compressionRatio > 0d) ? compressionRatio * uncompressedSize : uncompressedSize);
         }
 
         @Override
