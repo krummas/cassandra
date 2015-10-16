@@ -351,4 +351,9 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
             return new SplittingSizeTieredCompactionWriter(cfs, directories, txn, nonExpiredSSTables);
         }
     }
+
+    public Iterable<SSTableReader> getSSTables()
+    {
+        return ImmutableSet.copyOf(sstables);
+    }
 }

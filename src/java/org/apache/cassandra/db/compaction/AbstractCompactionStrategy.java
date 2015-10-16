@@ -23,6 +23,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.RateLimiter;
 
 import org.apache.cassandra.db.Directories;
@@ -30,6 +31,7 @@ import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.SimpleSSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -45,6 +47,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 /**
@@ -317,6 +320,11 @@ public abstract class AbstractCompactionStrategy
 
     public abstract void removeSSTable(SSTableReader sstable);
 
+    public int[] getAllLevelSize()
+    {
+        return new int[]{ Iterables.size(getSSTables()) };
+    }
+
     public static class ScannerList implements AutoCloseable
     {
         public final List<ISSTableScanner> scanners;
@@ -469,6 +477,8 @@ public abstract class AbstractCompactionStrategy
         uncheckedOptions.remove(UNCHECKED_TOMBSTONE_COMPACTION_OPTION);
         uncheckedOptions.remove(COMPACTION_ENABLED);
         uncheckedOptions.remove(ONLY_PURGE_REPAIRED_TOMBSTONES);
+        uncheckedOptions.remove(CompactionParams.Option.RANGE_AWARE_COMPACTION.toString());
+        uncheckedOptions.remove(CompactionParams.Option.MIN_RANGE_SSTABLE_SIZE_IN_MB.toString());
         return uncheckedOptions;
     }
 
@@ -520,4 +530,20 @@ public abstract class AbstractCompactionStrategy
     {
         return SimpleSSTableMultiWriter.create(descriptor, keyCount, repairedAt, cfs.metadata, meta, header, indexes, txn);
     }
+
+    public Iterable<SSTableReader> getSSTables()
+    {
+        return Collections.emptyList();
+    }
+
+    public Map<String, Object> getStrategyDescription()
+    {
+        Map<String, Object> strategyDescription =new HashMap<>();
+        strategyDescription.put("class", getClass());
+        Iterable<SSTableReader> sstables = getSSTables();
+        strategyDescription.put("sstablecount", Iterables.size(sstables));
+        strategyDescription.put("sstables", Lists.newArrayList(Iterables.transform(sstables, SSTable::toString)));
+        return strategyDescription;
+    }
+
 }

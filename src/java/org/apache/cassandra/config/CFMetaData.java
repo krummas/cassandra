@@ -45,6 +45,7 @@ import org.apache.cassandra.cql3.statements.CFStatement;
 import org.apache.cassandra.cql3.statements.CreateTableStatement;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.AbstractCompactionStrategy;
+import org.apache.cassandra.db.compaction.RangeAwareCompactionStrategy;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -790,7 +791,8 @@ public final class CFMetaData
         Class<AbstractCompactionStrategy> strategyClass = FBUtilities.classForName(className, "compaction strategy");
         if (!AbstractCompactionStrategy.class.isAssignableFrom(strategyClass))
             throw new ConfigurationException(String.format("Specified compaction strategy class (%s) is not derived from AbstractReplicationStrategy", className));
-
+        if (RangeAwareCompactionStrategy.class.equals(strategyClass))
+            throw new ConfigurationException("To use RangeAwareCompactionStrategy add the compaction strategy parameter 'range_aware_compaction':true");
         return strategyClass;
     }
 

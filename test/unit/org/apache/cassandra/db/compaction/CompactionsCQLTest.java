@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.collect.Iterables;
 import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
@@ -201,8 +202,6 @@ public class CompactionsCQLTest extends CQLTester
         assertTrue(getCurrentColumnFamilyStore().getCompactionStrategyManager().isEnabled());
     }
 
-
-
     @Test(expected = IllegalArgumentException.class)
     public void testBadLocalCompactionStrategyOptions()
     {
@@ -211,6 +210,22 @@ public class CompactionsCQLTest extends CQLTester
         localOptions.put("class","SizeTieredCompactionStrategy");
         localOptions.put("sstable_size_in_mb","1234"); // not for STCS
         getCurrentColumnFamilyStore().setCompactionParameters(localOptions);
+    }
+
+    @Test()
+    public void testSwitchToRangeAwareCompaction()
+    {
+        createTable("CREATE TABLE %s (id text PRIMARY KEY)");
+        Map<String, String> localOptions = new HashMap<>();
+        localOptions.put("class","SizeTieredCompactionStrategy");
+        localOptions.put("range_aware_compaction","true");
+        getCurrentColumnFamilyStore().setCompactionParameters(localOptions);
+        List<AbstractCompactionStrategy> strat = Iterables.getFirst(getCurrentColumnFamilyStore().getCompactionStrategyManager().getStrategies(), null);
+        assertTrue(Iterables.getFirst(strat, null) instanceof RangeAwareCompactionStrategy);
+        localOptions.remove("range_aware_compaction");
+        getCurrentColumnFamilyStore().setCompactionParameters(localOptions);
+        strat = Iterables.getFirst(getCurrentColumnFamilyStore().getCompactionStrategyManager().getStrategies(), null);
+        assertTrue(Iterables.getFirst(strat, null) instanceof SizeTieredCompactionStrategy);
     }
 
     public boolean verifyStrategies(CompactionStrategyManager manager, Class<? extends AbstractCompactionStrategy> expected)

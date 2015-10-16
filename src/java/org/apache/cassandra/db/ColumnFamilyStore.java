@@ -63,7 +63,6 @@ import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
-import org.apache.cassandra.io.sstable.SSTableTxnWriter;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
@@ -2408,6 +2407,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     void resetFileIndexGenerator()
     {
         fileIndexGenerator.set(0);
+    }
+
+    public List<Map<String, Object>> getCompactionStrategyInfo()
+    {
+        return compactionStrategyManager.describeCompaction();
     }
 
 }
