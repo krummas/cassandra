@@ -64,11 +64,22 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
     @Deprecated
     public CompactionAwareWriter(ColumnFamilyStore cfs,
+                                    Directories directories,
+                                    LifecycleTransaction txn,
+                                    Set<SSTableReader> nonExpiredSSTables,
+                                    boolean offline,
+                                    boolean keepOriginals)
+    {
+        this(cfs, directories, txn, nonExpiredSSTables, offline, keepOriginals, true);
+    }
+
+    public CompactionAwareWriter(ColumnFamilyStore cfs,
                                  Directories directories,
                                  LifecycleTransaction txn,
                                  Set<SSTableReader> nonExpiredSSTables,
                                  boolean offline,
-                                 boolean keepOriginals)
+                                 boolean keepOriginals,
+                                 boolean openEarly)
     {
         this(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
     }
@@ -234,7 +245,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
     public CompactionAwareWriter setRepairedAt(long repairedAt)
     {
-        this.sstableWriter.setRepairedAt(repairedAt);
+        sstableWriter.setRepairedAt(repairedAt);
         return this;
     }
 }

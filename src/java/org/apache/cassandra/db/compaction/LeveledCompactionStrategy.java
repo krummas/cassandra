@@ -526,4 +526,10 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
 
         return uncheckedOptions;
     }
+
+    @Override
+    public Iterable<SSTableReader> getSSTables()
+    {
+        return manifest.getAllSSTables();
+    }
 }

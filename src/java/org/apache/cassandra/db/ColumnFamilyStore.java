@@ -2620,4 +2620,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         return keyspace.getColumnFamilyStore(id);
     }
+
+    public List<Map<String, Object>> getCompactionStrategyInfo()
+    {
+        return compactionStrategyManager.describeCompaction();
+    }
+
 }

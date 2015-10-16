@@ -494,4 +494,9 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
                 cfs.getMinimumCompactionThreshold(),
                 cfs.getMaximumCompactionThreshold());
     }
+
+    public Iterable<SSTableReader> getSSTables()
+    {
+        return ImmutableSet.copyOf(sstables);
+    }
 }
