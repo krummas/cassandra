@@ -2672,4 +2672,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         return getIfExists(tableId).metric;
     }
+
+    public List<Map<String, Object>> getCompactionStrategyInfo()
+    {
+        return compactionStrategyManager.describeCompaction();
+    }
 }

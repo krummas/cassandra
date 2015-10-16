@@ -329,7 +329,7 @@ public class SizeTieredCompactionStrategy extends AbstractCompactionStrategy
     }
 
     @Override
-    protected Set<SSTableReader> getSSTables()
+    public Set<SSTableReader> getSSTables()
     {
         return ImmutableSet.copyOf(sstables);
     }

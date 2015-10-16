@@ -5029,11 +5029,8 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         logger.info("Updated hinted_handoff_throttle_in_kb to {}", throttleInKB);
     }
 
-    public static List<PartitionPosition> getDiskBoundaries(ColumnFamilyStore cfs, Directories.DataDirectory[] directories)
+    public static Collection<Range<Token>> getFutureLocalTokens(ColumnFamilyStore cfs)
     {
-        if (!cfs.getPartitioner().splitter().isPresent())
-            return null;
-
         Collection<Range<Token>> lr;
 
         if (StorageService.instance.isBootstrapMode())
@@ -5048,6 +5045,15 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             TokenMetadata tmd = StorageService.instance.getTokenMetadata().cloneAfterAllSettled();
             lr = cfs.keyspace.getReplicationStrategy().getAddressRanges(tmd).get(FBUtilities.getBroadcastAddress());
         }
+        return lr;
+    }
+
+    public static List<PartitionPosition> getDiskBoundaries(ColumnFamilyStore cfs, Directories.DataDirectory[] directories)
+    {
+        if (!cfs.getPartitioner().splitter().isPresent())
+            return null;
+
+        Collection<Range<Token>> lr = getFutureLocalTokens(cfs);
 
         if (lr == null || lr.isEmpty())
             return null;
