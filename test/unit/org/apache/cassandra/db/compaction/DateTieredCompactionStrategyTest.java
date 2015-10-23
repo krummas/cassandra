@@ -39,7 +39,6 @@ import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.getBuckets;
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.newestBucket;
-import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.trimToThreshold;
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.filterOldSSTables;
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.validateOptions;
 
@@ -222,18 +221,6 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(0).getMinTimestamp(), sstrs.get(0).getMaxTimestamp());
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(1).getMinTimestamp(), sstrs.get(1).getMaxTimestamp());
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(2).getMinTimestamp(), sstrs.get(2).getMaxTimestamp());
-
-        // if we have more than the max threshold, the oldest should be dropped
-        Collections.sort(sstrs, Collections.reverseOrder(new Comparator<SSTableReader>() {
-            public int compare(SSTableReader o1, SSTableReader o2) {
-                return Long.compare(o1.getMinTimestamp(), o2.getMinTimestamp()) ;
-            }
-        }));
-
-        List<SSTableReader> bucket = trimToThreshold(sstrs, 0, 2, new SizeTieredCompactionStrategyOptions());
-        assertEquals("one bucket should have been dropped", 2, bucket.size());
-        for (SSTableReader sstr : bucket)
-            assertFalse("the oldest sstable should be dropped", sstr.getMinTimestamp() == 0);
     }
 
     @Test

@@ -359,26 +359,12 @@ public class DateTieredCompactionStrategy extends AbstractCompactionStrategy
             boolean inFirstWindow = incomingWindow.onTarget(bucket.get(0).getMinTimestamp());
             if (bucket.size() >= minThreshold || (bucket.size() >= 2 && !inFirstWindow))
             {
-                List<SSTableReader> trimmedBucket = trimToThreshold(bucket, inFirstWindow ? minThreshold : 2, maxThreshold, stcsOptions);
-                if (!trimmedBucket.isEmpty())
-                    return trimmedBucket;
+                List<SSTableReader> stcsSSTables = getSSTablesForSTCS(bucket, inFirstWindow ? minThreshold : 2, maxThreshold, stcsOptions);
+                if (!stcsSSTables.isEmpty())
+                    return stcsSSTables;
             }
         }
         return Collections.emptyList();
-    }
-
-    /**
-     * @param bucket list of sstables, ordered from newest to oldest by getMinTimestamp().
-     * @param maxThreshold maximum number of sstables in a single compaction task.
-     * @return A bucket with sstables to compact.
-     */
-    @VisibleForTesting
-    static List<SSTableReader> trimToThreshold(List<SSTableReader> bucket, int minThreshold, int maxThreshold, SizeTieredCompactionStrategyOptions stcsOptions)
-    {
-        if (bucket.size() > maxThreshold)
-            return getSSTablesForSTCS(bucket, minThreshold, maxThreshold, stcsOptions);
-        // Trim the oldest sstables off the end to meet the maxThreshold
-        return bucket;
     }
 
     private static List<SSTableReader> getSSTablesForSTCS(Collection<SSTableReader> sstables, int minThreshold, int maxThreshold, SizeTieredCompactionStrategyOptions stcsOptions)
