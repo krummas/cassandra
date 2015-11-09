@@ -160,7 +160,7 @@ public final class CLibrary
         }
         catch (IOException e)
         {
-            throw new RuntimeException(e);
+            logger.warn("Could not skip cache", e);
         }
     }
 
