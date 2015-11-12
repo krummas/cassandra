@@ -34,6 +34,7 @@ import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.VersionedValue;
+import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.service.StorageService;
@@ -280,6 +281,20 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
     }
 
     @Override
+    public AbstractCompactionTask getCompactionTask(LifecycleTransaction txn, final int gcBefore, long maxSSTableBytes)
+    {
+        if (l0sstables.containsAll(txn.originals()))
+            return new RangeAwareCompactionTask(cfs, txn, gcBefore, rangeBoundaries, 0);
+
+        SSTableReader first = txn.originals().iterator().next();
+        int firstIndex = getRangeIndex(first.first.getToken());
+        if (txn.originals().stream().allMatch(s -> getRangeIndex(s.first.getToken()) == firstIndex))
+            return strategies.get(firstIndex).getCompactionTask(txn, gcBefore, maxSSTableBytes);
+        else
+            throw new RuntimeException("All sstables are not in the same range-compaction strategy");
+    }
+
+    @Override
     public int getEstimatedRemainingTasks()
     {
         // todo: improve this - currently underestimates by quite a lot if we have much data in L0 since
@@ -369,7 +384,7 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
 
     public int[] getAllLevelSize()
     {
-        int [] levelSizes = new int[0];
+        int[] levelSizes = new int[0];
         for (AbstractCompactionStrategy strategy : strategies)
         {
             if (strategy != null)
@@ -381,7 +396,7 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
             levelSizes[0] = l0sstables.size();
         }
         else
-            levelSizes = new int[] { 0 };
+            levelSizes = new int[]{0};
         return levelSizes;
     }
 
@@ -413,6 +428,117 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
 
     }
 
+    @Override
+    public synchronized ScannerList getScanners(Collection<SSTableReader> sstables, Range<Token> range)
+    {
+        List<ISSTableScanner> scanners = new ArrayList<>();
+        // note that we don't split between repaired/unrepaired here, any instance of RangeAwareCompactionStrategy will only see one kind
+        List<SSTableReader> l0scanners = new ArrayList<>();
+        for (SSTableReader sstable : sstables)
+        {
+            if (l0sstables.contains(sstable))
+                l0scanners.add(sstable);
+        }
+        scanners.addAll(super.getScanners(l0scanners, range).scanners);
+        Iterable<Collection<SSTableReader>> groupedSSTables = groupSSTables(sstables);
+        for (Collection<SSTableReader> groupedSSTable : groupedSSTables)
+        {
+            SSTableReader firstSSTable = groupedSSTable.iterator().next();
+            // we use getStrategyFor here, not index directly into strategies since getStrategyFor will create the compaction strategy instance for us if it does not exist yet
+            scanners.addAll(getStrategyFor(firstSSTable.first.getToken()).getScanners(groupedSSTable, range).scanners);
+        }
+        return new ScannerList(scanners);
+    }
+
+    @Override
+    public synchronized Collection<Collection<SSTableReader>> groupSSTablesForAntiCompaction(Collection<SSTableReader> sstablesToGroup)
+    {
+        List<SSTableReader> l0togroup = new ArrayList<>();
+
+        for (SSTableReader sstable : sstablesToGroup)
+            if (l0sstables.contains(sstable))
+                l0togroup.add(sstable);
+
+        Iterable<Collection<SSTableReader>> groupedSSTables = groupSSTables(sstablesToGroup);
+
+        List<Collection<SSTableReader>> anticompactionGrouping = new ArrayList<>();
+
+        anticompactionGrouping.addAll(super.groupSSTablesForAntiCompaction(l0togroup));
+
+        for (Collection<SSTableReader> groupedSSTable : groupedSSTables)
+        {
+            SSTableReader firstSSTable = groupedSSTable.iterator().next();
+            // we use getStrategyFor here, not index directly into strategies since getStrategyFor will create the compaction strategy instance for us if it does not exist yet
+            anticompactionGrouping.addAll(getStrategyFor(firstSSTable.first.getToken()).groupSSTablesForAntiCompaction(groupedSSTable));
+        }
+        return anticompactionGrouping;
+    }
+
+    /**
+     * Groups the sstables based on what strategy instance they belong to
+     *
+     * Ignores the l0 sstables
+     */
+    @SuppressWarnings("unchecked")
+    private Iterable<Collection<SSTableReader>> groupSSTables(Iterable<SSTableReader> sstables)
+    {
+        List<Collection<SSTableReader>> groupedCollection = new ArrayList<>();
+        for (ArrayList group : groupSSTablesArray(sstables))
+        {
+            if (group != null && group.size() > 0)
+                groupedCollection.add(group);
+        }
+
+        return groupedCollection;
+    }
+
+    @SuppressWarnings("unchecked")
+    private ArrayList[] groupSSTablesArray(Iterable<SSTableReader> sstables)
+    {
+        ArrayList[] groupedSSTables = new ArrayList[strategies.size()];
+
+        for (SSTableReader sstable : sstables)
+        {
+            if (!l0sstables.contains(sstable))
+            {
+                int index = getRangeIndex(sstable.first.getToken());
+                if (groupedSSTables[index] == null)
+                    groupedSSTables[index] = new ArrayList();
+                groupedSSTables[index].add(sstable);
+            }
+        }
+        return groupedSSTables;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public synchronized void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added)
+    {
+        removed.stream().filter(l0sstables::contains).forEach(this::removeSSTable);
+        added.stream().filter(l0sstables::contains).forEach(this::addSSTable);
+
+        ArrayList[] removedGrouped = groupSSTablesArray(removed);
+        ArrayList[] addedGrouped = groupSSTablesArray(removed);
+
+        for (int i = 0; i < strategies.size(); i++)
+        {
+            AbstractCompactionStrategy strategy = strategies.get(i);
+            if (removedGrouped[i] != null && addedGrouped[i] != null)
+                strategy.replaceSSTables(removedGrouped[i], addedGrouped[i]);
+            else if (removedGrouped[i] != null)
+                removedGrouped[i].forEach(s -> strategy.removeSSTable((SSTableReader)s));
+            else if (addedGrouped[i] != null)
+                addedGrouped[i].forEach(s -> strategy.addSSTable((SSTableReader)s));
+        }
+
+
+    }
+    @Override
+    public boolean shouldDefragment()
+    {
+        Optional<AbstractCompactionStrategy> first = strategies.stream().filter(s -> s != null).findFirst();
+        return first.isPresent() && first.get().shouldDefragment();
+    }
 
     @Override
     public void onJoin(InetAddress endpoint, EndpointState epState)

@@ -196,6 +196,7 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
                 cfs.metadata,
                 new MetadataCollector(txn.originals(), cfs.metadata.comparator, 0),
                 SerializationHeader.make(cfs.metadata, txn.originals()),
+                cfs.indexManager.listIndexes(),
                 txn);
     }
 }
