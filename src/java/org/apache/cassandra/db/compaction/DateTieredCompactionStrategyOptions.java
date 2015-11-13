@@ -25,17 +25,20 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 public final class DateTieredCompactionStrategyOptions
 {
     protected static final TimeUnit DEFAULT_TIMESTAMP_RESOLUTION = TimeUnit.MICROSECONDS;
-    protected static final double DEFAULT_MAX_SSTABLE_AGE_DAYS = 365;
+    @Deprecated
+    protected static final double DEFAULT_MAX_SSTABLE_AGE_DAYS = 365*1000;
     protected static final long DEFAULT_BASE_TIME_SECONDS = 60;
     protected static final long DEFAULT_MAX_WINDOW_SIZE_SECONDS = TimeUnit.SECONDS.convert(1, TimeUnit.DAYS);
 
     protected static final int DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS = 60 * 10;
     protected static final String TIMESTAMP_RESOLUTION_KEY = "timestamp_resolution";
+    @Deprecated
     protected static final String MAX_SSTABLE_AGE_KEY = "max_sstable_age_days";
     protected static final String BASE_TIME_KEY = "base_time_seconds";
     protected static final String EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_KEY = "expired_sstable_check_frequency_seconds";
     protected static final String MAX_WINDOW_SIZE_KEY = "max_window_size_seconds";
 
+    @Deprecated
     protected final long maxSSTableAge;
     protected final long baseTime;
     protected final long expiredSSTableCheckFrequency;
