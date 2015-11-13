@@ -101,11 +101,11 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         options.put(DateTieredCompactionStrategyOptions.TIMESTAMP_RESOLUTION_KEY, "SECONDS");
 
         DateTieredCompactionStrategyOptions opts = new DateTieredCompactionStrategyOptions(options);
-        assertEquals(opts.maxSSTableAge, TimeUnit.SECONDS.convert(365, TimeUnit.DAYS));
+        assertEquals(opts.maxSSTableAge, TimeUnit.SECONDS.convert(365*1000, TimeUnit.DAYS));
 
         options.put(DateTieredCompactionStrategyOptions.TIMESTAMP_RESOLUTION_KEY, "MILLISECONDS");
         opts = new DateTieredCompactionStrategyOptions(options);
-        assertEquals(opts.maxSSTableAge, TimeUnit.MILLISECONDS.convert(365, TimeUnit.DAYS));
+        assertEquals(opts.maxSSTableAge, TimeUnit.MILLISECONDS.convert(365*1000, TimeUnit.DAYS));
 
         options.put(DateTieredCompactionStrategyOptions.TIMESTAMP_RESOLUTION_KEY, "MICROSECONDS");
         options.put(DateTieredCompactionStrategyOptions.MAX_SSTABLE_AGE_KEY, "10");
@@ -345,25 +345,5 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (SSTableReader sstable : cfs.getSSTables())
             dtcs.addSSTable(sstable);
         assertEquals(20, dtcs.getNextBackgroundTask(0).sstables.size());
-    }
-
-    @Test
-    public void testLimitWindowSizes()
-    {
-        long now = System.currentTimeMillis();
-        List<Pair<Long, Long>> sstables = new ArrayList<>();
-        // create fake sstables, one per minute for 1 year:
-        for (long i = (now - TimeUnit.DAYS.toMillis(365)); i < now; i+=60000)
-            sstables.add(Pair.create(i,i));
-        long base = TimeUnit.MILLISECONDS.convert(60, TimeUnit.SECONDS);
-        List<List<Long>> buckets = getBuckets(sstables, base, 4, now, TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS));
-        System.out.println(buckets.size());
-        for (List<Long> bucket : buckets)
-        {
-            long bucketTimespan = Collections.max(bucket) - Collections.min(bucket);
-            assertTrue(bucketTimespan < TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS));
-            System.out.printf("%4d ", TimeUnit.MINUTES.convert(bucketTimespan, TimeUnit.MILLISECONDS));
-        }
-        System.out.println();
     }
 }
