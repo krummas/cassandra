@@ -283,7 +283,9 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
     @Test
     public void testDontRemoveLevelInfoUpgradeSSTables() throws InterruptedException, ExecutionException
     {
-        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
+        byte [] b = new byte[100 * 1024];
+        new Random().nextBytes(b);
+        ByteBuffer value = ByteBuffer.wrap(b); // 100 KB value, make it easy to have multiple files
 
         // Enough data to have a level 1 and 2
         int rows = 20;
