@@ -215,7 +215,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
-        cfs.truncateBlocking();
+
         cfs.disableAutoCompaction();
 
         ByteBuffer value = ByteBuffer.wrap(new byte[100]);
@@ -243,6 +243,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(0).getMinTimestamp(), sstrs.get(0).getMaxTimestamp());
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(1).getMinTimestamp(), sstrs.get(1).getMaxTimestamp());
         assertEquals("an sstable with a single value should have equal min/max timestamps", sstrs.get(2).getMinTimestamp(), sstrs.get(2).getMaxTimestamp());
+        cfs.truncateBlocking();
     }
 
     @Test
@@ -250,7 +251,6 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
-        cfs.truncateBlocking();
         cfs.disableAutoCompaction();
 
         ByteBuffer value = ByteBuffer.wrap(new byte[100]);
@@ -281,6 +281,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
 
         filtered = filterOldSSTables(sstrs, 1, 4);
         assertEquals("no sstables should remain when all are too old", 0, Iterables.size(filtered));
+        cfs.truncateBlocking();
     }
 
 
@@ -289,7 +290,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
-        cfs.truncateBlocking();
+
         cfs.disableAutoCompaction();
 
         ByteBuffer value = ByteBuffer.wrap(new byte[100]);
@@ -327,6 +328,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         SSTableReader sstable = t.transaction.originals().iterator().next();
         assertEquals(sstable, expiredSSTable);
         t.transaction.abort();
+        cfs.truncateBlocking();
     }
 
     @Test
@@ -334,7 +336,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD1);
-        cfs.truncateBlocking();
+
         cfs.disableAutoCompaction();
         ByteBuffer bigValue = ByteBuffer.wrap(new byte[10000]);
         ByteBuffer value = ByteBuffer.wrap(new byte[100]);
@@ -366,6 +368,10 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         DateTieredCompactionStrategy dtcs = new DateTieredCompactionStrategy(cfs, options);
         for (SSTableReader sstable : cfs.getSSTables())
             dtcs.addSSTable(sstable);
-        assertEquals(20, dtcs.getNextBackgroundTask(0).transaction.originals().size());
+        AbstractCompactionTask task = dtcs.getNextBackgroundTask(0);
+        assertEquals(20, task.transaction.originals().size());
+        task.transaction.abort();
+
+        cfs.truncateBlocking();
     }
 }
