@@ -64,7 +64,7 @@ public final class DateTieredCompactionStrategyOptions
         maxSSTableAge = Math.round(DEFAULT_MAX_SSTABLE_AGE_DAYS * DEFAULT_TIMESTAMP_RESOLUTION.convert(1, TimeUnit.DAYS));
         baseTime = DEFAULT_TIMESTAMP_RESOLUTION.convert(DEFAULT_BASE_TIME_SECONDS, TimeUnit.SECONDS);
         expiredSSTableCheckFrequency = TimeUnit.MILLISECONDS.convert(DEFAULT_EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS, TimeUnit.SECONDS);
-        maxWindowSize = TimeUnit.MILLISECONDS.convert(1, TimeUnit.DAYS);
+        maxWindowSize = DEFAULT_TIMESTAMP_RESOLUTION.convert(1, TimeUnit.DAYS);
     }
 
     public static Map<String, String> validateOptions(Map<String, String> options, Map<String, String> uncheckedOptions) throws  ConfigurationException
@@ -122,10 +122,26 @@ public final class DateTieredCompactionStrategyOptions
             throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", optionValue, EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_KEY), e);
         }
 
+        optionValue = options.get(MAX_WINDOW_SIZE_KEY);
+        try
+        {
+            long maxWindowSize = optionValue == null ? DEFAULT_MAX_WINDOW_SIZE_SECONDS : Long.parseLong(optionValue);
+            if (maxWindowSize < 0)
+            {
+                throw new ConfigurationException(String.format("%s must not be negative, but was %d", MAX_WINDOW_SIZE_KEY, maxWindowSize));
+            }
+        }
+        catch (NumberFormatException e)
+        {
+            throw new ConfigurationException(String.format("%s is not a parsable int (base10) for %s", optionValue, MAX_WINDOW_SIZE_KEY), e);
+        }
+
+
         uncheckedOptions.remove(MAX_SSTABLE_AGE_KEY);
         uncheckedOptions.remove(BASE_TIME_KEY);
         uncheckedOptions.remove(TIMESTAMP_RESOLUTION_KEY);
         uncheckedOptions.remove(EXPIRED_SSTABLE_CHECK_FREQUENCY_SECONDS_KEY);
+        uncheckedOptions.remove(MAX_WINDOW_SIZE_KEY);
 
         return uncheckedOptions;
     }
