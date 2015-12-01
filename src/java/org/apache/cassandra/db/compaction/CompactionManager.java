@@ -1113,35 +1113,13 @@ public class CompactionManager implements CompactionManagerMBean
                 CompactionIterable ci = new CompactionIterable(OperationType.ANTICOMPACTION, scanners.scanners, controller);
                 Iterator<AbstractCompactedRow> iter = ci.iterator();
                 metrics.beginCompaction(ci);
-                Iterator<Range<Token>> normalizedRangesIterator = Range.normalize(ranges).iterator();
-                assert normalizedRangesIterator.hasNext();
-                Range<Token> currentRange = normalizedRangesIterator.next();
                 try
                 {
+                    Range.OrderedRangeContainmentChecker containmentChecker = new Range.OrderedRangeContainmentChecker(ranges);
                     while (iter.hasNext())
                     {
                         AbstractCompactedRow row = iter.next();
-                        Token currentToken = row.key.getToken();
-                        boolean withinRepairedRange = false;
-                        while(true)
-                        {
-                            if (currentToken.compareTo(currentRange.left) <= 0)
-                            {
-                                withinRepairedRange = false;
-                                break;
-                            }
-                            else if (currentToken.compareTo(currentRange.right) <= 0 || currentRange.right.equals(cfs.partitioner.getMinimumToken()))
-                            {
-                                withinRepairedRange = true;
-                                break;
-                            }
-                            // when we have moved beyond the the rightmost token of the last range, all the remaining tokens will be unrepaired
-                            if (!normalizedRangesIterator.hasNext())
-                                break;
-                            currentRange = normalizedRangesIterator.next();
-                        }
-
-                        if (withinRepairedRange)
+                        if (containmentChecker.contains(row.key.getToken()))
                         {
                             repairedSSTableWriter.append(row);
                             repairedKeyCount++;
