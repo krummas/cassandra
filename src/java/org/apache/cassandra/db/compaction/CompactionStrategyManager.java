@@ -98,33 +98,40 @@ public class CompactionStrategyManager implements INotificationConsumer
     {
         if (!isEnabled())
             return null;
-
+        long start = System.nanoTime();
         maybeReload(cfs.metadata);
-
-        assert repaired.size() == unrepaired.size();
-        for (int i = 0; i < repaired.size(); i++)
+        try
         {
-            int strategyIndex = (i + nextCompactionStrategy) % repaired.size();
-            AbstractCompactionStrategy repStrategy = repaired.get(strategyIndex);
-            AbstractCompactionStrategy unrepStrategy = unrepaired.get(strategyIndex);
-            if (repStrategy.getEstimatedRemainingTasks() > unrepStrategy.getEstimatedRemainingTasks())
+            assert repaired.size() == unrepaired.size();
+            for (int i = 0; i < repaired.size(); i++)
             {
-                AbstractCompactionTask task = getTask(repStrategy, unrepStrategy, gcBefore);
-                if (task != null)
+                int strategyIndex = (i + nextCompactionStrategy) % repaired.size();
+                AbstractCompactionStrategy repStrategy = repaired.get(strategyIndex);
+                AbstractCompactionStrategy unrepStrategy = unrepaired.get(strategyIndex);
+                if (repStrategy.getEstimatedRemainingTasks() > unrepStrategy.getEstimatedRemainingTasks())
                 {
-                    nextCompactionStrategy = strategyIndex + 1;
-                    return task;
+                    AbstractCompactionTask task = getTask(repStrategy, unrepStrategy, gcBefore);
+                    if (task != null)
+                    {
+                        nextCompactionStrategy = strategyIndex + 1;
+                        return task;
+                    }
+                }
+                else
+                {
+                    AbstractCompactionTask task = getTask(unrepStrategy, repStrategy, gcBefore);
+                    if (task != null)
+                    {
+                        nextCompactionStrategy = strategyIndex + 1;
+                        return task;
+                    }
                 }
             }
-            else
-            {
-                AbstractCompactionTask task = getTask(unrepStrategy, repStrategy, gcBefore);
-                if (task != null)
-                {
-                    nextCompactionStrategy = strategyIndex + 1;
-                    return task;
-                }
-            }
+        }
+        finally
+        {
+            if (System.nanoTime() - start > 1_000_000)
+                logger.debug("Slow get next background task: {}ms", (((double)System.nanoTime()) - start)/1_000_000);
         }
         return null;
     }
