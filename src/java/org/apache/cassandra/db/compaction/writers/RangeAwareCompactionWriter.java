@@ -60,9 +60,9 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
     public RangeAwareCompactionWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, List<Token> rangeBoundaries, long rangeMinSSTableSize)
     {
         // note that we cant open early here as we are writing to two different files
-        super(cfs, directories, txn, nonExpiredSSTables, false, false, false);
+        super(cfs, directories, txn, nonExpiredSSTables, false);
         txn.permitRedundantTransitions(); // we are writing to several files
-        l1writer = new SSTableRewriter(txn, maxAge, false, false);
+        l1writer = SSTableRewriter.constructWithoutEarlyOpening(txn, false, maxAge);
         this.rangeBoundaries = rangeBoundaries;
         compactionGain = SSTableReader.estimateCompactionGain(nonExpiredSSTables);
         this.rangeMinSSTableSize = rangeMinSSTableSize;
@@ -175,15 +175,6 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
         List<SSTableReader> finished = new ArrayList<>();
         finished.addAll(super.finish());
         finished.addAll(l1writer.finished());
-        return finished;
-    }
-
-    @Override
-    public List<SSTableReader> finish(long repairedAt)
-    {
-        List<SSTableReader> finished = new ArrayList<>();
-        finished.addAll(setRepairedAt(repairedAt).finish());
-        finished.addAll(l1writer.setRepairedAt(repairedAt).finished());
         return finished;
     }
 

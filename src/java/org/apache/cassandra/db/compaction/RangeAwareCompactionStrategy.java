@@ -195,7 +195,7 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
             AbstractCompactionStrategy strategy = strategies.get(toCompactIndex);
             if (strategy != null)
             {
-                AbstractCompactionTask task = strategies.get(toCompactIndex).getNextBackgroundTask(gcBefore);
+                AbstractCompactionTask task = strategy.getNextBackgroundTask(gcBefore);
 
                 if (task != null)
                 {
@@ -357,9 +357,14 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
     private AbstractCompactionStrategy getStrategyFor(Token token)
     {
         int strategyIndex = getRangeIndex(token);
-        if (strategies.get(strategyIndex) == null)
-            strategies.set(strategyIndex, CFMetaData.createCompactionStrategyInstance(cfs, compactionParams));
-        return strategies.get(strategyIndex);
+        return getStrategyFor(strategyIndex);
+    }
+
+    private AbstractCompactionStrategy getStrategyFor(int index)
+    {
+        if (strategies.get(index) == null)
+            strategies.set(index, CFMetaData.createCompactionStrategyInstance(cfs, compactionParams));
+        return strategies.get(index);
     }
 
     private int getRangeIndex(Token token)
@@ -518,11 +523,11 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
         added.stream().filter(l0sstables::contains).forEach(this::addSSTable);
 
         ArrayList[] removedGrouped = groupSSTablesArray(removed);
-        ArrayList[] addedGrouped = groupSSTablesArray(removed);
+        ArrayList[] addedGrouped = groupSSTablesArray(added);
 
         for (int i = 0; i < strategies.size(); i++)
         {
-            AbstractCompactionStrategy strategy = strategies.get(i);
+            AbstractCompactionStrategy strategy = getStrategyFor(i);
             if (removedGrouped[i] != null && addedGrouped[i] != null)
                 strategy.replaceSSTables(removedGrouped[i], addedGrouped[i]);
             else if (removedGrouped[i] != null)

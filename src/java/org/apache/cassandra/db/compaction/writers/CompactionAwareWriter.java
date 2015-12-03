@@ -62,33 +62,21 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     private final List<PartitionPosition> diskBoundaries;
     private int locationIndex;
 
-    @Deprecated
     public CompactionAwareWriter(ColumnFamilyStore cfs,
                                     Directories directories,
                                     LifecycleTransaction txn,
                                     Set<SSTableReader> nonExpiredSSTables,
-                                    boolean offline,
                                     boolean keepOriginals)
     {
-        this(cfs, directories, txn, nonExpiredSSTables, offline, keepOriginals, true);
+        this(cfs, directories, txn, nonExpiredSSTables, keepOriginals, true);
     }
 
     public CompactionAwareWriter(ColumnFamilyStore cfs,
                                  Directories directories,
                                  LifecycleTransaction txn,
                                  Set<SSTableReader> nonExpiredSSTables,
-                                 boolean offline,
                                  boolean keepOriginals,
-                                 boolean openEarly)
-    {
-        this(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
-    }
-
-    public CompactionAwareWriter(ColumnFamilyStore cfs,
-                                 Directories directories,
-                                 LifecycleTransaction txn,
-                                 Set<SSTableReader> nonExpiredSSTables,
-                                 boolean keepOriginals)
+                                 boolean shouldOpenEarly)
     {
         this.cfs = cfs;
         this.directories = directories;
@@ -97,7 +85,10 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
         estimatedTotalKeys = SSTableReader.getApproximateKeyCount(nonExpiredSSTables);
         maxAge = CompactionTask.getMaxDataAge(nonExpiredSSTables);
-        sstableWriter = SSTableRewriter.construct(cfs, txn, keepOriginals, maxAge);
+        if (shouldOpenEarly)
+            sstableWriter = SSTableRewriter.construct(cfs, txn, keepOriginals, maxAge);
+        else
+            sstableWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, keepOriginals, maxAge);
         minRepairedAt = CompactionTask.getMinRepairedAt(nonExpiredSSTables);
         locations = cfs.getDirectories().getWriteableLocations();
         diskBoundaries = StorageService.getDiskBoundaries(cfs);

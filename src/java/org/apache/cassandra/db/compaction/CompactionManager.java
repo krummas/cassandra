@@ -258,7 +258,10 @@ public class CompactionManager implements CompactionManagerMBean
                 }
 
                 CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
+                long start = System.nanoTime();
                 AbstractCompactionTask task = strategy.getNextBackgroundTask(getDefaultGcBefore(cfs, FBUtilities.nowInSeconds()));
+                if (System.nanoTime() - start > 1_000_000)
+                    logger.debug("Slow get next background compaction task (in CompactionManager): {}", (((double)System.nanoTime()) - start)/1_000_000);
                 if (task == null)
                 {
                     logger.trace("No tasks available");

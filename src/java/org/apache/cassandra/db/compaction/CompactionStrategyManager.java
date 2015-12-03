@@ -106,7 +106,7 @@ public class CompactionStrategyManager implements INotificationConsumer
     {
         if (!isEnabled())
             return null;
-
+        long start = System.nanoTime();
         maybeReload(cfs.metadata);
         readLock.lock();
 
@@ -141,6 +141,8 @@ public class CompactionStrategyManager implements INotificationConsumer
         finally
         {
             readLock.unlock();
+            if (System.nanoTime() - start > 1_000_000)
+                logger.debug("Slow get next background task: {}ms", (((double)System.nanoTime()) - start)/1_000_000);
         }
         return null;
     }

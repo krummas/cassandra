@@ -29,7 +29,6 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.SimpleSSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -612,7 +611,7 @@ public abstract class AbstractCompactionStrategy
         strategyDescription.put("class", getClass());
         Iterable<SSTableReader> sstables = getSSTables();
         strategyDescription.put("sstablecount", Iterables.size(sstables));
-        strategyDescription.put("sstables", Lists.newArrayList(Iterables.transform(sstables, SSTable::toString)));
+        strategyDescription.put("sstables", Lists.newArrayList(Iterables.transform(sstables, SSTableReader::toString)));
         return strategyDescription;
     }
 }
