@@ -156,8 +156,9 @@ public class SystemKeyspaceTest
     public void testMigrateEmptyDataDirs() throws IOException
     {
         File dataDir = Paths.get(DatabaseDescriptor.getAllDataFileLocations()[0]).toFile();
-
-        assertTrue(new File(dataDir, "Emptykeyspace1").mkdir());
+        if (new File(dataDir, "Emptykeyspace1").exists())
+            FileUtils.deleteDirectory(new File(dataDir, "Emptykeyspace1"));
+        assertTrue(new File(dataDir, "Emptykeyspace1").mkdirs());
         assertEquals(0, numLegacyFiles());
         SystemKeyspace.migrateDataDirs();
         assertEquals(0, numLegacyFiles());
