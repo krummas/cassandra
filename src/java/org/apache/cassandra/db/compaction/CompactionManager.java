@@ -286,6 +286,8 @@ public class CompactionManager implements CompactionManagerMBean
         try
         {
             Iterable<SSTableReader> sstables = operation.filterSSTables(compactingSSTables);
+            Set<SSTableReader> filteredAway = Sets.difference(Sets.newHashSet(compactingSSTables), Sets.newHashSet(sstables));
+            cfs.getDataTracker().unmarkCompacting(filteredAway);
             List<Future<Object>> futures = new ArrayList<>();
 
             for (final SSTableReader sstable : sstables)
@@ -301,7 +303,14 @@ public class CompactionManager implements CompactionManagerMBean
                     @Override
                     public Object call() throws Exception
                     {
-                        operation.execute(sstable);
+                        try
+                        {
+                            operation.execute(sstable);
+                        }
+                        finally
+                        {
+                            cfs.getDataTracker().unmarkCompacting(Collections.singleton(sstable));
+                        }
                         return this;
                     }
                 }));
@@ -311,6 +320,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
         finally
         {
+            // this is kept as a safeguard if something goes wrong above, we don't want to ever leave sstables as compacting
             cfs.getDataTracker().unmarkCompacting(compactingSSTables);
         }
         return AllSSTableOpStatus.SUCCESSFUL;
@@ -1140,6 +1150,7 @@ public class CompactionManager implements CompactionManagerMBean
                 anticompactedSSTables.addAll(repairedSSTableWriter.finish(repairedAt));
                 anticompactedSSTables.addAll(unRepairedSSTableWriter.finish(ActiveRepairService.UNREPAIRED_SSTABLE));
                 successfullyAntiCompactedSSTables.add(sstable);
+                cfs.getDataTracker().unmarkCompacting(sstableAsSet);
             }
             catch (Throwable e)
             {
