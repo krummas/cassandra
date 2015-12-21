@@ -283,13 +283,14 @@ public class CompactionManager implements CompactionManagerMBean
             logger.info("No sstables for {}.{}", cfs.keyspace.getName(), cfs.name);
             return AllSSTableOpStatus.SUCCESSFUL;
         }
+        Set<SSTableReader> sstables = Sets.newHashSet(operation.filterSSTables(compactingSSTables));
+        Set<SSTableReader> filteredAway = Sets.difference(Sets.newHashSet(compactingSSTables), sstables);
+        cfs.getDataTracker().unmarkCompacting(filteredAway);
+        final Set<SSTableReader> finished = new HashSet<>();
+
+        List<Future<Object>> futures = new ArrayList<>();
         try
         {
-            Iterable<SSTableReader> sstables = operation.filterSSTables(compactingSSTables);
-            Set<SSTableReader> filteredAway = Sets.difference(Sets.newHashSet(compactingSSTables), Sets.newHashSet(sstables));
-            cfs.getDataTracker().unmarkCompacting(filteredAway);
-            List<Future<Object>> futures = new ArrayList<>();
-
             for (final SSTableReader sstable : sstables)
             {
                 if (executor.isShutdown())
@@ -297,7 +298,6 @@ public class CompactionManager implements CompactionManagerMBean
                     logger.info("Executor has shut down, not submitting task");
                     return AllSSTableOpStatus.ABORTED;
                 }
-
                 futures.add(executor.submit(new Callable<Object>()
                 {
                     @Override
@@ -310,18 +310,17 @@ public class CompactionManager implements CompactionManagerMBean
                         finally
                         {
                             cfs.getDataTracker().unmarkCompacting(Collections.singleton(sstable));
+                            finished.add(sstable);
                         }
                         return this;
                     }
                 }));
             }
-
             FBUtilities.waitOnFutures(futures);
         }
         finally
         {
-            // this is kept as a safeguard if something goes wrong above, we don't want to ever leave sstables as compacting
-            cfs.getDataTracker().unmarkCompacting(compactingSSTables);
+            cfs.getDataTracker().unmarkCompacting(Sets.difference(sstables, finished));
         }
         return AllSSTableOpStatus.SUCCESSFUL;
     }
