@@ -38,7 +38,7 @@ public enum OperationType
     WRITE("Write"),
     VIEW_BUILD("View build"),
     INDEX_SUMMARY("Index summary redistribution"),
-    RELOCATE_SSTABLES("Relocate sstables to correct disk");
+    RELOCATE("Relocate sstables to correct disk");
 
     public final String type;
     public final String fileName;
