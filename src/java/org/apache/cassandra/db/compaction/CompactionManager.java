@@ -286,7 +286,7 @@ public class CompactionManager implements CompactionManagerMBean
         Set<SSTableReader> sstables = Sets.newHashSet(operation.filterSSTables(compactingSSTables));
         Set<SSTableReader> filteredAway = Sets.difference(Sets.newHashSet(compactingSSTables), sstables);
         cfs.getDataTracker().unmarkCompacting(filteredAway);
-        final Set<SSTableReader> finished = new HashSet<>();
+        final Set<SSTableReader> finished = Sets.newConcurrentHashSet();
 
         List<Future<Object>> futures = new ArrayList<>();
         try
