@@ -200,7 +200,20 @@ public class CompactionsCQLTest extends CQLTester
         assertTrue(getCurrentColumnFamilyStore().getCompactionStrategyManager().isEnabled());
     }
 
+    @Test
+    public void test11102() throws Throwable
+    {
+        createTable("CREATE TABLE %s (id int, c1 int, PRIMARY KEY (id, c1)) with gc_grace_seconds = 1");
+        execute("INSERT INTO %s (id, c1) values (1, 1)");
+        execute("DELETE FROM %s WHERE id = 1 and c1 = 2");
 
+        assertRows(execute("SELECT * FROM %s"), row(1,1));
+        getCurrentColumnFamilyStore().forceBlockingFlush();
+        Thread.sleep(1100);
+        getCurrentColumnFamilyStore().forceMajorCompaction();
+        assertRows(execute("SELECT * FROM %s"), row(1,1));
+
+    }
 
     @Test(expected = IllegalArgumentException.class)
     public void testBadLocalCompactionStrategyOptions()

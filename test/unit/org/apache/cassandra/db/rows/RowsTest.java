@@ -193,6 +193,11 @@ public class RowsTest
             this.columnCount = columnSetInRow;
         }
 
+        public void containsLiveData()
+        {
+
+        }
+
         boolean hasLegacyCounterShards = false;
         public void updateHasLegacyCounterShards(boolean hasLegacyCounterShards)
         {

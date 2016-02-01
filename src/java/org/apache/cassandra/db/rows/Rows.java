@@ -96,9 +96,18 @@ public abstract class Rows
                     }
                 }
             }
-
         }
         collector.updateColumnSetPerRow(columnCount);
+        if (columnCount == 0)
+            if (!row.primaryKeyLivenessInfo().isExpiring() && row.deletion().time().isLive())
+            {
+                // we have no non-primary key columns but the row is live.
+                // in PartitionStatisticsCollector we only update max deleteiontime if either
+                // primaryKeyLivenessInfo.isExpiring() or !row.deletion().time().isLive(), this means
+                // that we don't keep any record of the max deletion time of this row (Integer.MAX_VALUE)
+                collector.containsLiveData();
+            }
+
         return cellCount;
     }
 

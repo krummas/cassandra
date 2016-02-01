@@ -198,6 +198,11 @@ public class EncodingStats
             minTTL = Math.min(minTTL, ttl);
         }
 
+        public void containsLiveData()
+        {
+            updateLocalDeletionTime(Integer.MAX_VALUE);
+        }
+
         public void updateColumnSetPerRow(long columnSetInRow)
         {
         }

@@ -196,6 +196,10 @@ public class MetadataCollector implements PartitionStatisticsCollector
         totalColumnsSet += columnSetInRow;
         ++totalRows;
     }
+    public void containsLiveData()
+    {
+        updateLocalDeletionTime(Integer.MAX_VALUE);
+    }
 
     private void updateTimestamp(long newTimestamp)
     {
