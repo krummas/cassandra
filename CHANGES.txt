@@ -1,5 +1,7 @@
 3.0.4
  * Hadoop integration is incompatible with Cassandra Driver 3.0.0 (CASSANDRA-11001)
+Merged from 2.1:
+ * Avoid major compaction mixing repaired and unrepaired sstables in DTCS (CASSANDRA-11113)
 
 
 3.0.3
@@ -39,7 +41,6 @@
  * (Hadoop) Close Clusters and Sessions in Hadoop Input/Output classes (CASSANDRA-10837)
  * Fix sstableloader not working with upper case keyspace name (CASSANDRA-10806)
 Merged from 2.2:
-2.2.5
  * maxPurgeableTimestamp needs to check memtables too (CASSANDRA-9949)
  * Apply change to compaction throughput in real time (CASSANDRA-10025)
  * Fix potential NPE on ORDER BY queries with IN (CASSANDRA-10955)
