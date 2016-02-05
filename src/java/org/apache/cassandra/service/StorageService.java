@@ -4128,10 +4128,18 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     	{
             List<String> userKeyspaces = Schema.instance.getUserKeyspaces();
 
-            if (userKeyspaces.size() > 1)
-                throw new IllegalStateException("Non-system keyspaces don't have the same replication settings, effective ownership information is meaningless");
-
-            keyspace = "system_traces";
+            if (userKeyspaces.size() > 0)
+            {
+                keyspace = userKeyspaces.iterator().next();
+                AbstractReplicationStrategy replicationStrategy = Schema.instance.getKeyspaceInstance(keyspace).getReplicationStrategy();
+                for (String keyspaceName : userKeyspaces)
+                {
+                    if (!Schema.instance.getKeyspaceInstance(keyspaceName).getReplicationStrategy().hasSameSettings(replicationStrategy))
+                        throw new IllegalStateException("Non-system keyspaces don't have the same replication settings, effective ownership information is meaningless");
+                }
+            }
+            else
+                keyspace = "system_traces";
 
             Keyspace keyspaceInstance = Schema.instance.getKeyspaceInstance(keyspace);
             if(keyspaceInstance == null)
