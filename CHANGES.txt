@@ -15,6 +15,8 @@
  * Add 3.0 metadata to sstablemetadata output (CASSANDRA-10838)
 Merged from 3.0:
  * Hadoop integration is incompatible with Cassandra Driver 3.0.0 (CASSANDRA-11001)
+Merged from 2.1:
+ * Avoid major compaction mixing repaired and unrepaired sstables in DTCS (CASSANDRA-11113)
 
 
 3.3
