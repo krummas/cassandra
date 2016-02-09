@@ -66,7 +66,6 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
     private long currentlyOpenedEarlyAt; // the position (in MB) in the target file we last (re)opened at
 
     private final List<SSTableWriter> writers = new ArrayList<>();
-    private final boolean isOffline; // true for operations that are performed without Cassandra running (prevents updates of Tracker)
 
     private SSTableWriter writer;
     private Map<DecoratedKey, RowIndexEntry> cachedKeys = new HashMap<>();
@@ -74,25 +73,24 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
     // for testing (TODO: remove when have byteman setup)
     private boolean throwEarly, throwLate;
 
-    public SSTableRewriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, long maxAge, boolean isOffline)
+    public SSTableRewriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, long maxAge)
     {
-        this(cfs, transaction, maxAge, isOffline, true);
+        this(cfs, transaction, maxAge, true);
     }
 
-    public SSTableRewriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, long maxAge, boolean isOffline, boolean shouldOpenEarly)
+    public SSTableRewriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, long maxAge, boolean shouldOpenEarly)
     {
-        this(cfs, transaction, maxAge, isOffline, calculateOpenInterval(shouldOpenEarly));
+        this(cfs, transaction, maxAge, calculateOpenInterval(shouldOpenEarly));
     }
 
     @VisibleForTesting
-    public SSTableRewriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, long maxAge, boolean isOffline, long preemptiveOpenInterval)
+    public SSTableRewriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, long maxAge, long preemptiveOpenInterval)
     {
         this.transaction = transaction;
         for (SSTableReader sstable : this.transaction.originals())
             fileDescriptors.put(sstable.descriptor, CLibrary.getfd(sstable.getFilename()));
         this.cfs = cfs;
         this.maxAge = maxAge;
-        this.isOffline = isOffline;
         this.preemptiveOpenInterval = preemptiveOpenInterval;
     }
 
@@ -114,7 +112,7 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
         // we do this before appending to ensure we can resetAndTruncate() safely if the append fails
         maybeReopenEarly(row.key);
         RowIndexEntry index = writer.append(row);
-        if (!isOffline)
+        if (!transaction.isOffline())
         {
             if (index == null)
             {
@@ -157,7 +155,7 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
     {
         if (writer.getFilePointer() - currentlyOpenedEarlyAt > preemptiveOpenInterval)
         {
-            if (isOffline)
+            if (transaction.isOffline())
             {
                 for (SSTableReader reader : transaction.originals())
                 {
@@ -212,7 +210,7 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
      */
     private void moveStarts(SSTableReader newReader, DecoratedKey lowerbound)
     {
-        if (isOffline)
+        if (transaction.isOffline())
             return;
         if (preemptiveOpenInterval == Long.MAX_VALUE)
             return;
@@ -362,7 +360,7 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
             throw new RuntimeException("exception thrown after all sstables finished, for testing");
 
         // TODO: do we always want to avoid obsoleting if offline?
-        if (!isOffline)
+        if (!transaction.isOffline())
             transaction.obsoleteOriginals();
 
         transaction.prepareToCommit();

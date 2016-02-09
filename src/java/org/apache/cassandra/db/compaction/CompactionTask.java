@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db.compaction;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -52,15 +51,13 @@ public class CompactionTask extends AbstractCompactionTask
 {
     protected static final Logger logger = LoggerFactory.getLogger(CompactionTask.class);
     protected final int gcBefore;
-    private final boolean offline;
     protected static long totalBytesCompacted = 0;
     private CompactionExecutorStatsCollector collector;
 
-    public CompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore, boolean offline)
+    public CompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore)
     {
         super(cfs, txn);
         this.gcBefore = gcBefore;
-        this.offline = offline;
     }
 
     public static synchronized long addToTotalBytesCompacted(long bytesCompacted)
@@ -226,7 +223,7 @@ public class CompactionTask extends AbstractCompactionTask
             logger.trace(String.format("CF Total Bytes Compacted: %,d", CompactionTask.addToTotalBytesCompacted(endsize)));
             logger.trace("Actual #keys: {}, Estimated #keys:{}, Err%: {}", totalKeysWritten, estimatedKeys, ((double)(totalKeysWritten - estimatedKeys)/totalKeysWritten));
 
-            if (offline)
+            if (transaction.isOffline())
                 Refs.release(Refs.selfRefs(newSStables));
         }
     }
@@ -234,7 +231,7 @@ public class CompactionTask extends AbstractCompactionTask
     @Override
     public CompactionAwareWriter getCompactionAwareWriter(ColumnFamilyStore cfs, LifecycleTransaction transaction, Set<SSTableReader> nonExpiredSSTables)
     {
-        return new DefaultCompactionWriter(cfs, transaction, nonExpiredSSTables, offline, compactionType);
+        return new DefaultCompactionWriter(cfs, transaction, nonExpiredSSTables, compactionType);
 
     }
 

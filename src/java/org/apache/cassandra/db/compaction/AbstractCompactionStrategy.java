@@ -178,7 +178,7 @@ public abstract class AbstractCompactionStrategy
 
     public AbstractCompactionTask getCompactionTask(LifecycleTransaction txn, final int gcBefore, long maxSSTableBytes)
     {
-        return new CompactionTask(cfs, txn, gcBefore, false);
+        return new CompactionTask(cfs, txn, gcBefore);
     }
 
     /**
