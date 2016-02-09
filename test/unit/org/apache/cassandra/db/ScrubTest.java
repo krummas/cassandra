@@ -350,7 +350,7 @@ public class ScrubTest
         for (SSTableReader sstable : cfs.getSSTables())
             new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)).delete();
 
-        CompactionManager.instance.performScrub(cfs, false, true, true);
+        CompactionManager.instance.performScrub(cfs, false, true, false);
 
         // check data is still there
         rows = cfs.getRangeSlice(Util.range("", ""), null, new IdentityQueryFilter(), 1000);
