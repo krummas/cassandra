@@ -111,8 +111,6 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         return sstableWriter.finished();
     }
 
-    public abstract List<SSTableReader> finish(long repairedAt);
-
     /**
      * estimated number of keys we should write
      */
