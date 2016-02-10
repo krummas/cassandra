@@ -41,6 +41,12 @@ public class DefaultCompactionWriter extends CompactionAwareWriter
 {
     protected static final Logger logger = LoggerFactory.getLogger(DefaultCompactionWriter.class);
 
+    // using the offline boolean is deprecated, the LifecycleTransaction states whether this is an offline compaction or not
+    @Deprecated
+    public DefaultCompactionWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, boolean offline, OperationType compactionType)
+    {
+        this(cfs, txn, nonExpiredSSTables, compactionType);
+    }
     @SuppressWarnings("resource")
     public DefaultCompactionWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, OperationType compactionType)
     {

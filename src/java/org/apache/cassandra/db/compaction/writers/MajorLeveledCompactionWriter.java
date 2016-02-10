@@ -47,6 +47,13 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     private int sstablesWritten = 0;
     private final boolean skipAncestors;
 
+    // using the offline boolean is deprecated, the LifecycleTransaction states whether this is an offline compaction or not
+    @Deprecated
+    public MajorLeveledCompactionWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, long maxSSTableSize, boolean offline, OperationType compactionType)
+    {
+        this(cfs, txn, nonExpiredSSTables, maxSSTableSize, compactionType);
+    }
+
     @SuppressWarnings("resource")
     public MajorLeveledCompactionWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, long maxSSTableSize, OperationType compactionType)
     {

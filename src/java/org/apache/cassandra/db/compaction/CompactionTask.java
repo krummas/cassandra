@@ -54,6 +54,13 @@ public class CompactionTask extends AbstractCompactionTask
     protected static long totalBytesCompacted = 0;
     private CompactionExecutorStatsCollector collector;
 
+    // using the offline boolean is deprecated - the LifecycleTransaction states whether this is offline or not
+    @Deprecated
+    public CompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore, boolean offline)
+    {
+        this(cfs, txn, gcBefore);
+    }
+
     public CompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore)
     {
         super(cfs, txn);

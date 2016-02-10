@@ -39,6 +39,13 @@ public class MaxSSTableSizeWriter extends CompactionAwareWriter
     private final long estimatedSSTables;
     private final Set<SSTableReader> allSSTables;
 
+    // using the offline boolean is deprecated, the LifecycleTransaction states whether this is an offline compaction or not
+    @Deprecated
+    public MaxSSTableSizeWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, long maxSSTableSize, int level, boolean offline, OperationType compactionType)
+    {
+        this(cfs, txn, nonExpiredSSTables, maxSSTableSize, level, compactionType);
+    }
+
     @SuppressWarnings("resource")
     public MaxSSTableSizeWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, long maxSSTableSize, int level, OperationType compactionType)
     {

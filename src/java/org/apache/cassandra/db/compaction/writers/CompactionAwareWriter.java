@@ -44,6 +44,13 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     protected final long minRepairedAt;
     protected final SSTableRewriter sstableWriter;
 
+    // using the offline boolean is deprecated, the LifecycleTransaction states whether this is an offline compaction or not
+    @Deprecated
+    public CompactionAwareWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, boolean offline)
+    {
+        this(cfs, txn, nonExpiredSSTables);
+    }
+
     public CompactionAwareWriter(ColumnFamilyStore cfs, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables)
     {
         this.cfs = cfs;
