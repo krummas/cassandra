@@ -222,6 +222,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     public void init(StreamResultFuture streamResult)
     {
         this.streamResult = streamResult;
+        IStreamHook.instance.reportStreamFuture(this, streamResult);
     }
 
     public void start()

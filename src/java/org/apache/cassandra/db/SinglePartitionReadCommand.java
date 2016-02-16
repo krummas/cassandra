@@ -547,7 +547,7 @@ public class SinglePartitionReadCommand extends ReadCommand
 
                 @SuppressWarnings("resource") // 'iter' is added to iterators which is closed on exception,
                                               // or through the closing of the final merged iterator
-                UnfilteredRowIteratorWithLowerBound iter = makeIterator(sstable, true);
+                UnfilteredRowIteratorWithLowerBound iter = IStorageHook.instance.makeRowIteratorWithLowerBound(cfs, this, sstable, true);
                 if (!sstable.isRepaired())
                     oldestUnrepairedTombstone = Math.min(oldestUnrepairedTombstone, sstable.getMinLocalDeletionTime());
 
@@ -582,6 +582,7 @@ public class SinglePartitionReadCommand extends ReadCommand
             if (iterators.isEmpty())
                 return EmptyIterators.unfilteredRow(cfs.metadata, partitionKey(), filter.isReversed());
 
+            IStorageHook.instance.reportRead(cfs.metadata.cfId, partitionKey());
             return withStateTracking(withSSTablesIterated(iterators, cfs.metric));
         }
         catch (RuntimeException | Error e)
@@ -724,7 +725,7 @@ public class SinglePartitionReadCommand extends ReadCommand
 
                 // We need to get the partition deletion and include it if it's live. In any case though, we're done with that sstable.
                 sstable.incrementReadCount();
-                try (UnfilteredRowIterator iter = sstable.iterator(partitionKey(), Slices.ALL, columnFilter(), filter.isReversed(), isForThrift()))
+                try (UnfilteredRowIterator iter = IStorageHook.instance.makeRowIterator(cfs, sstable, partitionKey(), Slices.ALL, columnFilter(), filter.isReversed(), isForThrift()))
                 {
                     if (iter.partitionLevelDeletion().isLive())
                     {
@@ -737,7 +738,7 @@ public class SinglePartitionReadCommand extends ReadCommand
 
             Tracing.trace("Merging data from sstable {}", sstable.descriptor.generation);
             sstable.incrementReadCount();
-            try (UnfilteredRowIterator iter = sstable.iterator(partitionKey(), filter.getSlices(metadata()), columnFilter(), filter.isReversed(), isForThrift()))
+            try (UnfilteredRowIterator iter = IStorageHook.instance.makeRowIterator(cfs, sstable, partitionKey(), filter.getSlices(metadata()), columnFilter(), filter.isReversed(), isForThrift()))
             {
                 if (iter.isEmpty())
                     continue;
@@ -754,6 +755,7 @@ public class SinglePartitionReadCommand extends ReadCommand
 
         DecoratedKey key = result.partitionKey();
         cfs.metric.samplers.get(TableMetrics.Sampler.READS).addSample(key.getKey(), key.hashCode(), 1);
+        IStorageHook.instance.reportRead(cfs.metadata.cfId, partitionKey());
 
         // "hoist up" the requested data into a more recent sstable
         if (sstablesIterated > cfs.getMinimumCompactionThreshold()
