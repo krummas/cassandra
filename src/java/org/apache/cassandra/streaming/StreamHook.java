@@ -24,45 +24,34 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.streaming.messages.OutgoingFileMessage;
 import org.apache.cassandra.utils.FBUtilities;
 
-public interface IStreamHook
+public interface StreamHook
 {
+    public static final StreamHook instance = createHook();
 
-    public static IStreamHook DEFAULT = new IStreamHook()
+    public OutgoingFileMessage reportOutgoingFile(StreamSession session, SSTableReader sstable, OutgoingFileMessage message);
+    public void reportStreamFuture(StreamSession session, StreamResultFuture future);
+    public void reportIncomingFile(ColumnFamilyStore cfs, SSTableMultiWriter writer, StreamSession session, int sequenceNumber);
+
+    static StreamHook createHook()
     {
-        public OutgoingFileMessage reportOutgoingFile(StreamSession session, SSTableReader sstable, OutgoingFileMessage message)
-        {
-            return message;
-        }
-
-        public void reportStreamFuture(StreamSession session, StreamResultFuture future)
-        {
-
-        }
-
-        public void reportIncomingFile(ColumnFamilyStore cfs, SSTableMultiWriter writer, StreamSession session, int sequenceNumber)
-        {
-
-        }
-    };
-
-    static IStreamHook createHook()
-    {
-        String className =  System.getProperty("cassandra_stream_hook");
+        String className =  System.getProperty("cassandra.stream_hook");
         if (className != null)
         {
-            return FBUtilities.construct(className, IStreamHook.class.getSimpleName());
+            return FBUtilities.construct(className, StreamHook.class.getSimpleName());
         }
         else
         {
-            return DEFAULT;
+            return new StreamHook()
+            {
+                public OutgoingFileMessage reportOutgoingFile(StreamSession session, SSTableReader sstable, OutgoingFileMessage message)
+                {
+                    return message;
+                }
+
+                public void reportStreamFuture(StreamSession session, StreamResultFuture future) {}
+
+                public void reportIncomingFile(ColumnFamilyStore cfs, SSTableMultiWriter writer, StreamSession session, int sequenceNumber) {}
+            };
         }
     }
-
-    public static IStreamHook instance = createHook();
-
-    public OutgoingFileMessage reportOutgoingFile(StreamSession session, SSTableReader sstable, OutgoingFileMessage message);
-
-    public void reportStreamFuture(StreamSession session, StreamResultFuture future);
-
-    public void reportIncomingFile(ColumnFamilyStore cfs, SSTableMultiWriter writer, StreamSession session, int sequenceNumber);
 }
