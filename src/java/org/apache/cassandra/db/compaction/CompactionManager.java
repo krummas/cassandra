@@ -1078,24 +1078,24 @@ public class CompactionManager implements CompactionManagerMBean
                         sstablesToValidate.add(sstable);
                     }
                 }
-
-                Set<SSTableReader> currentlyRepairing = ActiveRepairService.instance.currentlyRepairing(cfs.metadata.cfId, validator.desc.parentSessionId);
-
-                if (!Sets.intersection(currentlyRepairing, sstablesToValidate).isEmpty())
+                synchronized (this)
                 {
-                    logger.error("Cannot start multiple repair sessions over the same sstables");
-                    throw new RuntimeException("Cannot start multiple repair sessions over the same sstables");
-                }
+                    Set<SSTableReader> currentlyRepairing = ActiveRepairService.instance.currentlyRepairing(cfs.metadata.cfId, validator.desc.parentSessionId);
+                    if (!Sets.intersection(currentlyRepairing, sstablesToValidate).isEmpty())
+                    {
+                        logger.error("Cannot start multiple repair sessions over the same sstables");
+                        throw new RuntimeException("Cannot start multiple repair sessions over the same sstables");
+                    }
 
-                sstables = Refs.tryRef(sstablesToValidate);
-                if (sstables == null)
-                {
-                    logger.error("Could not reference sstables");
-                    throw new RuntimeException("Could not reference sstables");
+                    sstables = Refs.tryRef(sstablesToValidate);
+                    if (sstables == null)
+                    {
+                        logger.error("Could not reference sstables");
+                        throw new RuntimeException("Could not reference sstables");
+                    }
+                    sstableCandidates.release();
+                    prs.addSSTables(cfs.metadata.cfId, sstablesToValidate);
                 }
-                sstableCandidates.release();
-                prs.addSSTables(cfs.metadata.cfId, sstablesToValidate);
-
                 if (validator.gcBefore > 0)
                     gcBefore = validator.gcBefore;
                 else
