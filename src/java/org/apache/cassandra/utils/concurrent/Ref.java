@@ -339,8 +339,8 @@ public final class Ref<T> implements RefCounted<T>
         EXEC.execute(new ReferenceReaper());
         if (DEBUG_ENABLED)
         {
-            STRONG_LEAK_DETECTOR.scheduleAtFixedRate(new Visitor(), 1, 15, TimeUnit.MINUTES);
-            STRONG_LEAK_DETECTOR.scheduleAtFixedRate(new StrongLeakDetector(), 2, 15, TimeUnit.MINUTES);
+            STRONG_LEAK_DETECTOR.scheduleAtFixedRate(new Visitor(), 1, 1, TimeUnit.SECONDS);
+            STRONG_LEAK_DETECTOR.scheduleAtFixedRate(new StrongLeakDetector(), 2, 1, TimeUnit.SECONDS);
         }
         concurrentIterables.addAll(Arrays.asList(concurrentIterableClasses));
     }
