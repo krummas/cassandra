@@ -18,7 +18,6 @@
 package org.apache.cassandra.db.lifecycle;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
@@ -63,7 +62,7 @@ public class Tracker
 {
     private static final Logger logger = LoggerFactory.getLogger(Tracker.class);
 
-    public final Collection<WeakReference<INotificationConsumer>> subscribers = new CopyOnWriteArrayList<>();
+    public final Collection<INotificationConsumer> subscribers = new CopyOnWriteArrayList<>();
     public final ColumnFamilyStore cfstore;
     final AtomicReference<View> view;
     public final boolean loadsstables;
@@ -392,13 +391,11 @@ public class Tracker
     Throwable notifySSTablesChanged(Collection<SSTableReader> removed, Collection<SSTableReader> added, OperationType compactionType, Throwable accumulate)
     {
         INotification notification = new SSTableListChangedNotification(added, removed, compactionType);
-        for (WeakReference<INotificationConsumer> subscriberRef : subscribers)
+        for (INotificationConsumer subscriber : subscribers)
         {
             try
             {
-                INotificationConsumer subscriber = subscriberRef.get();
-                if (subscriber != null)
-                    subscriber.handleNotification(notification, this);
+                subscriber.handleNotification(notification, this);
             }
             catch (Throwable t)
             {
@@ -411,13 +408,11 @@ public class Tracker
     Throwable notifyAdded(Iterable<SSTableReader> added, Throwable accumulate)
     {
         INotification notification = new SSTableAddedNotification(added);
-        for (WeakReference<INotificationConsumer> subscriberRef : subscribers)
+        for (INotificationConsumer subscriber : subscribers)
         {
             try
             {
-                INotificationConsumer subscriber = subscriberRef.get();
-                if (subscriber != null)
-                    subscriber.handleNotification(notification, this);
+                subscriber.handleNotification(notification, this);
             }
             catch (Throwable t)
             {
@@ -435,35 +430,29 @@ public class Tracker
     public void notifySSTableRepairedStatusChanged(Collection<SSTableReader> repairStatusesChanged)
     {
         INotification notification = new SSTableRepairStatusChanged(repairStatusesChanged);
-        notify(notification);
+        for (INotificationConsumer subscriber : subscribers)
+            subscriber.handleNotification(notification, this);
     }
 
     public void notifyDeleting(SSTableReader deleting)
     {
         INotification notification = new SSTableDeletingNotification(deleting);
-        notify(notification);
+        for (INotificationConsumer subscriber : subscribers)
+            subscriber.handleNotification(notification, this);
     }
 
     public void notifyRenewed(Memtable renewed)
     {
         INotification notification = new MemtableRenewedNotification(renewed);
-        notify(notification);
+        for (INotificationConsumer subscriber : subscribers)
+            subscriber.handleNotification(notification, this);
     }
 
     public void notifyTruncated(long truncatedAt)
     {
         INotification notification = new TruncationNotification(truncatedAt);
-        notify(notification);
-    }
-
-    private void notify(INotification notification)
-    {
-        for (WeakReference<INotificationConsumer> subscriberRef : subscribers)
-        {
-            INotificationConsumer subscriber = subscriberRef.get();
-            if (subscriber != null)
-                subscriber.handleNotification(notification, this);
-        }
+        for (INotificationConsumer subscriber : subscribers)
+            subscriber.handleNotification(notification, this);
     }
 
     public boolean isDummy()
@@ -473,12 +462,12 @@ public class Tracker
 
     public void subscribe(INotificationConsumer consumer)
     {
-        subscribers.add(new WeakReference<>(consumer));
+        subscribers.add(consumer);
     }
 
     public void unsubscribe(INotificationConsumer consumer)
     {
-        subscribers.remove(new WeakReference<>(consumer));
+        subscribers.remove(consumer);
     }
 
     private static Set<SSTableReader> emptySet()
