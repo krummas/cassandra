@@ -271,10 +271,9 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    private AllSSTableOpStatus parallelAllSSTableOperation(final ColumnFamilyStore cfs, final OneSSTableOperation operation, boolean sequential) throws ExecutionException, InterruptedException
+    private AllSSTableOpStatus parallelAllSSTableOperation(final ColumnFamilyStore cfs, final OneSSTableOperation operation, int jobs) throws ExecutionException, InterruptedException
     {
         Iterable<SSTableReader> compactingSSTables = cfs.markAllCompacting();
-        logger.info("sequential == {}", sequential);
         if (compactingSSTables == null)
         {
             logger.info("Aborting operation on {}.{} after failing to interrupt other compaction operations", cfs.keyspace.getName(), cfs.name);
@@ -318,14 +317,14 @@ public class CompactionManager implements CompactionManagerMBean
                         return this;
                     }
                 };
-
-                if (sequential)
-                    executor.submit(callable).get();
-                else
-                    futures.add(executor.submit(callable));
+                futures.add(executor.submit(callable));
+                if (jobs > 0 && futures.size() == jobs)
+                {
+                    FBUtilities.waitOnFutures(futures);
+                    futures.clear();
+                }
             }
-            if (!sequential)
-                FBUtilities.waitOnFutures(futures);
+            FBUtilities.waitOnFutures(futures);
         }
         finally
         {
@@ -349,7 +348,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    public AllSSTableOpStatus performScrub(final ColumnFamilyStore cfs, final boolean skipCorrupted, final boolean checkData, boolean sequential) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performScrub(final ColumnFamilyStore cfs, final boolean skipCorrupted, final boolean checkData, int jobs) throws InterruptedException, ExecutionException
     {
         assert !cfs.isIndex();
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
@@ -365,10 +364,10 @@ public class CompactionManager implements CompactionManagerMBean
             {
                 scrubOne(cfs, input, skipCorrupted, checkData);
             }
-        }, sequential);
+        }, jobs);
     }
 
-    public AllSSTableOpStatus performSSTableRewrite(final ColumnFamilyStore cfs, final boolean excludeCurrentVersion, boolean sequential) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performSSTableRewrite(final ColumnFamilyStore cfs, final boolean excludeCurrentVersion, int jobs) throws InterruptedException, ExecutionException
     {
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
         {
@@ -393,10 +392,10 @@ public class CompactionManager implements CompactionManagerMBean
                 task.setCompactionType(OperationType.UPGRADE_SSTABLES);
                 task.execute(metrics);
             }
-        }, sequential);
+        }, jobs);
     }
 
-    public AllSSTableOpStatus performCleanup(final ColumnFamilyStore cfStore, boolean sequential) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performCleanup(final ColumnFamilyStore cfStore, int jobs) throws InterruptedException, ExecutionException
     {
         assert !cfStore.isIndex();
         Keyspace keyspace = cfStore.keyspace;
@@ -424,7 +423,7 @@ public class CompactionManager implements CompactionManagerMBean
                 CleanupStrategy cleanupStrategy = CleanupStrategy.get(cfStore, ranges);
                 doCleanupOne(cfStore, input, cleanupStrategy, ranges, hasIndexes);
             }
-        }, sequential);
+        }, jobs);
     }
 
     public ListenableFuture<?> submitAntiCompaction(final ColumnFamilyStore cfs,

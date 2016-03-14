@@ -2385,10 +2385,10 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     public int forceKeyspaceCleanup(String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return forceKeyspaceCleanup(false, keyspaceName, columnFamilies);
+        return forceKeyspaceCleanup(0, keyspaceName, columnFamilies);
     }
 
-    public int forceKeyspaceCleanup(boolean sequential, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int forceKeyspaceCleanup(int jobs, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
         if (keyspaceName.equals(Keyspace.SYSTEM_KS))
             throw new RuntimeException("Cleanup of the system keyspace is neither necessary nor wise");
@@ -2396,7 +2396,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         CompactionManager.AllSSTableOpStatus status = CompactionManager.AllSSTableOpStatus.SUCCESSFUL;
         for (ColumnFamilyStore cfStore : getValidColumnFamilies(false, false, keyspaceName, columnFamilies))
         {
-            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.forceCleanup(sequential);
+            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.forceCleanup(jobs);
             if (oneStatus != CompactionManager.AllSSTableOpStatus.SUCCESSFUL)
                 status = oneStatus;
         }
@@ -2405,20 +2405,20 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     public int scrub(boolean disableSnapshot, boolean skipCorrupted, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return scrub(disableSnapshot, skipCorrupted, true, false, keyspaceName, columnFamilies);
+        return scrub(disableSnapshot, skipCorrupted, true, 0, keyspaceName, columnFamilies);
     }
 
     public int scrub(boolean disableSnapshot, boolean skipCorrupted, boolean checkData, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return scrub(disableSnapshot, skipCorrupted, checkData, false, keyspaceName, columnFamilies);
+        return scrub(disableSnapshot, skipCorrupted, checkData, 0, keyspaceName, columnFamilies);
     }
 
-    public int scrub(boolean disableSnapshot, boolean skipCorrupted, boolean checkData, boolean sequential, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int scrub(boolean disableSnapshot, boolean skipCorrupted, boolean checkData, int jobs, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
         CompactionManager.AllSSTableOpStatus status = CompactionManager.AllSSTableOpStatus.SUCCESSFUL;
         for (ColumnFamilyStore cfStore : getValidColumnFamilies(false, false, keyspaceName, columnFamilies))
         {
-            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.scrub(disableSnapshot, skipCorrupted, checkData, sequential);
+            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.scrub(disableSnapshot, skipCorrupted, checkData, jobs);
             if (oneStatus != CompactionManager.AllSSTableOpStatus.SUCCESSFUL)
                 status = oneStatus;
         }
@@ -2426,15 +2426,15 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     }
     public int upgradeSSTables(String keyspaceName, boolean excludeCurrentVersion, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return upgradeSSTables(keyspaceName, excludeCurrentVersion, false, columnFamilies);
+        return upgradeSSTables(keyspaceName, excludeCurrentVersion, 2, columnFamilies);
     }
 
-    public int upgradeSSTables(String keyspaceName, boolean excludeCurrentVersion, boolean sequential, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int upgradeSSTables(String keyspaceName, boolean excludeCurrentVersion, int jobs, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
         CompactionManager.AllSSTableOpStatus status = CompactionManager.AllSSTableOpStatus.SUCCESSFUL;
         for (ColumnFamilyStore cfStore : getValidColumnFamilies(true, true, keyspaceName, columnFamilies))
         {
-            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.sstablesRewrite(excludeCurrentVersion, sequential);
+            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.sstablesRewrite(excludeCurrentVersion, jobs);
             if (oneStatus != CompactionManager.AllSSTableOpStatus.SUCCESSFUL)
                 status = oneStatus;
         }

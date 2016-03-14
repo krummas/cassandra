@@ -237,42 +237,42 @@ public class NodeProbe implements AutoCloseable
         jmxc.close();
     }
 
-    public int forceKeyspaceCleanup(boolean sequential, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int forceKeyspaceCleanup(int jobs, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return ssProxy.forceKeyspaceCleanup(sequential, keyspaceName, columnFamilies);
+        return ssProxy.forceKeyspaceCleanup(jobs, keyspaceName, columnFamilies);
     }
 
-    public int scrub(boolean disableSnapshot, boolean skipCorrupted, boolean checkData, boolean sequential, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int scrub(boolean disableSnapshot, boolean skipCorrupted, boolean checkData, int jobs, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return ssProxy.scrub(disableSnapshot, skipCorrupted, checkData, sequential, keyspaceName, columnFamilies);
+        return ssProxy.scrub(disableSnapshot, skipCorrupted, checkData, jobs, keyspaceName, columnFamilies);
     }
 
-    public int upgradeSSTables(String keyspaceName, boolean excludeCurrentVersion, boolean sequential, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public int upgradeSSTables(String keyspaceName, boolean excludeCurrentVersion, int jobs, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        return ssProxy.upgradeSSTables(keyspaceName, excludeCurrentVersion, sequential, columnFamilies);
+        return ssProxy.upgradeSSTables(keyspaceName, excludeCurrentVersion, jobs, columnFamilies);
     }
 
-    public void forceKeyspaceCleanup(PrintStream out, boolean sequential, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public void forceKeyspaceCleanup(PrintStream out, int jobs, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        if (forceKeyspaceCleanup(sequential, keyspaceName, columnFamilies) != 0)
+        if (forceKeyspaceCleanup(jobs, keyspaceName, columnFamilies) != 0)
         {
             failed = true;
             out.println("Aborted cleaning up atleast one column family in keyspace "+keyspaceName+", check server logs for more information.");
         }
     }
 
-    public void scrub(PrintStream out, boolean disableSnapshot, boolean skipCorrupted, boolean checkData, boolean sequential, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public void scrub(PrintStream out, boolean disableSnapshot, boolean skipCorrupted, boolean checkData, int jobs, String keyspaceName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        if (scrub(disableSnapshot, skipCorrupted, checkData, sequential, keyspaceName, columnFamilies) != 0)
+        if (scrub(disableSnapshot, skipCorrupted, checkData, jobs, keyspaceName, columnFamilies) != 0)
         {
             failed = true;
             out.println("Aborted scrubbing atleast one column family in keyspace "+keyspaceName+", check server logs for more information.");
         }
     }
 
-    public void upgradeSSTables(PrintStream out, String keyspaceName, boolean excludeCurrentVersion, boolean sequential, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
+    public void upgradeSSTables(PrintStream out, String keyspaceName, boolean excludeCurrentVersion, int jobs, String... columnFamilies) throws IOException, ExecutionException, InterruptedException
     {
-        if (upgradeSSTables(keyspaceName, excludeCurrentVersion, sequential, columnFamilies) != 0)
+        if (upgradeSSTables(keyspaceName, excludeCurrentVersion, jobs, columnFamilies) != 0)
         {
             failed = true;
             out.println("Aborted upgrading sstables for atleast one column family in keyspace "+keyspaceName+", check server logs for more information.");
