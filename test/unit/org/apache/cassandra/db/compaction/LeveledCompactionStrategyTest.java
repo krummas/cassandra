@@ -328,7 +328,7 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
         assertTrue(strategy.getAllLevelSize()[1] > 0);
 
         cfs.disableAutoCompaction();
-        cfs.sstablesRewrite(false);
+        cfs.sstablesRewrite(false, false);
         assertTrue(strategy.getAllLevelSize()[1] > 0);
 
     }

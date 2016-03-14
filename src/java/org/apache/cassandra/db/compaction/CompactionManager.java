@@ -271,9 +271,10 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    private AllSSTableOpStatus parallelAllSSTableOperation(final ColumnFamilyStore cfs, final OneSSTableOperation operation) throws ExecutionException, InterruptedException
+    private AllSSTableOpStatus parallelAllSSTableOperation(final ColumnFamilyStore cfs, final OneSSTableOperation operation, boolean sequential) throws ExecutionException, InterruptedException
     {
         Iterable<SSTableReader> compactingSSTables = cfs.markAllCompacting();
+        logger.info("sequential == {}", sequential);
         if (compactingSSTables == null)
         {
             logger.info("Aborting operation on {}.{} after failing to interrupt other compaction operations", cfs.keyspace.getName(), cfs.name);
@@ -299,7 +300,8 @@ public class CompactionManager implements CompactionManagerMBean
                     logger.info("Executor has shut down, not submitting task");
                     return AllSSTableOpStatus.ABORTED;
                 }
-                futures.add(executor.submit(new Callable<Object>()
+
+                Callable<Object> callable = new Callable<Object>()
                 {
                     @Override
                     public Object call() throws Exception
@@ -315,9 +317,15 @@ public class CompactionManager implements CompactionManagerMBean
                         }
                         return this;
                     }
-                }));
+                };
+
+                if (sequential)
+                    executor.submit(callable).get();
+                else
+                    futures.add(executor.submit(callable));
             }
-            FBUtilities.waitOnFutures(futures);
+            if (!sequential)
+                FBUtilities.waitOnFutures(futures);
         }
         finally
         {
@@ -341,7 +349,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    public AllSSTableOpStatus performScrub(final ColumnFamilyStore cfs, final boolean skipCorrupted, final boolean checkData) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performScrub(final ColumnFamilyStore cfs, final boolean skipCorrupted, final boolean checkData, boolean sequential) throws InterruptedException, ExecutionException
     {
         assert !cfs.isIndex();
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
@@ -357,10 +365,10 @@ public class CompactionManager implements CompactionManagerMBean
             {
                 scrubOne(cfs, input, skipCorrupted, checkData);
             }
-        });
+        }, sequential);
     }
 
-    public AllSSTableOpStatus performSSTableRewrite(final ColumnFamilyStore cfs, final boolean excludeCurrentVersion) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performSSTableRewrite(final ColumnFamilyStore cfs, final boolean excludeCurrentVersion, boolean sequential) throws InterruptedException, ExecutionException
     {
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
         {
@@ -385,10 +393,10 @@ public class CompactionManager implements CompactionManagerMBean
                 task.setCompactionType(OperationType.UPGRADE_SSTABLES);
                 task.execute(metrics);
             }
-        });
+        }, sequential);
     }
 
-    public AllSSTableOpStatus performCleanup(final ColumnFamilyStore cfStore) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performCleanup(final ColumnFamilyStore cfStore, boolean sequential) throws InterruptedException, ExecutionException
     {
         assert !cfStore.isIndex();
         Keyspace keyspace = cfStore.keyspace;
@@ -416,7 +424,7 @@ public class CompactionManager implements CompactionManagerMBean
                 CleanupStrategy cleanupStrategy = CleanupStrategy.get(cfStore, ranges);
                 doCleanupOne(cfStore, input, cleanupStrategy, ranges, hasIndexes);
             }
-        });
+        }, sequential);
     }
 
     public ListenableFuture<?> submitAntiCompaction(final ColumnFamilyStore cfs,
