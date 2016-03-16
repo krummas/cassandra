@@ -30,6 +30,7 @@ import com.google.common.util.concurrent.Runnables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.codahale.metrics.Counter;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.Directories;
@@ -288,16 +289,14 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
         // must not retain a reference to the SSTableReader, else leak detection cannot kick in
         private final Descriptor desc;
         private final long sizeOnDisk;
-        private final Tracker tracker;
-        private final boolean wasNew;
+        private final Counter totalDiskSpaceUsed;
         private final Ref<LogTransaction> parentRef;
 
         public SSTableTidier(SSTableReader referent, boolean wasNew, LogTransaction parent)
         {
             this.desc = referent.descriptor;
             this.sizeOnDisk = referent.bytesOnDisk();
-            this.tracker = parent.tracker;
-            this.wasNew = wasNew;
+            this.totalDiskSpaceUsed = (parent.tracker != null && parent.tracker.cfstore != null && !wasNew ? parent.tracker.cfstore.metric.totalDiskSpaceUsed : null);
             this.parentRef = parent.selfRef.tryRef();
         }
 
@@ -321,8 +320,8 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
                 return;
             }
 
-            if (tracker != null && tracker.cfstore != null && !wasNew)
-                tracker.cfstore.metric.totalDiskSpaceUsed.dec(sizeOnDisk);
+            if (totalDiskSpaceUsed != null)
+                totalDiskSpaceUsed.dec(sizeOnDisk);
 
             // release the referent to the parent so that the all transaction files can be released
             parentRef.release();
