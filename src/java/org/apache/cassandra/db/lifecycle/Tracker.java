@@ -63,7 +63,7 @@ public class Tracker
 {
     private static final Logger logger = LoggerFactory.getLogger(Tracker.class);
 
-    public final Collection<WeakReference<INotificationConsumer>> subscribers = new CopyOnWriteArrayList<>();
+    public SubcriptionHandler subscriptionHandler = new SubcriptionHandler();
     public final ColumnFamilyStore cfstore;
     final AtomicReference<View> view;
     public final boolean loadsstables;
@@ -445,24 +445,7 @@ public class Tracker
 
     private Throwable notify(INotification notification, Throwable accumulate)
     {
-        Set<WeakReference<INotificationConsumer>> toRemove = new HashSet<>();
-        for (WeakReference<INotificationConsumer> subscriberRef : subscribers)
-        {
-            try
-            {
-                INotificationConsumer subscriber = subscriberRef.get();
-                if (subscriber != null)
-                    subscriber.handleNotification(notification, this);
-                else
-                    toRemove.add(subscriberRef);
-            }
-            catch (Throwable t)
-            {
-                accumulate = merge(accumulate, t);
-            }
-        }
-        subscribers.removeAll(toRemove);
-        return accumulate;
+        return subscriptionHandler.notify(notification, accumulate);
     }
 
     public boolean isDummy()
@@ -472,12 +455,12 @@ public class Tracker
 
     public void subscribe(INotificationConsumer consumer)
     {
-        subscribers.add(new WeakReference<>(consumer));
+        subscriptionHandler.subscribe(consumer);
     }
 
     public void unsubscribe(INotificationConsumer consumer)
     {
-        subscribers.remove(new WeakReference<>(consumer));
+        subscriptionHandler.unsubscribe(consumer);
     }
 
     private static Set<SSTableReader> emptySet()
@@ -488,5 +471,92 @@ public class Tracker
     public View getView()
     {
         return view.get();
+    }
+
+    public static class SubcriptionHandler
+    {
+        public final Collection<WeakReference<INotificationConsumer>> subscribers = new CopyOnWriteArrayList<>();
+
+        Throwable notifySSTablesChanged(Collection<SSTableReader> removed, Collection<SSTableReader> added, OperationType compactionType, Throwable accumulate)
+        {
+            INotification notification = new SSTableListChangedNotification(added, removed, compactionType);
+            return notify(notification, accumulate);
+        }
+
+        Throwable notifyAdded(Iterable<SSTableReader> added, Throwable accumulate)
+        {
+            INotification notification = new SSTableAddedNotification(added);
+            return notify(notification, accumulate);
+        }
+
+        public void notifyAdded(Iterable<SSTableReader> added)
+        {
+            maybeFail(notifyAdded(added, null));
+        }
+
+        public void notifySSTableRepairedStatusChanged(Collection<SSTableReader> repairStatusesChanged)
+        {
+            INotification notification = new SSTableRepairStatusChanged(repairStatusesChanged);
+            notify(notification, null);
+        }
+
+        public void notifyDeleting(SSTableReader deleting)
+        {
+            INotification notification = new SSTableDeletingNotification(deleting);
+            notify(notification, null);
+        }
+
+        public void notifyTruncated(long truncatedAt)
+        {
+            INotification notification = new TruncationNotification(truncatedAt);
+            notify(notification, null);
+        }
+
+        public void notifyRenewed(Memtable renewed)
+        {
+            notify(new MemtableRenewedNotification(renewed), null);
+        }
+
+        public void notifySwitched(Memtable previous)
+        {
+            notify(new MemtableSwitchedNotification(previous), null);
+        }
+
+        public void notifyDiscarded(Memtable discarded)
+        {
+            notify(new MemtableDiscardedNotification(discarded), null);
+        }
+
+        private Throwable notify(INotification notification, Throwable accumulate)
+        {
+            Set<WeakReference<INotificationConsumer>> toRemove = new HashSet<>();
+            for (WeakReference<INotificationConsumer> subscriberRef : subscribers)
+            {
+                try
+                {
+                    INotificationConsumer subscriber = subscriberRef.get();
+                    if (subscriber != null)
+                        subscriber.handleNotification(notification, this);
+                    else
+                        toRemove.add(subscriberRef);
+                }
+                catch (Throwable t)
+                {
+                    accumulate = merge(accumulate, t);
+                }
+            }
+            subscribers.removeAll(toRemove);
+            return accumulate;
+        }
+
+        public void subscribe(INotificationConsumer consumer)
+        {
+            subscribers.add(new WeakReference<>(consumer));
+        }
+
+        public void unsubscribe(INotificationConsumer consumer)
+        {
+            subscribers.remove(new WeakReference<>(consumer));
+        }
     }
 }

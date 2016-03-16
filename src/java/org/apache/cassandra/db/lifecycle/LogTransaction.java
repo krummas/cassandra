@@ -102,7 +102,9 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
         }
     }
 
-    private final Tracker tracker;
+//    private final Tracker tracker;
+    private final Tracker.SubcriptionHandler subscriptionHandler;
+    private final Counter totalDiskSpaceUsed;
     private final LogFile txnFile;
     private final Ref<LogTransaction> selfRef;
     // Deleting sstables is tricky because the mmapping might not have been finalized yet,
@@ -118,7 +120,8 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
 
     LogTransaction(OperationType opType, Tracker tracker)
     {
-        this.tracker = tracker;
+        subscriptionHandler = tracker != null ? tracker.subscriptionHandler : null;
+        totalDiskSpaceUsed = tracker != null && tracker.cfstore != null ? tracker.cfstore.metric.totalDiskSpaceUsed : null;
         this.txnFile = new LogFile(opType, UUIDGen.getTimeUUID());
         this.selfRef = new Ref<>(this, new TransactionTidier(txnFile));
 
@@ -157,8 +160,8 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
 
         txnFile.add(Type.REMOVE, reader);
 
-        if (tracker != null)
-            tracker.notifyDeleting(reader);
+        if (subscriptionHandler != null)
+            subscriptionHandler.notifyDeleting(reader);
 
         return new SSTableTidier(reader, false, this);
     }
@@ -296,7 +299,7 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
         {
             this.desc = referent.descriptor;
             this.sizeOnDisk = referent.bytesOnDisk();
-            this.totalDiskSpaceUsed = (parent.tracker != null && parent.tracker.cfstore != null && !wasNew ? parent.tracker.cfstore.metric.totalDiskSpaceUsed : null);
+            this.totalDiskSpaceUsed = !wasNew ? parent.totalDiskSpaceUsed : null;
             this.parentRef = parent.selfRef.tryRef();
         }
 
