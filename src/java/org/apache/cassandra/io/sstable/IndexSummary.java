@@ -29,7 +29,9 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.util.*;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.WrappedSharedCloseable;
 import org.apache.cassandra.utils.memory.MemoryUtil;
@@ -346,6 +348,31 @@ public class IndexSummary extends WrappedSharedCloseable
             for (int i = 0 ; i < offsets.size() ; i += 4)
                 offsets.setInt(i, (int) (offsets.getInt(i) - offsets.size()));
             return new IndexSummary(partitioner, offsets, offsetCount, entries, entries.size(), fullSamplingSummarySize, minIndexInterval, samplingLevel);
+        }
+
+        /**
+         * Deserializes the first and last key stored in the summary
+         *
+         * Only for use by offline tools like SSTableMetadataViewer, otherwise SSTable.first/last should be used.
+         */
+        public Pair<DecoratedKey, DecoratedKey> deserializeFirstLastKey(DataInputStream in, IPartitioner partitioner, boolean haveSamplingLevel) throws IOException
+        {
+            int minIndexInterval = in.readInt();
+            int offsetCount = in.readInt();
+            long offheapSize = in.readLong();
+            int samplingLevel, fullSamplingSummarySize;
+            if (haveSamplingLevel)
+            {
+                samplingLevel = in.readInt();
+                fullSamplingSummarySize = in.readInt();
+            }
+
+            in.skip(offsetCount * 4);
+            in.skip(offheapSize - offsetCount * 4);
+
+            DecoratedKey first = partitioner.decorateKey(ByteBufferUtil.readWithLength(in));
+            DecoratedKey last = partitioner.decorateKey(ByteBufferUtil.readWithLength(in));
+            return Pair.create(first, last);
         }
     }
 }
