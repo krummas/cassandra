@@ -94,11 +94,12 @@ public class SSTableMetadataViewer
                         out.printf("Compression ratio: %s%n", stats.compressionRatio);
                     out.printf("TTL min: %s%n", stats.minTTL);
                     out.printf("TTL max: %s%n", stats.maxTTL);
+
+                    if (validation != null && header != null)
+                        printMinMaxToken(descriptor, FBUtilities.newPartitioner(validation.partitioner), header.getKeyType(), out);
+
                     if (header != null && header.getClusteringTypes().size() == stats.minClusteringValues.size())
                     {
-                        if (validation != null)
-                            printMinMaxToken(descriptor, FBUtilities.newPartitioner(validation.partitioner), header.getKeyType(), out);
-
                         List<AbstractType<?>> clusteringTypes = header.getClusteringTypes();
                         List<ByteBuffer> minClusteringValues = stats.minClusteringValues;
                         List<ByteBuffer> maxClusteringValues = stats.maxClusteringValues;

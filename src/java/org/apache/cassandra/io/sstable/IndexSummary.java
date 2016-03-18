@@ -357,15 +357,11 @@ public class IndexSummary extends WrappedSharedCloseable
          */
         public Pair<DecoratedKey, DecoratedKey> deserializeFirstLastKey(DataInputStream in, IPartitioner partitioner, boolean haveSamplingLevel) throws IOException
         {
-            int minIndexInterval = in.readInt();
+            in.skipBytes(4); // minIndexInterval
             int offsetCount = in.readInt();
             long offheapSize = in.readLong();
-            int samplingLevel, fullSamplingSummarySize;
             if (haveSamplingLevel)
-            {
-                samplingLevel = in.readInt();
-                fullSamplingSummarySize = in.readInt();
-            }
+                in.skipBytes(8); // samplingLevel, fullSamplingSummarySize
 
             in.skip(offsetCount * 4);
             in.skip(offheapSize - offsetCount * 4);
