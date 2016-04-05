@@ -38,15 +38,15 @@ public class LZ4Compressor implements ICompressor
 {
     private static final Logger logger = LoggerFactory.getLogger(LZ4Compressor.class);
 
-    private static final String LZ4_FAST_COMPRESSOR = "fast";
-    private static final String LZ4_HIGH_COMPRESSOR = "high";
+    public static final String LZ4_FAST_COMPRESSOR = "fast";
+    public static final String LZ4_HIGH_COMPRESSOR = "high";
     private static final Set<String> VALID_COMPRESSOR_TYPES = new HashSet<>(Arrays.asList(LZ4_FAST_COMPRESSOR, LZ4_HIGH_COMPRESSOR));
 
     private static final int DEFAULT_HIGH_COMPRESSION_LEVEL = 9;
     private static final String DEFAULT_LZ4_COMPRESSOR_TYPE = LZ4_FAST_COMPRESSOR;
 
-    private static final String LZ4_HIGH_COMPRESSION_LEVEL = "lz4_high_compressor_level";
-    private static final String LZ4_COMPRESSOR_TYPE = "lz4_compressor_type";
+    public static final String LZ4_HIGH_COMPRESSION_LEVEL = "lz4_high_compressor_level";
+    public static final String LZ4_COMPRESSOR_TYPE = "lz4_compressor_type";
 
     private static final int INTEGER_BYTES = 4;
 
@@ -57,26 +57,31 @@ public class LZ4Compressor implements ICompressor
         String compressorType = validateCompressorType(args.get(LZ4_COMPRESSOR_TYPE));
         Integer compressionLevel = validateCompressionLevel(args.get(LZ4_HIGH_COMPRESSION_LEVEL));
 
-        if (compressorType.equals(LZ4_FAST_COMPRESSOR) && args.get(LZ4_HIGH_COMPRESSION_LEVEL) != null)
-            logger.warn("'{}' parameter is ignored when '{}' is '{}'", LZ4_HIGH_COMPRESSION_LEVEL, LZ4_COMPRESSOR_TYPE, LZ4_FAST_COMPRESSOR);
-
         Pair<String, Integer> compressorTypeAndLevel = Pair.create(compressorType, compressionLevel);
         LZ4Compressor instance = instances.get(compressorTypeAndLevel);
         if (instance == null)
         {
+            if (compressorType.equals(LZ4_FAST_COMPRESSOR) && args.get(LZ4_HIGH_COMPRESSION_LEVEL) != null)
+                logger.warn("'{}' parameter is ignored when '{}' is '{}'", LZ4_HIGH_COMPRESSION_LEVEL, LZ4_COMPRESSOR_TYPE, LZ4_FAST_COMPRESSOR);
             instance = new LZ4Compressor(compressorType, compressionLevel);
             LZ4Compressor instanceFromMap = instances.putIfAbsent(compressorTypeAndLevel, instance);
             if(instanceFromMap != null)
-            instance = instanceFromMap;
+                instance = instanceFromMap;
         }
         return instance;
     }
 
     private final net.jpountz.lz4.LZ4Compressor compressor;
     private final net.jpountz.lz4.LZ4FastDecompressor decompressor;
+    @VisibleForTesting
+    final String compressorType;
+    @VisibleForTesting
+    final Integer compressionLevel;
 
     private LZ4Compressor(String type, Integer compressionLevel)
     {
+        this.compressorType = type;
+        this.compressionLevel = compressionLevel;
         final LZ4Factory lz4Factory = LZ4Factory.fastestInstance();
         switch (type)
         {
