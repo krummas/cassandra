@@ -227,7 +227,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
             // so we add it to level -1 and create exclusive scanners for it - see below (#9935)
             if (level >= sstablesPerLevel.length || !sstablesPerLevel[level].contains(sstable))
             {
-                logger.warn("Live sstable {} from level {} is not on corresponding level in the leveled manifest." +
+                logger.error("Live sstable {} from level {} is not on corresponding level in the leveled manifest." +
                             " This is not a problem per se, but may indicate an orphaned sstable due to a failed" +
                             " compaction not cleaned up properly.",
                              sstable.getFilename(), level);
