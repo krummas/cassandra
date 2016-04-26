@@ -3090,7 +3090,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         {
             List<SSTableReader> sstables = new ArrayList<>();
             for (SSTableReader sstable : view.compacting)
-                if (sstable.openReason != SSTableReader.OpenReason.EARLY)
+                if (sstable.openReason != SSTableReader.OpenReason.EARLY && view.sstables.contains(sstable))
                     sstables.add(sstable);
             for (SSTableReader sstable : view.sstables)
                 if (!view.compacting.contains(sstable) && sstable.openReason != SSTableReader.OpenReason.EARLY)
