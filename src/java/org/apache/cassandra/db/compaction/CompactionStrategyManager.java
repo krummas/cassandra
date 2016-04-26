@@ -100,7 +100,13 @@ public class CompactionStrategyManager implements INotificationConsumer
      */
     public AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
-        if (!isEnabled())
+        return getNextBackgroundTask(gcBefore, false);
+    }
+
+    @VisibleForTesting
+    public AbstractCompactionTask getNextBackgroundTask(int gcBefore, boolean ignoreDisabled)
+    {
+        if (!ignoreDisabled && !isEnabled())
             return null;
 
         maybeReload(cfs.metadata);
