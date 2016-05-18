@@ -36,12 +36,18 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.JMXConfigurableThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.gms.ApplicationState;
+import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
+import org.apache.cassandra.gms.IFailureDetectionEventListener;
+import org.apache.cassandra.gms.VersionedValue;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.locator.TokenMetadata;
@@ -74,7 +80,7 @@ import org.apache.cassandra.utils.concurrent.Refs;
  * The creation of a repair session is done through the submitRepairSession that
  * returns a future on the completion of that session.
  */
-public class ActiveRepairService
+public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFailureDetectionEventListener
 {
     private static final Logger logger = LoggerFactory.getLogger(ActiveRepairService.class);
     // singleton enforcement
@@ -83,6 +89,8 @@ public class ActiveRepairService
     public static final long UNREPAIRED_SSTABLE = 0;
 
     private static final ThreadPoolExecutor executor;
+    private boolean registeredForEndpointChanges = false;
+
     static
     {
         executor = new JMXConfigurableThreadPoolExecutor(4,
@@ -246,10 +254,10 @@ public class ActiveRepairService
         return neighbors;
     }
 
-    public synchronized UUID prepareForRepair(Set<InetAddress> endpoints, Collection<Range<Token>> ranges, List<ColumnFamilyStore> columnFamilyStores)
+    public synchronized UUID prepareForRepair(InetAddress coordinator, Set<InetAddress> endpoints, Collection<Range<Token>> ranges, List<ColumnFamilyStore> columnFamilyStores)
     {
         UUID parentRepairSession = UUIDGen.getTimeUUID();
-        registerParentRepairSession(parentRepairSession, columnFamilyStores, ranges);
+        registerParentRepairSession(parentRepairSession, coordinator, columnFamilyStores, ranges);
         final CountDownLatch prepareLatch = new CountDownLatch(endpoints.size());
         final AtomicBoolean status = new AtomicBoolean(true);
         final Set<String> failedNodes = Collections.synchronizedSet(new HashSet<String>());
@@ -311,9 +319,36 @@ public class ActiveRepairService
         return parentRepairSession;
     }
 
-    public synchronized void registerParentRepairSession(UUID parentRepairSession, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges)
+    public synchronized void registerParentRepairSession(UUID parentRepairSession, InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges)
     {
-        parentRepairSessions.put(parentRepairSession, new ParentRepairSession(columnFamilyStores, ranges, System.currentTimeMillis()));
+        if (!registeredForEndpointChanges)
+        {
+            Gossiper.instance.register(this);
+            FailureDetector.instance.registerFailureDetectionEventListener(this);
+            registeredForEndpointChanges = true;
+        }
+
+        cleanupOldParentRepairSessions();
+
+        parentRepairSessions.put(parentRepairSession, new ParentRepairSession(coordinator, columnFamilyStores, ranges, System.currentTimeMillis()));
+    }
+
+    /**
+     * Cleans up old failed parent repair sessions - if it is 24h old, we remove it from the map
+     */
+    private void cleanupOldParentRepairSessions()
+    {
+        long currentTime = System.currentTimeMillis();
+
+        Set<UUID> expired = new HashSet<>();
+        for (Map.Entry<UUID, ParentRepairSession> entry : parentRepairSessions.entrySet())
+        {
+            ParentRepairSession session = entry.getValue();
+            if (session.failed && currentTime - session.repairedAt > TimeUnit.HOURS.toMillis(24))
+                expired.add(entry.getKey());
+        }
+        for (UUID remove : expired)
+            parentRepairSessions.remove(remove);
     }
 
     public Set<SSTableReader> currentlyRepairing(UUID cfId, UUID parentRepairSession)
@@ -361,7 +396,13 @@ public class ActiveRepairService
 
     public ParentRepairSession getParentRepairSession(UUID parentSessionId)
     {
-        return parentRepairSessions.get(parentSessionId);
+        ParentRepairSession session = parentRepairSessions.get(parentSessionId);
+        // this can happen if a node thinks that the coordinator was down, but that coordinator got back before noticing
+        // that it was down itself.
+        if (session != null && session.failed)
+            throw new RuntimeException("Parent repair session with id = " + parentSessionId + " has failed.");
+
+        return session;
     }
 
     public synchronized ParentRepairSession removeParentRepairSession(UUID parentSessionId)
@@ -429,10 +470,20 @@ public class ActiveRepairService
         public final Map<UUID, ColumnFamilyStore> columnFamilyStores = new HashMap<>();
         public final Collection<Range<Token>> ranges;
         public final Map<UUID, Set<SSTableReader>> sstableMap = new HashMap<>();
+        /**
+         * used as fail time if failed is true
+         */
         public final long repairedAt;
+        public final InetAddress coordinator;
+        /**
+         * Used to mark a repair as failed - if the coordinator thinks that the repair is still ongoing and sends a
+         * request, we need to fail the coordinator as well.
+         */
+        public final boolean failed;
 
-        public ParentRepairSession(List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, long repairedAt)
+        public ParentRepairSession(InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, long repairedAt, boolean failed)
         {
+            this.coordinator = coordinator;
             for (ColumnFamilyStore cfs : columnFamilyStores)
             {
                 this.columnFamilyStores.put(cfs.metadata.cfId, cfs);
@@ -440,6 +491,12 @@ public class ActiveRepairService
             }
             this.ranges = ranges;
             this.repairedAt = repairedAt;
+            this.failed = failed;
+        }
+
+        public ParentRepairSession(InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, long repairedAt)
+        {
+            this(coordinator, columnFamilyStores, ranges, repairedAt, false);
         }
 
         public synchronized Refs<SSTableReader> getAndReferenceSSTables(UUID cfId)
@@ -471,6 +528,10 @@ public class ActiveRepairService
             sstableMap.get(cfId).addAll(sstables);
         }
 
+        public ParentRepairSession asFailed()
+        {
+            return new ParentRepairSession(coordinator, Collections.<ColumnFamilyStore>emptyList(), Collections.<Range<Token>>emptyList(), System.currentTimeMillis(), true);
+        }
         @Override
         public String toString()
         {
@@ -482,4 +543,61 @@ public class ActiveRepairService
                     '}';
         }
     }
+
+    /*
+    If the coordinator node dies we should remove the parent repair session from the other nodes.
+    This uses the same notifications as we get in RepairSession
+     */
+    public void onJoin(InetAddress endpoint, EndpointState epState) {}
+    public void beforeChange(InetAddress endpoint, EndpointState currentState, ApplicationState newStateKey, VersionedValue newValue) {}
+    public void onChange(InetAddress endpoint, ApplicationState state, VersionedValue value) {}
+    public void onAlive(InetAddress endpoint, EndpointState state) {}
+    public void onDead(InetAddress endpoint, EndpointState state) {}
+
+    public void onRemove(InetAddress endpoint)
+    {
+        convict(endpoint, Double.MAX_VALUE);
+    }
+
+    public void onRestart(InetAddress endpoint, EndpointState state)
+    {
+        convict(endpoint, Double.MAX_VALUE);
+    }
+
+    /**
+     * Something has happened to a remote node - if that node is a coordinator, we mark the parent repair session id as failed.
+     *
+     * The fail marker is kept in the map for 24h to make sure that if the coordinator does not agree
+     * that the repair failed, we need to fail the entire repair session
+     *
+     * @param ep  endpoint to be convicted
+     * @param phi the value of phi with with ep was convicted
+     */
+    public void convict(InetAddress ep, double phi)
+    {
+        // We want a higher confidence in the failure detection than usual because failing a repair wrongly has a high cost.
+        if (phi < 2 * DatabaseDescriptor.getPhiConvictThreshold() || parentRepairSessions.isEmpty())
+            return;
+
+        Set<UUID> toRemove = new HashSet<>();
+
+        for (Map.Entry<UUID, ParentRepairSession> repairSessionEntry : parentRepairSessions.entrySet())
+        {
+            if (repairSessionEntry.getValue().coordinator.equals(ep))
+            {
+                toRemove.add(repairSessionEntry.getKey());
+            }
+        }
+
+        if (!toRemove.isEmpty())
+        {
+            logger.debug("Failing {} in parent repair sessions", toRemove);
+            for (UUID id : toRemove)
+            {
+                ParentRepairSession failed = parentRepairSessions.get(id);
+                parentRepairSessions.replace(id, failed, failed.asFailed());
+            }
+        }
+    }
+
 }
