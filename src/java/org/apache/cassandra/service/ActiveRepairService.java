@@ -328,26 +328,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             FailureDetector.instance.registerFailureDetectionEventListener(this);
             registeredForEndpointChanges = true;
         }
-        cleanupOldParentRepairSessions();
         parentRepairSessions.put(parentRepairSession, new ParentRepairSession(coordinator, columnFamilyStores, ranges, isIncremental, isGlobal, System.currentTimeMillis()));
-    }
-
-    /**
-     * Cleans up old failed parent repair sessions - if it is 24h old, we remove it from the map
-     */
-    private void cleanupOldParentRepairSessions()
-    {
-        long currentTime = System.currentTimeMillis();
-
-        Set<UUID> expired = new HashSet<>();
-        for (Map.Entry<UUID, ParentRepairSession> entry : parentRepairSessions.entrySet())
-        {
-            ParentRepairSession session = entry.getValue();
-            if (session.failed && currentTime - session.repairedAt > TimeUnit.HOURS.toMillis(24))
-                expired.add(entry.getKey());
-        }
-        for (UUID remove : expired)
-            parentRepairSessions.remove(remove);
     }
 
     public Set<SSTableReader> currentlyRepairing(UUID cfId, UUID parentRepairSession)
@@ -388,7 +369,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         ParentRepairSession session = parentRepairSessions.get(parentSessionId);
         // this can happen if a node thinks that the coordinator was down, but that coordinator got back before noticing
         // that it was down itself.
-        if (session != null && session.failed)
+        if (session == null)
             throw new RuntimeException("Parent repair session with id = " + parentSessionId + " has failed.");
 
         return session;
@@ -475,23 +456,10 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         private final Map<UUID, Set<SSTableReader>> sstableMap = new HashMap<>();
         public final boolean isIncremental;
         public final boolean isGlobal;
-        /**
-         * used as fail time if failed is true
-         */
         public final long repairedAt;
         public final InetAddress coordinator;
-        /**
-         * Used to mark a repair as failed - if the coordinator thinks that the repair is still ongoing and sends a
-         * request, we need to fail the coordinator as well.
-         */
-        public final boolean failed;
 
         public ParentRepairSession(InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, boolean isGlobal, long repairedAt)
-        {
-            this(coordinator, columnFamilyStores, ranges, isIncremental, isGlobal, repairedAt, false);
-        }
-
-        public ParentRepairSession(InetAddress coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, boolean isGlobal, long repairedAt, boolean failed)
         {
             this.coordinator = coordinator;
             for (ColumnFamilyStore cfs : columnFamilyStores)
@@ -503,7 +471,6 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             this.repairedAt = repairedAt;
             this.isGlobal = isGlobal;
             this.isIncremental = isIncremental;
-            this.failed = failed;
         }
 
         public void addSSTables(UUID cfId, Set<SSTableReader> sstables)
@@ -540,11 +507,6 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             if (isGlobal)
                 return repairedAt;
             return ActiveRepairService.UNREPAIRED_SSTABLE;
-        }
-
-        public ParentRepairSession asFailed()
-        {
-            return new ParentRepairSession(coordinator, Collections.<ColumnFamilyStore>emptyList(), Collections.<Range<Token>>emptyList(), isIncremental, isGlobal, System.currentTimeMillis(), true);
         }
 
         @Override
@@ -606,12 +568,9 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
 
         if (!toRemove.isEmpty())
         {
-            logger.debug("Failing {} in parent repair sessions", toRemove);
+            logger.debug("Removing {} in parent repair sessions", toRemove);
             for (UUID id : toRemove)
-            {
-                ParentRepairSession failed = parentRepairSessions.get(id);
-                parentRepairSessions.replace(id, failed, failed.asFailed());
-            }
+                parentRepairSessions.remove(id);
         }
     }
 
