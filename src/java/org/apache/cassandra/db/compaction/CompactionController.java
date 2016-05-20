@@ -44,9 +44,13 @@ import static org.apache.cassandra.db.lifecycle.SSTableIntervalTree.buildInterva
 public class CompactionController implements AutoCloseable
 {
     private static final Logger logger = LoggerFactory.getLogger(CompactionController.class);
+    private static final boolean NEVER_PURGE_TOMBSTONES = Boolean.getBoolean("cassandra.never_purge_tombstones");
 
     public final ColumnFamilyStore cfs;
     private final boolean compactingRepaired;
+    // note that overlappingTree and overlappingSSTables will be null if NEVER_PURGE_TOMBSTONES is set - this is a
+    // good thing so that noone starts using them and thinks that if overlappingSSTables is empty, there
+    // is no overlap.
     private Refs<SSTableReader> overlappingSSTables;
     private OverlapIterator<PartitionPosition, SSTableReader> overlapIterator;
     private final Iterable<SSTableReader> compacting;
@@ -82,6 +86,9 @@ public class CompactionController implements AutoCloseable
 
     private void refreshOverlaps()
     {
+        if (NEVER_PURGE_TOMBSTONES)
+            return;
+
         if (this.overlappingSSTables != null)
             overlappingSSTables.release();
 
@@ -117,7 +124,7 @@ public class CompactionController implements AutoCloseable
     {
         logger.trace("Checking droppable sstables in {}", cfStore);
 
-        if (compacting == null)
+        if (compacting == null || NEVER_PURGE_TOMBSTONES)
             return Collections.<SSTableReader>emptySet();
 
         if (cfStore.getCompactionStrategyManager().onlyPurgeRepairedTombstones() && !Iterables.all(compacting, SSTableReader::isRepaired))
@@ -187,7 +194,7 @@ public class CompactionController implements AutoCloseable
      */
     public long maxPurgeableTimestamp(DecoratedKey key)
     {
-        if (!compactingRepaired())
+        if (NEVER_PURGE_TOMBSTONES || !compactingRepaired())
             return Long.MIN_VALUE;
 
         long min = Long.MAX_VALUE;
@@ -212,7 +219,8 @@ public class CompactionController implements AutoCloseable
 
     public void close()
     {
-        overlappingSSTables.release();
+        if (overlappingSSTables != null)
+            overlappingSSTables.release();
     }
 
     public boolean compactingRepaired()
