@@ -41,8 +41,13 @@ import org.apache.cassandra.utils.concurrent.Refs;
 public class CompactionController implements AutoCloseable
 {
     private static final Logger logger = LoggerFactory.getLogger(CompactionController.class);
+    private static final boolean NEVER_PURGE_TOMBSTONES = Boolean.getBoolean("cassandra.never_purge_tombstones");
 
     public final ColumnFamilyStore cfs;
+
+    // note that overlappingTree and overlappingSSTables will be null if NEVER_PURGE_TOMBSTONES is set - this is a
+    // good thing so that noone starts using them and thinks that if overlappingSSTables is empty, there
+    // is no overlap.
     private DataTracker.SSTableIntervalTree overlappingTree;
     private Refs<SSTableReader> overlappingSSTables;
     private final Iterable<SSTableReader> compacting;
@@ -77,6 +82,9 @@ public class CompactionController implements AutoCloseable
 
     private void refreshOverlaps()
     {
+        if (NEVER_PURGE_TOMBSTONES)
+            return;
+
         if (this.overlappingSSTables != null)
             overlappingSSTables.release();
 
@@ -112,7 +120,7 @@ public class CompactionController implements AutoCloseable
     {
         logger.debug("Checking droppable sstables in {}", cfStore);
 
-        if (compacting == null)
+        if (compacting == null || NEVER_PURGE_TOMBSTONES)
             return Collections.<SSTableReader>emptySet();
 
         List<SSTableReader> candidates = new ArrayList<SSTableReader>();
@@ -175,6 +183,9 @@ public class CompactionController implements AutoCloseable
      */
     public long maxPurgeableTimestamp(DecoratedKey key)
     {
+        if (NEVER_PURGE_TOMBSTONES)
+            return Long.MIN_VALUE;
+
         List<SSTableReader> filteredSSTables = overlappingTree.search(key);
         long min = Long.MAX_VALUE;
         for (SSTableReader sstable : filteredSSTables)
@@ -191,6 +202,7 @@ public class CompactionController implements AutoCloseable
 
     public void close()
     {
-        overlappingSSTables.release();
+        if (overlappingSSTables != null)
+            overlappingSSTables.release();
     }
 }
