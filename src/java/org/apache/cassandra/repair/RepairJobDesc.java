@@ -61,7 +61,7 @@ public class RepairJobDesc
     @Override
     public String toString()
     {
-        return "[repair #" + sessionId + " on " + keyspace + "/" + columnFamily + ", " + range + "]";
+        return "[repair #" + sessionId + " (prs= " +parentSessionId+ ") on " + keyspace + "/" + columnFamily + ", " + range + "]";
     }
 
     @Override

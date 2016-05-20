@@ -1032,13 +1032,7 @@ public class CompactionManager implements CompactionManagerMBean
                 {
                     ColumnFamilyStore.RefViewFragment refView = cfs.selectAndReference(ColumnFamilyStore.UNREPAIRED_SSTABLES);
                     sstables = refView.refs;
-                    Set<SSTableReader> currentlyRepairing = ActiveRepairService.instance.currentlyRepairing(cfs.metadata.cfId, validator.desc.parentSessionId);
-
-                    if (!Sets.intersection(currentlyRepairing, Sets.newHashSet(refView.sstables)).isEmpty())
-                    {
-                        logger.error("Cannot start multiple repair sessions over the same sstables");
-                        throw new RuntimeException("Cannot start multiple repair sessions over the same sstables");
-                    }
+                    ActiveRepairService.instance.verifyNotRepairing(cfs.metadata.cfId, validator.desc.parentSessionId, new HashSet<>(sstables));
 
                     ActiveRepairService.instance.getParentRepairSession(validator.desc.parentSessionId).addSSTables(cfs.metadata.cfId, refView.sstables);
                 }

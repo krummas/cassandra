@@ -160,7 +160,7 @@ public class RepairJob
         for (InetAddress endpoint : endpoints)
             treeRequests.add(endpoint);
 
-        logger.info(String.format("[repair #%s] requesting merkle trees for %s (to %s)", desc.sessionId, desc.columnFamily, endpoints));
+        logger.info(String.format("[repair #%s (prs=%s)] requesting merkle trees for %s (to %s)", desc.sessionId, desc.parentSessionId, desc.columnFamily, endpoints));
         treeRequests.start();
         requestsSent.signalAll();
     }

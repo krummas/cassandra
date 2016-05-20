@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -316,16 +317,32 @@ public class ActiveRepairService
         parentRepairSessions.put(parentRepairSession, new ParentRepairSession(columnFamilyStores, ranges, System.currentTimeMillis()));
     }
 
-    public Set<SSTableReader> currentlyRepairing(UUID cfId, UUID parentRepairSession)
+    public void verifyNotRepairing(UUID cfId, UUID parentRepairSession, Set<SSTableReader> toRepair)
     {
-        Set<SSTableReader> repairing = new HashSet<>();
+        boolean clash = false;
+        Set<UUID> clashingParentRepairSessions = new HashSet<>();
         for (Map.Entry<UUID, ParentRepairSession> entry : parentRepairSessions.entrySet())
         {
-            Collection<SSTableReader> sstables = entry.getValue().sstableMap.get(cfId);
+            Set<SSTableReader> sstables = entry.getValue().sstableMap.get(cfId);
             if (sstables != null && !entry.getKey().equals(parentRepairSession))
-                repairing.addAll(sstables);
+            {
+                if (!Sets.intersection(sstables, toRepair).isEmpty())
+                {
+                    clash = true;
+                    clashingParentRepairSessions.add(entry.getKey());
+                }
+            }
         }
-        return repairing;
+
+        if (clash)
+        {
+            String message = "[" +
+                             parentRepairSession +
+                             "] Cannot start multiple repair sessions over the same sstables - the following parent repair sessions clash: " +
+                             Joiner.on(",").join(clashingParentRepairSessions);
+            logger.error(message);
+            throw new RuntimeException("Cannot start multiple repair sessions over the same sstables");
+        }
     }
 
     /**

@@ -168,7 +168,7 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
             return;
         }
 
-        logger.info(String.format("[repair #%s] Received merkle tree for %s from %s", getId(), desc.columnFamily, endpoint));
+        logger.info(String.format("[repair #%s (prs=%s)] Received merkle tree for %s from %s", getId(), parentRepairSession, desc.columnFamily, endpoint));
 
         assert job.desc.equals(desc);
         if (job.addTree(endpoint, tree) == 0)
@@ -225,16 +225,16 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
             return;
         }
 
-        logger.debug(String.format("[repair #%s] Repair completed between %s and %s on %s", getId(), nodes.endpoint1, nodes.endpoint2, desc.columnFamily));
+        logger.debug(String.format("[repair #%s (prs=%s)] Repair completed between %s and %s on %s", getId(), parentRepairSession, nodes.endpoint1, nodes.endpoint2, desc.columnFamily));
 
         if (job.completedSynchronization())
         {
             RepairJob completedJob = syncingJobs.remove(job.desc.columnFamily);
             String remaining = syncingJobs.size() == 0 ? "" : String.format(" (%d remaining column family to sync for this session)", syncingJobs.size());
             if (completedJob != null && completedJob.isFailed())
-                logger.warn(String.format("[repair #%s] %s sync failed%s", getId(), desc.columnFamily, remaining));
+                logger.warn(String.format("[repair #%s (prs=%s)] %s sync failed%s", getId(), parentRepairSession, desc.columnFamily, remaining));
             else
-                logger.info(String.format("[repair #%s] %s is fully synced%s", getId(), desc.columnFamily, remaining));
+                logger.info(String.format("[repair #%s (prs=%s)] %s is fully synced%s", getId(), parentRepairSession, desc.columnFamily, remaining));
 
             if (jobs.isEmpty() && syncingJobs.isEmpty())
             {
@@ -257,12 +257,12 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
     // we don't care about the return value but care about it throwing exception
     public void runMayThrow() throws Exception
     {
-        logger.info(String.format("[repair #%s] new session: will sync %s on range %s for %s.%s", getId(), repairedNodes(), range, keyspace, Arrays.toString(cfnames)));
+        logger.info(String.format("[repair #%s (prs=%s)] new session: will sync %s on range %s for %s.%s", getId(), parentRepairSession, repairedNodes(), range, keyspace, Arrays.toString(cfnames)));
 
         if (endpoints.isEmpty())
         {
             differencingDone.signalAll();
-            logger.info(String.format("[repair #%s] No neighbors to repair with on range %s: session completed", getId(), range));
+            logger.info(String.format("[repair #%s (prs=%s)] No neighbors to repair with on range %s: session completed", getId(), parentRepairSession, range));
             return;
         }
 
@@ -273,7 +273,7 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
             {
                 String message = String.format("Cannot proceed on repair because a neighbor (%s) is dead: session failed", endpoint);
                 differencingDone.signalAll();
-                logger.error("[repair #{}] {}", getId(), message);
+                logger.error("[repair #{} (prs=%s)] {}", getId(), parentRepairSession, message);
                 throw new IOException(message);
             }
         }
@@ -296,11 +296,11 @@ public class RepairSession extends WrappedRunnable implements IEndpointStateChan
 
             if (exception == null)
             {
-                logger.info(String.format("[repair #%s] session completed successfully", getId()));
+                logger.info(String.format("[repair #%s (prs=%s)] session completed successfully", getId(), parentRepairSession));
             }
             else
             {
-                logger.error(String.format("[repair #%s] session completed with the following error", getId()), exception);
+                logger.error(String.format("[repair #%s (prs=%s)] session completed with the following error", getId(), parentRepairSession), exception);
                 throw exception;
             }
         }
