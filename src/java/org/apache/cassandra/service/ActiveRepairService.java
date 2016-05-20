@@ -442,14 +442,12 @@ public class ActiveRepairService
 
         public synchronized Refs<SSTableReader> getActiveRepairedSSTableRefs(UUID cfId)
         {
-            Iterator<SSTableReader> sstableIterator = getActiveSSTables(cfId).iterator();
             ImmutableMap.Builder<SSTableReader, Ref<SSTableReader>> references = ImmutableMap.builder();
-            while (sstableIterator.hasNext())
+            for (SSTableReader sstable : getActiveSSTables(cfId))
             {
-                SSTableReader sstable = sstableIterator.next();
                 Ref<SSTableReader> ref = sstable.tryRef();
                 if (ref == null)
-                    sstableIterator.remove();
+                    sstableMap.get(cfId).remove(sstable.getFilename());
                 else
                     references.put(sstable, ref);
             }
@@ -459,14 +457,17 @@ public class ActiveRepairService
         private Set<SSTableReader> getActiveSSTables(UUID cfId)
         {
             Set<String> repairedSSTables = sstableMap.get(cfId);
-            HashSet<SSTableReader> activeSSTables = new HashSet<>();
+            Set<SSTableReader> activeSSTables = new HashSet<>();
+            Set<String> activeSSTableNames = new HashSet<>();
             for (SSTableReader sstable : columnFamilyStores.get(cfId).getSSTables())
             {
                 if (repairedSSTables.contains(sstable.getFilename()))
                 {
                     activeSSTables.add(sstable);
+                    activeSSTableNames.add(sstable.getFilename());
                 }
             }
+            sstableMap.put(cfId, activeSSTableNames);
             return activeSSTables;
         }
 
