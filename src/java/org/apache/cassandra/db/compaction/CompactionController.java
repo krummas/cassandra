@@ -70,10 +70,18 @@ public class CompactionController implements AutoCloseable
         this.compacting = compacting;
         compactingRepaired = compacting != null && compacting.stream().allMatch(SSTableReader::isRepaired);
         refreshOverlaps();
+        if (NEVER_PURGE_TOMBSTONES)
+            logger.warn("You are running with -Dcassandra.never_purge_tombstones=true, this is dangerous!");
     }
 
     public void maybeRefreshOverlaps()
     {
+        if (NEVER_PURGE_TOMBSTONES)
+        {
+            logger.debug("not refreshing overlaps - running with -Dcassandra.never_purge_tombstones=true");
+            return;
+        }
+
         for (SSTableReader reader : overlappingSSTables)
         {
             if (reader.isMarkedCompacted())
