@@ -38,6 +38,7 @@ import org.apache.cassandra.db.DataTracker;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.*;
@@ -309,20 +310,16 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                 {
                     public List<SSTableReader> apply(DataTracker.View view)
                     {
-                        Map<SSTableReader, SSTableReader> permittedInstances = new HashMap<>();
-                        for (SSTableReader reader : ColumnFamilyStore.CANONICAL_SSTABLES.apply(view))
-                            permittedInstances.put(reader, reader);
-
+                        List<SSTableReader> canonicalSSTables = ColumnFamilyStore.CANONICAL_SSTABLES.apply(view);
                         Set<SSTableReader> sstables = Sets.newHashSet();
                         for (AbstractBounds<RowPosition> rowBounds : rowBoundsList)
                         {
-                            // sstableInBounds may contain early opened sstables
-                            for (SSTableReader sstable : view.sstablesInBounds(rowBounds))
+                            for (SSTableReader sstable : canonicalSSTables)
                             {
                                 if (isIncremental && sstable.isRepaired())
                                     continue;
-                                sstable = permittedInstances.get(sstable);
-                                if (sstable != null)
+                                AbstractBounds<RowPosition> sstableBounds = new Bounds<RowPosition>(sstable.first, sstable.last);
+                                if (rowBounds.contains(sstableBounds.left) || rowBounds.contains(sstableBounds.right) || sstableBounds.contains(rowBounds.left))
                                     sstables.add(sstable);
                             }
                         }
