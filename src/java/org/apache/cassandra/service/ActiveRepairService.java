@@ -466,6 +466,18 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         }
     }
 
+    /**
+     * We keep a ParentRepairSession around for the duration of the entire repair, for example, on a 256 token vnode rf=3 cluster
+     * we would have 768 RepairSession but only one ParentRepairSession. We use the PRS to avoid anticompacting the sstables
+     * 768 times, instead we take all repaired ranges at the end of the repair and anticompact once.
+     *
+     * We do an optimistic marking of sstables - when we start an incremental repair we mark all unrepaired sstables as
+     * repairing (@see markSSTablesRepairing), then while the repair is ongoing compactions might remove those sstables,
+     * and when it is time for anticompaction we will only anticompact the sstables that are still on disk.
+     *
+     * Note that validation and streaming do not care about which sstables we have marked as repairing - they operate on
+     * all unrepaired sstables (if it is incremental), otherwise we would not get a correct repair.
+     */
     public static class ParentRepairSession
     {
         private final Map<UUID, ColumnFamilyStore> columnFamilyStores = new HashMap<>();
@@ -494,6 +506,14 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             this.isIncremental = isIncremental;
         }
 
+        /**
+         * Mark sstables repairing - either all sstables or only the unrepaired ones depending on
+         *
+         * whether this is an incremental or full repair
+         *
+         * @param cfId the column family
+         * @param parentSessionId the parent repair session id, used to make sure we don't start multiple repairs over the same sstables
+         */
         public synchronized void markSSTablesRepairing(UUID cfId, UUID parentSessionId)
         {
             if (!marked.containsKey(cfId))
@@ -505,14 +525,13 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                     logger.error("Cannot start multiple repair sessions over the same sstables");
                     throw new RuntimeException("Cannot start multiple repair sessions over the same sstables");
                 }
-                System.out.println("---------- "+sstables);
                 addSSTables(cfId, sstables);
                 marked.put(cfId, true);
             }
         }
 
         /**
-         * get the still active sstables we should run anticompaction on
+         * Get the still active sstables we should run anticompaction on
          *
          * note that validation and streaming do not call this method - they have to work on the actual active sstables on the node, we only call this
          * to know which sstables are still there that were there when we started the repair
@@ -538,6 +557,16 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             return new Refs<>(references.build());
         }
 
+        /**
+         * If we are running a snapshot repair we need to find the 'real' sstables when we start anticompaction
+         *
+         * We use the generation of the sstables as identifiers instead of the file name to avoid having to parse out the
+         * actual filename.
+         *
+         * @param cfId
+         * @param parentSessionId
+         * @return
+         */
         private Set<SSTableReader> getSSTablesForSnapshotRepair(UUID cfId, UUID parentSessionId)
         {
             Set<SSTableReader> activeSSTables = new HashSet<>();
