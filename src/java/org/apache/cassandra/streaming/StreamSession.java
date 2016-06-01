@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.collect.*;
 
@@ -37,6 +38,8 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.*;
@@ -279,7 +282,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             flushSSTables(stores);
 
         List<Range<Token>> normalizedRanges = Range.normalize(ranges);
-        List<SSTableStreamingSections> sections = getSSTableSectionsForRanges(normalizedRanges, stores, repairedAt);
+        List<SSTableStreamingSections> sections = getSSTableSectionsForRanges(normalizedRanges, stores, repairedAt, isIncremental);
         try
         {
             addTransferFiles(sections);
@@ -307,7 +310,8 @@ public class StreamSession implements IEndpointStateChangeSubscriber
         return stores;
     }
 
-    private List<SSTableStreamingSections> getSSTableSectionsForRanges(Collection<Range<Token>> ranges, Collection<ColumnFamilyStore> stores, long overriddenRepairedAt)
+    @VisibleForTesting
+    public static List<SSTableStreamingSections> getSSTableSectionsForRanges(Collection<Range<Token>> ranges, Collection<ColumnFamilyStore> stores, long overriddenRepairedAt, final boolean isIncremental)
     {
         Refs<SSTableReader> refs = new Refs<>();
         try
@@ -321,26 +325,17 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                 {
                     public List<SSTableReader> apply(View view)
                     {
-                        Map<SSTableReader, SSTableReader> permittedInstances = new HashMap<>();
-                        for (SSTableReader reader : ColumnFamilyStore.CANONICAL_SSTABLES.apply(view))
-                            permittedInstances.put(reader, reader);
-
+                        List<SSTableReader> canonicalSSTables = ColumnFamilyStore.CANONICAL_SSTABLES.apply(view);
                         Set<SSTableReader> sstables = Sets.newHashSet();
                         for (Range<RowPosition> keyRange : keyRanges)
                         {
-                            // keyRange excludes its start, while sstableInBounds is inclusive (of both start and end).
-                            // This is fine however, because keyRange has been created from a token range through Range.makeRowRange (see above).
-                            // And that later method uses the Token.maxKeyBound() method to creates the range, which return a "fake" key that
-                            // sort after all keys having the token. That "fake" key cannot however be equal to any real key, so that even
-                            // including keyRange.left will still exclude any key having the token of the original token range, and so we're
-                            // still actually selecting what we wanted.
-                            for (SSTableReader sstable : view.sstablesInBounds(keyRange.left, keyRange.right))
+                            for (SSTableReader sstable : canonicalSSTables)
                             {
                                 // sstableInBounds may contain early opened sstables
                                 if (isIncremental && sstable.isRepaired())
                                     continue;
-                                sstable = permittedInstances.get(sstable);
-                                if (sstable != null)
+                                AbstractBounds<RowPosition> sstableBounds = new Bounds<RowPosition>(sstable.first, sstable.last);
+                                if (keyRange.contains(sstableBounds.left) || keyRange.contains(sstableBounds.right) || sstableBounds.contains(keyRange.left))
                                     sstables.add(sstable);
                             }
                         }
