@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
 
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -37,6 +38,8 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.*;
@@ -284,7 +287,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             flushSSTables(stores);
 
         List<Range<Token>> normalizedRanges = Range.normalize(ranges);
-        List<SSTableStreamingSections> sections = getSSTableSectionsForRanges(normalizedRanges, stores, repairedAt);
+        List<SSTableStreamingSections> sections = getSSTableSectionsForRanges(normalizedRanges, stores, repairedAt, isIncremental);
         try
         {
             addTransferFiles(sections);
@@ -312,7 +315,8 @@ public class StreamSession implements IEndpointStateChangeSubscriber
         return stores;
     }
 
-    private List<SSTableStreamingSections> getSSTableSectionsForRanges(Collection<Range<Token>> ranges, Collection<ColumnFamilyStore> stores, long overriddenRepairedAt)
+    @VisibleForTesting
+    public static List<SSTableStreamingSections> getSSTableSectionsForRanges(Collection<Range<Token>> ranges, Collection<ColumnFamilyStore> stores, long overriddenRepairedAt, final boolean isIncremental)
     {
         Refs<SSTableReader> refs = new Refs<>();
         try
@@ -326,16 +330,14 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                     Set<SSTableReader> sstables = Sets.newHashSet();
                     for (Range<PartitionPosition> keyRange : keyRanges)
                     {
-                        // keyRange excludes its start, while sstableInBounds is inclusive (of both start and end).
-                        // This is fine however, because keyRange has been created from a token range through Range.makeRowRange (see above).
-                        // And that later method uses the Token.maxKeyBound() method to creates the range, which return a "fake" key that
-                        // sort after all keys having the token. That "fake" key cannot however be equal to any real key, so that even
-                        // including keyRange.left will still exclude any key having the token of the original token range, and so we're
-                        // still actually selecting what we wanted.
-                        for (SSTableReader sstable : view.sstablesInBounds(SSTableSet.CANONICAL, keyRange.left, keyRange.right))
+                        Iterable<SSTableReader> canonicalSSTables = view.sstables(SSTableSet.CANONICAL);
+                        for (SSTableReader sstable : canonicalSSTables)
                         {
                             // sstableInBounds may contain early opened sstables
-                            if (!isIncremental || !sstable.isRepaired())
+                            if (isIncremental && sstable.isRepaired())
+                                continue;
+                            AbstractBounds<PartitionPosition> sstableBounds = new Bounds<>(sstable.first, sstable.last);
+                            if (keyRange.contains(sstableBounds.left) || keyRange.contains(sstableBounds.right) || sstableBounds.contains(keyRange.left))
                                 sstables.add(sstable);
                         }
                     }
