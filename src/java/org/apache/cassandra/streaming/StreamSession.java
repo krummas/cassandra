@@ -40,6 +40,7 @@ import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Bounds;
+import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.*;
@@ -306,26 +307,23 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             for (ColumnFamilyStore cfStore : stores)
             {
                 final List<AbstractBounds<RowPosition>> rowBoundsList = new ArrayList<>(ranges.size());
+                final IPartitioner partitioner = cfStore.partitioner;
                 for (Range<Token> range : ranges)
                     rowBoundsList.add(range.toRowBounds());
                 refs.addAll(cfStore.selectAndReference(new Function<DataTracker.View, List<SSTableReader>>()
                 {
                     public List<SSTableReader> apply(DataTracker.View view)
                     {
-                        List<SSTableReader> canonicalSSTables = ColumnFamilyStore.CANONICAL_SSTABLES.apply(view);
+                        DataTracker.SSTableIntervalTree intervalTree = DataTracker.buildIntervalTree(ColumnFamilyStore.CANONICAL_SSTABLES.apply(view));
                         Set<SSTableReader> sstables = Sets.newHashSet();
                         for (AbstractBounds<RowPosition> rowBounds : rowBoundsList)
                         {
-                            for (SSTableReader sstable : canonicalSSTables)
+                            for (SSTableReader sstable : DataTracker.View.sstablesInBounds(rowBounds, intervalTree, partitioner))
                             {
-                                if (isIncremental && sstable.isRepaired())
-                                    continue;
-                                AbstractBounds<RowPosition> sstableBounds = new Bounds<RowPosition>(sstable.first, sstable.last);
-                                if (rowBounds.contains(sstableBounds.left) || rowBounds.contains(sstableBounds.right) || sstableBounds.contains(rowBounds.left))
+                                if (!isIncremental || !sstable.isRepaired())
                                     sstables.add(sstable);
                             }
                         }
-
                         return ImmutableList.copyOf(sstables);
                     }
                 }).refs);
