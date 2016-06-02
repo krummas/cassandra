@@ -29,6 +29,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Function;
 import com.google.common.collect.*;
 
+import org.apache.cassandra.db.lifecycle.SSTableIntervalTree;
 import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.slf4j.Logger;
@@ -325,17 +326,13 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                 {
                     public List<SSTableReader> apply(View view)
                     {
-                        List<SSTableReader> canonicalSSTables = ColumnFamilyStore.CANONICAL_SSTABLES.apply(view);
+                        SSTableIntervalTree intervalTree = SSTableIntervalTree.build(ColumnFamilyStore.CANONICAL_SSTABLES.apply(view));
                         Set<SSTableReader> sstables = Sets.newHashSet();
                         for (Range<RowPosition> keyRange : keyRanges)
                         {
-                            for (SSTableReader sstable : canonicalSSTables)
+                            for (SSTableReader sstable : View.sstablesInBounds(keyRange.left, keyRange.right, intervalTree))
                             {
-                                // sstableInBounds may contain early opened sstables
-                                if (isIncremental && sstable.isRepaired())
-                                    continue;
-                                AbstractBounds<RowPosition> sstableBounds = new Bounds<RowPosition>(sstable.first, sstable.last);
-                                if (keyRange.contains(sstableBounds.left) || keyRange.contains(sstableBounds.right) || sstableBounds.contains(keyRange.left))
+                                if (!isIncremental || !sstable.isRepaired())
                                     sstables.add(sstable);
                             }
                         }
