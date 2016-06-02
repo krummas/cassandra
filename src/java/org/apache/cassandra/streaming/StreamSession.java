@@ -30,6 +30,8 @@ import com.google.common.collect.*;
 
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
+import org.apache.cassandra.db.lifecycle.SSTableIntervalTree;
+import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,8 +40,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionPosition;
-import org.apache.cassandra.dht.AbstractBounds;
-import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.*;
@@ -329,16 +329,12 @@ public class StreamSession implements IEndpointStateChangeSubscriber
                     keyRanges.add(Range.makeRowRange(range));
                 refs.addAll(cfStore.selectAndReference(view -> {
                     Set<SSTableReader> sstables = Sets.newHashSet();
+                    SSTableIntervalTree intervalTree = SSTableIntervalTree.build(view.sstables(SSTableSet.CANONICAL));
                     for (Range<PartitionPosition> keyRange : keyRanges)
                     {
-                        Iterable<SSTableReader> canonicalSSTables = view.sstables(SSTableSet.CANONICAL);
-                        for (SSTableReader sstable : canonicalSSTables)
+                        for (SSTableReader sstable : View.sstablesInBounds(keyRange.left, keyRange.right, intervalTree))
                         {
-                            // sstableInBounds may contain early opened sstables
-                            if (isIncremental && sstable.isRepaired())
-                                continue;
-                            AbstractBounds<PartitionPosition> sstableBounds = new Bounds<>(sstable.first, sstable.last);
-                            if (keyRange.contains(sstableBounds.left) || keyRange.contains(sstableBounds.right) || sstableBounds.contains(keyRange.left))
+                            if (!isIncremental || !sstable.isRepaired())
                                 sstables.add(sstable);
                         }
                     }
