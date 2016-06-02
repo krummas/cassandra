@@ -20,6 +20,7 @@ package org.apache.cassandra.service;
 
 import java.net.InetAddress;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 
 import com.google.common.collect.Sets;
 import org.junit.Before;
@@ -267,6 +268,7 @@ public class ActiveRepairServiceTest
         Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
         UUID prsId = UUID.randomUUID();
         ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), null, true, System.currentTimeMillis(), true);
+
         ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(prsId);
         prs.markSSTablesRepairing(store.metadata.cfId, prsId);
         try (Refs<SSTableReader> refs = prs.getActiveRepairedSSTableRefsForAntiCompaction(store.metadata.cfId, prsId))
@@ -292,6 +294,58 @@ public class ActiveRepairServiceTest
         {
             Set<SSTableReader> retrieved = Sets.newHashSet(refs.iterator());
             assertEquals(original, retrieved);
+        }
+    }
+
+    @Test
+    public void testSnapshotAddSSTables() throws ExecutionException, InterruptedException
+    {
+        ColumnFamilyStore store = prepareColumnFamilyStore();
+        UUID prsId = UUID.randomUUID();
+        Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
+        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
+        ActiveRepairService.instance.getParentRepairSession(prsId).maybeSnapshot(store.metadata.cfId, prsId);
+
+        UUID prsId2 = UUID.randomUUID();
+        ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
+        createSSTables(store, 2);
+        ActiveRepairService.instance.getParentRepairSession(prsId).maybeSnapshot(store.metadata.cfId, prsId);
+        try (Refs<SSTableReader> refs = ActiveRepairService.instance.getParentRepairSession(prsId).getActiveRepairedSSTableRefsForAntiCompaction(store.metadata.cfId, prsId))
+        {
+            assertEquals(original, Sets.newHashSet(refs.iterator()));
+        }
+        store.forceMajorCompaction();
+        // after a major compaction the original sstables will be gone and we will have no sstables to anticompact:
+        try (Refs<SSTableReader> refs = ActiveRepairService.instance.getParentRepairSession(prsId).getActiveRepairedSSTableRefsForAntiCompaction(store.metadata.cfId, prsId))
+        {
+            assertEquals(0, refs.size());
+        }
+    }
+
+    @Test
+    public void testSnapshotMultipleRepairs()
+    {
+        ColumnFamilyStore store = prepareColumnFamilyStore();
+        Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
+        UUID prsId = UUID.randomUUID();
+        ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
+        ActiveRepairService.instance.getParentRepairSession(prsId).maybeSnapshot(store.metadata.cfId, prsId);
+
+        UUID prsId2 = UUID.randomUUID();
+        ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddress(), Collections.singletonList(store), Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken())), true, System.currentTimeMillis(), true);
+        boolean exception = false;
+        try
+        {
+            ActiveRepairService.instance.getParentRepairSession(prsId2).maybeSnapshot(store.metadata.cfId, prsId2);
+        }
+        catch (Throwable t)
+        {
+            exception = true;
+        }
+        assertTrue(exception);
+        try (Refs<SSTableReader> refs = ActiveRepairService.instance.getParentRepairSession(prsId).getActiveRepairedSSTableRefsForAntiCompaction(store.metadata.cfId, prsId))
+        {
+            assertEquals(original, Sets.newHashSet(refs.iterator()));
         }
     }
 
