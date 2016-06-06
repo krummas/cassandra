@@ -187,7 +187,7 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
     {
         long lowerTimestamp;
         long upperTimestamp;
-        long timestampInSeconds = timestampInMillis / 1000L;
+        long timestampInSeconds = TimeUnit.SECONDS.convert(timestampInMillis, TimeUnit.MILLISECONDS);
 
         switch(windowTimeUnit)
         {
@@ -206,7 +206,8 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
                 break;
         }
 
-        return Pair.create(lowerTimestamp * 1000L, upperTimestamp * 1000L);
+        return Pair.create(TimeUnit.MILLISECONDS.convert(lowerTimestamp, TimeUnit.SECONDS),
+                           TimeUnit.MILLISECONDS.convert(upperTimestamp, TimeUnit.SECONDS));
 
     }
 
@@ -230,24 +231,16 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
         // Where the bucket is the file's max timestamp rounded to the nearest window bucket
         for (SSTableReader f : files)
         {
-            long tStamp = f.getMaxTimestamp();
-            if (timestampResolution.equals(TimeUnit.MICROSECONDS))
-                tStamp = tStamp / 1000L;
-            else if (timestampResolution.equals(TimeUnit.NANOSECONDS))
-                tStamp = tStamp / 1000000L;
-            else if (timestampResolution.equals(TimeUnit.SECONDS))
-                tStamp = tStamp * 1000L;
-            else
-                assert TimeWindowCompactionStrategyOptions.validTimestampTimeUnits.contains(timestampResolution);
-
+            assert TimeWindowCompactionStrategyOptions.validTimestampTimeUnits.contains(timestampResolution);
+            long tStamp = TimeUnit.MILLISECONDS.convert(f.getMaxTimestamp(), timestampResolution);
             Pair<Long,Long> bounds = getWindowBoundsInMillis(sstableWindowUnit, sstableWindowSize, tStamp);
-            buckets.put(bounds.left, f );
+            buckets.put(bounds.left, f);
             if (bounds.left > maxTimestamp)
                 maxTimestamp = bounds.left;
         }
 
-        logger.debug("buckets {}, max timestamp", buckets, maxTimestamp);
-        return Pair.< HashMultimap<Long, SSTableReader>, Long >create(buckets, maxTimestamp);
+        logger.trace("buckets {}, max timestamp", buckets, maxTimestamp);
+        return Pair.create(buckets, maxTimestamp);
     }
 
     private void updateEstimatedCompactionsByTasks(HashMultimap<Long, SSTableReader> tasks)
@@ -287,7 +280,7 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
         {
             Long key = it.next();
             Set<SSTableReader> bucket = buckets.get(key);
-            logger.debug("Key {}, now {}", key, now); 
+            logger.trace("Key {}, now {}", key, now);
             if (bucket.size() >= minThreshold && key >= now)
             {
                 // If we're in the newest bucket, we'll use STCS to prioritize sstables
@@ -338,7 +331,7 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
         LifecycleTransaction txn = cfs.getTracker().tryModify(filteredSSTables, OperationType.COMPACTION);
         if (txn == null)
             return null;
-        return Collections.<AbstractCompactionTask>singleton(new CompactionTask(cfs, txn, gcBefore));
+        return Collections.singleton(new CompactionTask(cfs, txn, gcBefore));
     }
 
     @Override
