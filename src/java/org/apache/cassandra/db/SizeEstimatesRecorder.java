@@ -104,7 +104,7 @@ public class SizeEstimatesRecorder extends MigrationListener implements Runnable
                 while (refs == null)
                 {
                     // note that this is not guaranteed to return all sstables within the ranges, but for an estimated size, that should be fine
-                    Iterable<SSTableReader> canonicalSSTables = table.getTracker().getView().select(SSTableSet.CANONICAL, table.select(View.select(Range.makeRowRange(range))).sstables);
+                    Iterable<SSTableReader> canonicalSSTables = table.getTracker().getView().select(SSTableSet.CANONICAL, table.select(View.selectLive(Range.makeRowRange(range))).sstables);
                     refs = Refs.tryRef(canonicalSSTables);
                 }
 
