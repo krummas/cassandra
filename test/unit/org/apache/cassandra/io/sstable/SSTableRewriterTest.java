@@ -872,6 +872,51 @@ public class SSTableRewriterTest extends SSTableWriterTestBase
         validateCFS(cfs);
     }
 
+    @Test
+    public void testCanonicalSSTables() throws ExecutionException, InterruptedException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        final ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF);
+        truncate(cfs);
+
+        cfs.addSSTable(writeFile(cfs, 1000));
+        Collection<SSTableReader> allSSTables = cfs.getSSTables();
+        assertEquals(1, allSSTables.size());
+        final AtomicBoolean done = new AtomicBoolean(false);
+        final AtomicBoolean failed = new AtomicBoolean(false);
+        Runnable r = new Runnable()
+        {
+            public void run()
+            {
+                while (!done.get())
+                {
+                    Iterable<SSTableReader> sstables = cfs.getSSTables(SSTableSet.CANONICAL);
+                    if (Iterables.size(sstables) != 1)
+                    {
+                        System.out.println("Canonical sstables size = "+Iterables.size(sstables));
+                        failed.set(true);
+                    }
+                    Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
+                }
+            }
+        };
+        Thread t = new Thread(r);
+        try
+        {
+            t.start();
+            cfs.forceMajorCompaction();
+            // reset
+        }
+        finally
+        {
+            DatabaseDescriptor.setSSTablePreempiveOpenIntervalInMB(50);
+            done.set(true);
+            t.join(20);
+        }
+
+
+    }
+
     private void validateKeys(Keyspace ks)
     {
         for (int i = 0; i < 100; i++)
