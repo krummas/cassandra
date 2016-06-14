@@ -148,6 +148,15 @@ Ideally, operators should select a `compaction_window_unit` and `compaction_wind
 
 On tables running TWCS it is adviced to disable read repair as this can mix old and new data in the same memtable and this creates sstables with long time spans. On the same note any clients to a TWCS table should avoid doing backfill of data or executing `USING TIMESTAMP` queries (or client equivalent) as this will also mix old and new data in the same memtable.
 
+### TimeWindowCompactionStrategy Operational Concerns
+
+The primary motivation for TimeWindowCompactionStrategy is to separate data on disk by timestamp and to allow fully expired SSTables to drop more efficiently. One potential way this optimal behavior can be subverted is if data is written to SSTables out of order, with new data and old data in the same SSTable. Out of order data can appear in two ways:
+
+* If the user mixes old data and new data in the traditional write path, the data will be comingled in the memtables and flushed into the same SSTable, where it will remain comingled.
+* If the user's read requests for old data cause read repairs that pull old data into the current memtable, that data will be comingled and flushed into the same SSTable.
+
+While TimeWindowCompactionStrategy tries to minimize the impact of comingled data, users should attempt to minimize this behavior by running frequent repairs (which streams data in such a way that it does not become comingled), and by disabling backinground read repair by setting the table's `read_repair_chance` and `dclocal_read_repair_chance` to 0.
+
 ### Changing TimeWindowCompactionStrategy Options
 
 Operators wishing to enable TimeWindowCompactionStrategy on existing data should consider running a major compaction first, placing all existing data into a single (old) window. Subsequent newer writes will then create typical SSTables as expected.
