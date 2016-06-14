@@ -135,3 +135,20 @@ If a node ends up with a leveling where there are a few very high level sstables
 * `sstable_size_in_mb`: the target compressed (if using compression) sstable size - the sstables can end up being larger if there are very large partitions on the node. Default is 160MB
 * `cassandra.disable_stcs_in_l0`: a startup option (`-Dcassandra.disable_stcs_in_l0=true`)to avoid doing STCS in L0.
 
+## TimeWindowCompactionStrategy
+
+TimeWindowCompactionStrategy is designed specifically for workloads where it's beneficial to have data on disk grouped by the timestamp of the data, a common goal when the workload is time-series in nature or when all data is written with a TTL. In an expiring/TTL workload, the contents of an entire SSTable likely expire at approximately the same time, allowing them to be dropped completely, and space reclaimed much more reliably than when using SizeTieredCompactionStrategy or LeveledCompactionStrategy. The basic concept is that TimeWindowCompactionStrategy will create 1 sstable per file for a given window, where a window is simply calculated as the combination of two primary options:
+
+* `compaction_window_unit`: A Java TimeUnit (MINUTES, HOURS, or DAYS). The default value is DAYS
+* `compaction_window_size`: The number of units that make up a window. The default value is 1
+
+Taken together, the operator can specify windows of virtually any size, and TimeWindowCompactionStrategy will work to create a single sstable for writes within that window. For efficiency during writing, the newest window will be compacted using SizeTieredCompactionStrategy.
+
+Ideally, operators should select a `compaction_window_unit` and `compaction_window_size` pair that produces approximately 20-30 windows - if writing with a 90 day TTL, for example, a 3 Day window would be a reasonable choice (`'compaction_window_unit':'DAYS','compaction_window_size':3`).
+
+### Changing TimeWindowCompactionStrategy Options
+
+Operators wishing to enable TimeWindowCompactionStrategy on existing data should consider running a major compaction first, placing all existing data into a single (old) window. Subsequent newer writes will then create typical SSTables as expected.
+
+Operators wishing to change `compaction_window_unit` or `compaction_window_size` can do so, but may trigger additional compactions as adjacent windows are joined together. If the window size is decrease
+d (for example, from 24 hours to 12 hours), then the existing SSTables will not be modified - TimeWindowCompactionStrategy can not split existing SSTables into multiple windows.
