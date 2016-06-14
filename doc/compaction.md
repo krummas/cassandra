@@ -146,6 +146,8 @@ Taken together, the operator can specify windows of virtually any size, and Time
 
 Ideally, operators should select a `compaction_window_unit` and `compaction_window_size` pair that produces approximately 20-30 windows - if writing with a 90 day TTL, for example, a 3 Day window would be a reasonable choice (`'compaction_window_unit':'DAYS','compaction_window_size':3`).
 
+On tables running TWCS it is adviced to disable read repair as this can mix old and new data in the same memtable and this creates sstables with long time spans. On the same note any clients to a TWCS table should avoid doing backfill of data or executing `USING TIMESTAMP` queries (or client equivalent) as this will also mix old and new data in the same memtable.
+
 ### Changing TimeWindowCompactionStrategy Options
 
 Operators wishing to enable TimeWindowCompactionStrategy on existing data should consider running a major compaction first, placing all existing data into a single (old) window. Subsequent newer writes will then create typical SSTables as expected.
