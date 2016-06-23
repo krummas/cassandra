@@ -504,7 +504,10 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         public synchronized Refs<SSTableReader> getActiveRepairedSSTableRefs(UUID cfId)
         {
             ImmutableMap.Builder<SSTableReader, Ref<SSTableReader>> references = ImmutableMap.builder();
-            for (SSTableReader sstable : getActiveSSTables(cfId))
+            Iterable<SSTableReader> sstables = getActiveSSTables(cfId);
+            if (sstables == null)
+                throw new RuntimeException("Not possible to get sstables for anticompaction for " + cfId);
+            for (SSTableReader sstable : sstables)
             {
                 Ref<SSTableReader> ref = sstable.tryRef();
                 if (ref == null)
@@ -519,6 +522,9 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         {
             if (failed)
                 return Collections.emptySet();
+            if (!columnFamilyStores.containsKey(cfId))
+                return null;
+
             Set<String> repairedSSTables = sstableMap.get(cfId);
             Set<SSTableReader> activeSSTables = new HashSet<>();
             Set<String> activeSSTableNames = new HashSet<>();
