@@ -879,24 +879,19 @@ public class SSTableRewriterTest extends SSTableWriterTestBase
         final ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF);
         truncate(cfs);
 
-        cfs.addSSTable(writeFile(cfs, 1000));
+        cfs.addSSTable(writeFile(cfs, 100));
         Collection<SSTableReader> allSSTables = cfs.getSSTables();
         assertEquals(1, allSSTables.size());
         final AtomicBoolean done = new AtomicBoolean(false);
         final AtomicBoolean failed = new AtomicBoolean(false);
-        Runnable r = new Runnable()
-        {
-            public void run()
+        Runnable r = () -> {
+            while (!done.get())
             {
-                while (!done.get())
+                Iterable<SSTableReader> sstables = cfs.getSSTables(SSTableSet.CANONICAL);
+                if (Iterables.size(sstables) != 1)
                 {
-                    Iterable<SSTableReader> sstables = cfs.getSSTables(SSTableSet.CANONICAL);
-                    if (Iterables.size(sstables) != 1)
-                    {
-                        System.out.println("Canonical sstables size = "+Iterables.size(sstables));
-                        failed.set(true);
-                    }
-                    Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
+                    failed.set(true);
+                    return;
                 }
             }
         };
@@ -909,10 +904,10 @@ public class SSTableRewriterTest extends SSTableWriterTestBase
         }
         finally
         {
-            DatabaseDescriptor.setSSTablePreempiveOpenIntervalInMB(50);
             done.set(true);
             t.join(20);
         }
+        assertFalse(failed.get());
 
 
     }
