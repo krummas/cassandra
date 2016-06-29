@@ -118,14 +118,9 @@ public class View
         return sstables;
     }
 
-    public Iterable<SSTableReader> sstables(SSTableSet sstableSet)
-    {
-        return select(sstableSet, sstables);
-    }
-
     public Iterable<SSTableReader> sstables(SSTableSet sstableSet, Predicate<SSTableReader> filter)
     {
-        return select(sstableSet, filter(sstables, filter));
+        return filter(select(sstableSet), filter);
     }
 
     // any sstable known by this tracker in any form; we have a special method here since it's only used for testing/debug
@@ -136,7 +131,7 @@ public class View
         return Iterables.concat(sstables, filterOut(compacting, sstables));
     }
 
-    public Iterable<SSTableReader> select(SSTableSet sstableSet, Iterable<SSTableReader> sstables)
+    public Iterable<SSTableReader> select(SSTableSet sstableSet)
     {
         switch (sstableSet)
         {
@@ -199,7 +194,7 @@ public class View
             return Collections.emptyList();
 
         PartitionPosition stopInTree = right.isMinimum() ? intervalTree.max() : right;
-        return select(SSTableSet.LIVE, intervalTree.search(Interval.create(left, stopInTree)));
+        return intervalTree.search(Interval.create(left, stopInTree));
     }
 
     public static List<SSTableReader> sstablesInBounds(PartitionPosition left, PartitionPosition right, SSTableIntervalTree intervalTree)
@@ -213,9 +208,9 @@ public class View
         return intervalTree.search(Interval.create(left, stopInTree));
     }
 
-    public static Function<View, Iterable<SSTableReader>> select(SSTableSet sstableSet)
+    public static Function<View, Iterable<SSTableReader>> selectFunction(SSTableSet sstableSet)
     {
-        return (view) -> view.sstables(sstableSet);
+        return (view) -> view.select(sstableSet);
     }
 
     public static Function<View, Iterable<SSTableReader>> select(SSTableSet sstableSet, Predicate<SSTableReader> filter)

@@ -759,7 +759,7 @@ public class SSTableRewriterTest extends SSTableWriterTestBase
                 if (!checked && writer.currentWriter().getFilePointer() > 15000000)
                 {
                     checked = true;
-                    ColumnFamilyStore.ViewFragment viewFragment = cfs.select(View.select(SSTableSet.CANONICAL));
+                    ColumnFamilyStore.ViewFragment viewFragment = cfs.select(View.selectFunction(SSTableSet.CANONICAL));
                     // canonical view should have only one SSTable which is not opened early.
                     assertEquals(1, viewFragment.sstables.size());
                     SSTableReader sstable = viewFragment.sstables.get(0);
@@ -900,7 +900,6 @@ public class SSTableRewriterTest extends SSTableWriterTestBase
         {
             t.start();
             cfs.forceMajorCompaction();
-            // reset
         }
         finally
         {
