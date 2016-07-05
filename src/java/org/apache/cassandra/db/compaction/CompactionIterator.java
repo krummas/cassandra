@@ -313,7 +313,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             return maxPurgeableTimestamp;
         }
     }
-    
+
     private static class GarbageSkippingUnfilteredRowIterator extends WrappingUnfilteredRowIterator
     {
         final UnfilteredRowIterator tombSource;

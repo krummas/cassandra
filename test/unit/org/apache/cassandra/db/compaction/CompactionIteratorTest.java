@@ -198,7 +198,7 @@ public class CompactionIteratorTest
         verifyEquivalent(inputLists, result, tombstoneLists, generator);
         return size(result);
     }
-    
+
     private static int size(List<Unfiltered> data)
     {
         return data.stream().mapToInt(x -> x instanceof RangeTombstoneBoundaryMarker ? 2 : 1).sum();
@@ -228,7 +228,7 @@ public class CompactionIteratorTest
     {
         return ImmutableList.copyOf(Lists.transform(Arrays.asList(inputs), x -> parse(x, generator)));
     }
-    
+
     private List<Unfiltered> parse(String input, UnfilteredRowsGenerator generator)
     {
         Matcher m = Pattern.compile("D(\\d+)\\|").matcher(input);
@@ -281,7 +281,7 @@ public class CompactionIteratorTest
         }
         return map;
     }
-    
+
     @Test
     public void testRandom()
     {
