@@ -41,6 +41,7 @@ public class LongLeveledCompactionStrategyTest
 {
     public static final String KEYSPACE1 = "LongLeveledCompactionStrategyTest";
     public static final String CF_STANDARDLVL = "StandardLeveled";
+    public static final String CF_STANDARDLVL2 = "StandardLeveled2";
 
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
@@ -52,6 +53,9 @@ public class LongLeveledCompactionStrategyTest
                                     SimpleStrategy.class,
                                     KSMetaData.optsWithRF(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARDLVL)
+                                                .compactionStrategyClass(LeveledCompactionStrategy.class)
+                                                .compactionStrategyOptions(leveledOptions),
+                                    SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARDLVL2)
                                                 .compactionStrategyClass(LeveledCompactionStrategy.class)
                                                 .compactionStrategyOptions(leveledOptions));
     }
@@ -144,16 +148,33 @@ public class LongLeveledCompactionStrategyTest
     @Test
     public void testLeveledScanner() throws Exception
     {
-        testParallelLeveledCompaction();
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
-        ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF_STANDARDLVL);
-        store.disableAutoCompaction();
-
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF_STANDARDLVL2);
         WrappingCompactionStrategy strategy = ((WrappingCompactionStrategy) store.getCompactionStrategy());
         LeveledCompactionStrategy lcs = (LeveledCompactionStrategy) strategy.getWrappedStrategies().get(1);
 
-        ByteBuffer value = ByteBuffer.wrap(new byte[10 * 1024]); // 10 KB value
+        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
 
+        // Enough data to have a level 1 and 2
+        int rows = 128;
+        int columns = 10;
+
+        // Adds enough data to trigger multiple sstable per level
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            Mutation rm = new Mutation(KEYSPACE1, key.getKey());
+            for (int c = 0; c < columns; c++)
+            {
+                rm.add(CF_STANDARDLVL2, Util.cellname("column" + c), value, 0);
+            }
+            rm.apply();
+            store.forceBlockingFlush();
+        }
+
+        value = ByteBuffer.wrap(new byte[10 * 1024]); // 10 KB value
+        LeveledCompactionStrategyTest.waitForLeveling(store);
+        store.disableAutoCompaction();
         // Adds 10 partitions
         for (int r = 0; r < 10; r++)
         {
