@@ -232,18 +232,38 @@ public class LongLeveledCompactionStrategyTest extends SchemaLoader
     @Test
     public void testLeveledScanner() throws Exception
     {
-        testParallelLeveledCompaction();
         String ksname = "Keyspace1";
-        String cfname = "StandardLeveled";
+        String cfname = "StandardLeveled2";
         Keyspace keyspace = Keyspace.open(ksname);
         ColumnFamilyStore store = keyspace.getColumnFamilyStore(cfname);
-        store.disableAutoCompaction();
 
         WrappingCompactionStrategy strategy = ((WrappingCompactionStrategy) store.getCompactionStrategy());
         LeveledCompactionStrategy lcs = (LeveledCompactionStrategy) strategy.getWrappedStrategies().get(1);
 
-        ByteBuffer value = ByteBuffer.wrap(new byte[10 * 1024]); // 10 KB value
+        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
 
+        // Enough data to have a level 1 and 2
+        int rows = 128;
+        int columns = 10;
+
+        // Adds enough data to trigger multiple sstable per level
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            Mutation rm = new Mutation(ksname, key.getKey());
+            for (int c = 0; c < columns; c++)
+            {
+                rm.add(cfname, Util.cellname("column" + c), value, 0);
+            }
+            rm.apply();
+            store.forceBlockingFlush();
+        }
+
+        value = ByteBuffer.wrap(new byte[10 * 1024]); // 10 KB value
+        LeveledCompactionStrategyTest.waitForLeveling(store);
+        while (store.getCompactionStrategy().getEstimatedRemainingTasks() > 0)
+            Thread.sleep(100);
+        store.disableAutoCompaction();
         // Adds 10 partitions
         for (int r = 0; r < 10; r++)
         {

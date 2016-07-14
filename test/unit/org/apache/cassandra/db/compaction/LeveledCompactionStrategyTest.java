@@ -117,7 +117,7 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
     /**
      * wait for leveled compaction to quiesce on the given columnfamily
      */
-    private void waitForLeveling(ColumnFamilyStore cfs) throws InterruptedException
+    public static void waitForLeveling(ColumnFamilyStore cfs) throws InterruptedException
     {
         WrappingCompactionStrategy strategyManager = (WrappingCompactionStrategy)cfs.getCompactionStrategy();
         while (true)
