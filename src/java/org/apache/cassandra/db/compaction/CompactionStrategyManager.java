@@ -742,32 +742,40 @@ public class CompactionStrategyManager implements INotificationConsumer
     public List<AbstractCompactionTask> getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
     {
         maybeReload(cfs.metadata);
-        List<AbstractCompactionTask> ret = new ArrayList<>();
-
-        readLock.lock();
-        try
+        // runWithCompactionsDisabled cancels active compactions and disables them, then we are able
+        // to make the repaired/unrepaired strategies mark their own sstables as compacting. Once the
+        // sstables are marked the compactions are re-enabled
+        return cfs.runWithCompactionsDisabled(new Callable<List<AbstractCompactionTask>>()
         {
-            Map<Integer, List<SSTableReader>> repairedSSTables = sstables.stream()
-                                                                         .filter(s -> !s.isMarkedSuspect() && s.isRepaired())
-                                                                         .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+            @Override
+            public List<AbstractCompactionTask> call()
+            {
+                List<AbstractCompactionTask> ret = new ArrayList<>();
+                readLock.lock();
+                try
+                {
+                    Map<Integer, List<SSTableReader>> repairedSSTables = sstables.stream()
+                                                                                 .filter(s -> !s.isMarkedSuspect() && s.isRepaired())
+                                                                                 .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
 
-            Map<Integer, List<SSTableReader>> unrepairedSSTables = sstables.stream()
-                                                                           .filter(s -> !s.isMarkedSuspect() && !s.isRepaired())
-                                                                           .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+                    Map<Integer, List<SSTableReader>> unrepairedSSTables = sstables.stream()
+                                                                                   .filter(s -> !s.isMarkedSuspect() && !s.isRepaired())
+                                                                                   .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
 
 
-            for (Map.Entry<Integer, List<SSTableReader>> group : repairedSSTables.entrySet())
-                ret.add(repaired.get(group.getKey()).getUserDefinedTask(group.getValue(), gcBefore));
+                    for (Map.Entry<Integer, List<SSTableReader>> group : repairedSSTables.entrySet())
+                        ret.add(repaired.get(group.getKey()).getUserDefinedTask(group.getValue(), gcBefore));
 
-            for (Map.Entry<Integer, List<SSTableReader>> group : unrepairedSSTables.entrySet())
-                ret.add(unrepaired.get(group.getKey()).getUserDefinedTask(group.getValue(), gcBefore));
-
-            return ret;
-        }
-        finally
-        {
-            readLock.unlock();
-        }
+                    for (Map.Entry<Integer, List<SSTableReader>> group : unrepairedSSTables.entrySet())
+                        ret.add(unrepaired.get(group.getKey()).getUserDefinedTask(group.getValue(), gcBefore));
+                }
+                finally
+                {
+                    readLock.unlock();
+                }
+                return ret;
+            }
+        }, false, false);
     }
 
     /**
