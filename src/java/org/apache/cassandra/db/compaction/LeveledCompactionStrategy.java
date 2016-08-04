@@ -155,8 +155,8 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
             logger.trace("Unable to mark {} for compaction; probably a background compaction got to it first.  You can disable background compactions temporarily if this is a problem", sstables);
             return null;
         }
-
-        return new LeveledCompactionTask(cfs, transaction, 0, gcBefore, getMaxSSTableBytes(), true);
+        int level = sstables.size() > 1 ? 0 : sstables.iterator().next().getSSTableLevel();
+        return new LeveledCompactionTask(cfs, transaction, level, gcBefore, level == 0 ? Long.MAX_VALUE : getMaxSSTableBytes(), false);
     }
 
     @Override
