@@ -2109,7 +2109,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         forceMajorCompaction(false);
     }
 
-
     public void forceMajorCompaction(boolean splitOutput) throws InterruptedException, ExecutionException
     {
         CompactionManager.instance.performMaximal(this, splitOutput);
@@ -2117,28 +2116,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void forceCompactionForTokenRange(Collection<Range<Token>> tokenRanges) throws ExecutionException, InterruptedException
     {
-        final Collection<SSTableReader> sstables = sstablesInBounds(tokenRanges);
-        if (sstables == null || sstables.isEmpty())
-        {
-            logger.debug("No sstables found for the provided token range");
-            return;
-        }
-
-        CompactionManager.instance.performOnSSTables(this, sstables);
-    }
-
-    private Collection<SSTableReader> sstablesInBounds(Collection<Range<Token>> tokenRangeCollection)
-    {
-        final Set<SSTableReader> sstables = new HashSet<>();
-        Iterable<SSTableReader> liveTables = data.getView().select(SSTableSet.LIVE);
-        SSTableIntervalTree tree = SSTableIntervalTree.build(liveTables);
-
-        for (Range<Token> tokenRange : tokenRangeCollection)
-        {
-            Iterable<SSTableReader> ssTableReaders = View.sstablesInBounds(tokenRange.left.minKeyBound(), tokenRange.right.maxKeyBound(), tree);
-            Iterables.addAll(sstables, ssTableReaders);
-        }
-        return sstables;
+        CompactionManager.instance.forceCompactionForTokenRange(this, tokenRanges);
     }
 
     public static Iterable<ColumnFamilyStore> all()

@@ -44,6 +44,7 @@ import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.CompactionInfo.Holder;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.db.lifecycle.SSTableIntervalTree;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
@@ -98,7 +99,6 @@ public class CompactionManager implements CompactionManagerMBean
             return false;
         }
     };
-
 
     static
     {
@@ -732,32 +732,52 @@ public class CompactionManager implements CompactionManagerMBean
         return futures;
     }
 
-    public void performOnSSTables(ColumnFamilyStore cfStore, Collection<SSTableReader> sstables)
+    public void forceCompactionForTokenRange(ColumnFamilyStore cfStore, Collection<Range<Token>> ranges)
     {
-        Future<?> future = submitOnSSTables(cfStore, getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()), sstables);
-        if (future != null)
-            FBUtilities.waitOnFuture(future);
-    }
+        final Collection<AbstractCompactionTask> tasks = cfStore.runWithCompactionsDisabled(() ->
+                   {
+                       Collection<SSTableReader> sstables = sstablesInBounds(cfStore, ranges);
+                       if (sstables == null || sstables.isEmpty())
+                       {
+                           logger.debug("No sstables found for the provided token range");
+                           return null;
+                       }
+                       return cfStore.getCompactionStrategyManager().getUserDefinedTasks(sstables, getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()));
+                   }, false, false);
 
-    public Future<?> submitOnSSTables(final ColumnFamilyStore cfStore, final int gcBefore, final Collection<SSTableReader> sstables)
-    {
-        final AbstractCompactionTask task = cfStore.getCompactionStrategyManager().getUserDefinedTask(sstables, gcBefore);
-        if (task == null)
-            throw new RuntimeException("Cannot start multiple compaction sessions over the same sstables");
+        if (tasks == null)
+            return;
 
         Runnable runnable = new WrappedRunnable()
         {
-            protected void runMayThrow() throws IOException
+            protected void runMayThrow()
             {
-                task.execute(metrics);
+                for (AbstractCompactionTask task : tasks)
+                    if (task != null)
+                        task.execute(metrics);
             }
         };
+
         if (executor.isShutdown())
         {
             logger.info("Compaction executor has shut down, not submitting task");
-            return null;
+            return;
         }
-        return executor.submit(runnable);
+        FBUtilities.waitOnFuture(executor.submit(runnable));
+    }
+
+    private static Collection<SSTableReader> sstablesInBounds(ColumnFamilyStore cfs, Collection<Range<Token>> tokenRangeCollection)
+    {
+        final Set<SSTableReader> sstables = new HashSet<>();
+        Iterable<SSTableReader> liveTables = cfs.getTracker().getView().select(SSTableSet.LIVE);
+        SSTableIntervalTree tree = SSTableIntervalTree.build(liveTables);
+
+        for (Range<Token> tokenRange : tokenRangeCollection)
+        {
+            Iterable<SSTableReader> ssTableReaders = View.sstablesInBounds(tokenRange.left.minKeyBound(), tokenRange.right.maxKeyBound(), tree);
+            Iterables.addAll(sstables, ssTableReaders);
+        }
+        return sstables;
     }
 
     public void forceUserDefinedCompaction(String dataFiles)
