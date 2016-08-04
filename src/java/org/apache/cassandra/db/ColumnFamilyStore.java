@@ -2118,7 +2118,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public void forceCompactionForTokenRange(Collection<Range<Token>> tokenRanges) throws ExecutionException, InterruptedException
     {
         final Collection<SSTableReader> sstables = sstablesInBounds(tokenRanges);
-        if (sstables == null || sstables.isEmpty()) {
+        if (sstables == null || sstables.isEmpty())
+        {
             logger.debug("No sstables found for the provided token range");
             return;
         }
