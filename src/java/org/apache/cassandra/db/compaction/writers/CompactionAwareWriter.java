@@ -62,21 +62,32 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     private final List<PartitionPosition> diskBoundaries;
     private int locationIndex;
 
+    @Deprecated
     public CompactionAwareWriter(ColumnFamilyStore cfs,
-                                    Directories directories,
-                                    LifecycleTransaction txn,
-                                    Set<SSTableReader> nonExpiredSSTables,
-                                    boolean keepOriginals)
+                                 Directories directories,
+                                 LifecycleTransaction txn,
+                                 Set<SSTableReader> nonExpiredSSTables,
+                                 boolean offline,
+                                 boolean keepOriginals)
     {
-        this(cfs, directories, txn, nonExpiredSSTables, keepOriginals, true);
+        this(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
     }
 
     public CompactionAwareWriter(ColumnFamilyStore cfs,
                                  Directories directories,
                                  LifecycleTransaction txn,
                                  Set<SSTableReader> nonExpiredSSTables,
-                                 boolean keepOriginals,
-                                 boolean shouldOpenEarly)
+                                 boolean keepOriginals)
+    {
+        this(cfs, directories, true, txn, nonExpiredSSTables, keepOriginals);
+    }
+
+    public CompactionAwareWriter(ColumnFamilyStore cfs,
+                                 Directories directories,
+                                 boolean shouldOpenEarly,
+                                 LifecycleTransaction txn,
+                                 Set<SSTableReader> nonExpiredSSTables,
+                                 boolean keepOriginals)
     {
         this.cfs = cfs;
         this.directories = directories;
@@ -236,7 +247,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
     public CompactionAwareWriter setRepairedAt(long repairedAt)
     {
-        sstableWriter.setRepairedAt(repairedAt);
+        this.sstableWriter.setRepairedAt(repairedAt);
         return this;
     }
 }

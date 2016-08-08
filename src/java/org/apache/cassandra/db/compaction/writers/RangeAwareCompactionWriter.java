@@ -60,7 +60,7 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
     public RangeAwareCompactionWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, List<Token> rangeBoundaries, long rangeMinSSTableSize)
     {
         // note that we cant open early here as we are writing to two different files
-        super(cfs, directories, txn, nonExpiredSSTables, false);
+        super(cfs, directories, false, txn, nonExpiredSSTables, false);
         txn.permitRedundantTransitions(); // we are writing to several files
         l1writer = SSTableRewriter.constructWithoutEarlyOpening(txn, false, maxAge);
         this.rangeBoundaries = rangeBoundaries;
