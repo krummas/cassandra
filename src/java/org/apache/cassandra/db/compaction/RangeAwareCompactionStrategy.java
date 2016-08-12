@@ -19,6 +19,7 @@ package org.apache.cassandra.db.compaction;
 
 import java.net.InetAddress;
 import java.util.*;
+import java.util.stream.Stream;
 
 import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
@@ -320,7 +321,6 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
     {
         refreshRangeBoundaries();
         // if we get an sstable before we know the range boundaries, we keep it separate and don't do any compaction.
-        //
         if (rangeBoundaries == null || rangeBoundaries.isEmpty())
         {
             unknownSSTables.add(added);
@@ -519,11 +519,27 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
     @SuppressWarnings("unchecked")
     public synchronized void replaceSSTables(Collection<SSTableReader> removed, Collection<SSTableReader> added)
     {
-        removed.stream().filter(l0sstables::contains).forEach(this::removeSSTable);
-        added.stream().filter(l0sstables::contains).forEach(this::addSSTable);
 
-        ArrayList[] removedGrouped = groupSSTablesArray(removed);
-        ArrayList[] addedGrouped = groupSSTablesArray(added);
+        List<SSTableReader> removedFromSubStrategies = new ArrayList<>();
+        List<SSTableReader> addedToSubStrategies = new ArrayList<>();
+
+        for (SSTableReader removedSSTable : removed)
+        {
+            if (l0sstables.contains(removedSSTable))
+                removeSSTable(removedSSTable);
+            else
+                removedFromSubStrategies.add(removedSSTable);
+        }
+        for (SSTableReader addedSSTable : added)
+        {
+            if (!isSingleRange(addedSSTable))
+                addSSTable(addedSSTable);
+            else
+                addedToSubStrategies.add(addedSSTable);
+        }
+
+        ArrayList[] removedGrouped = groupSSTablesArray(removedFromSubStrategies);
+        ArrayList[] addedGrouped = groupSSTablesArray(addedToSubStrategies);
 
         for (int i = 0; i < strategies.size(); i++)
         {
