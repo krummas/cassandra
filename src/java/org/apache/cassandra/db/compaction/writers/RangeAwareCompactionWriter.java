@@ -49,6 +49,7 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
     private final SSTableRewriter l1writer;
     private final List<Token> rangeBoundaries;
     private final double compactionGain;
+    private final double compressionRatio;
     private final long rangeMinSSTableSize;
     private final double totalSize;
     private SSTableRewriter activeWriter;
@@ -65,6 +66,7 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
         l1writer = SSTableRewriter.constructWithoutEarlyOpening(txn, false, maxAge);
         this.rangeBoundaries = rangeBoundaries;
         compactionGain = SSTableReader.estimateCompactionGain(nonExpiredSSTables);
+        compressionRatio = getCompressionRatio(nonExpiredSSTables);
         this.rangeMinSSTableSize = rangeMinSSTableSize;
         totalSize = compactionGain * SSTableReader.getTotalBytes(nonExpiredSSTables);
     }
@@ -189,6 +191,24 @@ public class RangeAwareCompactionWriter extends CompactionAwareWriter
                                                             SerializationHeader.make(cfs.metadata, txn.originals()),
                                                             cfs.indexManager.listIndexes(),
                                                             txn);
+    }
+
+    private static double getCompressionRatio(Iterable<SSTableReader> sstables)
+    {
+        double compressed = 0.0;
+        double uncompressed = 0.0;
+
+        for (SSTableReader sstable : sstables)
+        {
+            compressed += sstable.onDiskLength();
+            uncompressed += sstable.uncompressedLength();
+        }
+
+        if (compressed == uncompressed || uncompressed == 0)
+            return 1.0;
+
+        return compressed / uncompressed;
+
     }
 }
 
