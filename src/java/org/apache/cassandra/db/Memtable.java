@@ -513,6 +513,7 @@ public class Memtable implements Comparable<Memtable>
             return cfs.createSSTableMultiWriter(Descriptor.fromFilename(filename),
                                                 toFlush.size(),
                                                 ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                ActiveRepairService.NO_PENDING_REPAIR,
                                                 sstableMetadataCollector,
                                                 new SerializationHeader(true, cfs.metadata, columns, stats), txn);
         }

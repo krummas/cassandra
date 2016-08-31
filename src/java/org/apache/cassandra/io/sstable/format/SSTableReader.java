@@ -1789,6 +1789,11 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         return clustering;
     }
 
+    public boolean isPendingRepair()
+    {
+        return sstableMetadata.pendingRepair != ActiveRepairService.NO_PENDING_REPAIR;
+    }
+
     /**
      * TODO: Move someplace reusable
      */
