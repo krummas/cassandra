@@ -45,6 +45,8 @@ import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.io.util.RandomAccessReader;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class MetadataSerializerTest
 {
@@ -97,7 +99,7 @@ public class MetadataSerializerTest
 
         String partitioner = RandomPartitioner.class.getCanonicalName();
         double bfFpChance = 0.1;
-        Map<MetadataType, MetadataComponent> originalMetadata = collector.finalizeMetadata(partitioner, bfFpChance, 0, SerializationHeader.make(cfm, Collections.emptyList()));
+        Map<MetadataType, MetadataComponent> originalMetadata = collector.finalizeMetadata(partitioner, bfFpChance, 0, null, SerializationHeader.make(cfm, Collections.emptyList()));
         return originalMetadata;
     }
 
@@ -123,6 +125,12 @@ public class MetadataSerializerTest
     public void testMbReadMc() throws IOException
     {
         testOldReadsNew("mb", "mc");
+    }
+
+    @Test
+    public void testMdReadMc() throws IOException
+    {
+        testOldReadsNew("mc", "md");
     }
 
     public void testOldReadsNew(String oldV, String newV) throws IOException
@@ -151,5 +159,14 @@ public class MetadataSerializerTest
                 }
             }
         }
+    }
+
+    @Test
+    public void pendingRepairCompatibility()
+    {
+        Version mc = BigFormat.instance.getVersion("mc");
+        assertFalse(mc.hasPendingRepair());
+        Version md = BigFormat.instance.getVersion("md");
+        assertTrue(md.hasPendingRepair());
     }
 }

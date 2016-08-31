@@ -94,7 +94,7 @@ public class SSTableFlushObserverTest
                                                                   KS_NAME, CF_NAME,
                                                                   0,
                                                                   sstableFormat),
-                                                   10L, 0L, cfm,
+                                                   10L, 0L, null, cfm,
                                                    new MetadataCollector(cfm.comparator).sstableLevel(0),
                                                    new SerializationHeader(true, cfm, cfm.partitionColumns(), EncodingStats.NO_STATS),
                                                    Collections.singletonList(observer),

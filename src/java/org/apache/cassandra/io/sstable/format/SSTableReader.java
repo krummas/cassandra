@@ -53,6 +53,7 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.db.rows.EncodingStats;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
+import org.apache.cassandra.db.rows.UnfilteredSerializer;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -64,6 +65,7 @@ import org.apache.cassandra.io.sstable.metadata.*;
 import org.apache.cassandra.io.util.*;
 import org.apache.cassandra.metrics.RestorableMeter;
 import org.apache.cassandra.metrics.StorageMetrics;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.CachingParams;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
@@ -1758,6 +1760,17 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         }
 
         return key;
+    }
+
+    public boolean isPendingRepair()
+    {
+        return sstableMetadata.pendingRepair != ActiveRepairService.NO_PENDING_REPAIR;
+    }
+
+    public boolean intersects(Collection<Range<Token>> ranges)
+    {
+        Range<Token> range = new Range<>(first.getToken(), last.getToken());
+        return Iterables.any(ranges, r -> r.intersects(range));
     }
 
     /**

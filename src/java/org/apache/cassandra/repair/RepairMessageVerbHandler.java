@@ -45,6 +45,12 @@ import org.apache.cassandra.service.ActiveRepairService;
 public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
 {
     private static final Logger logger = LoggerFactory.getLogger(RepairMessageVerbHandler.class);
+
+    private boolean isConsistent(UUID sessionID)
+    {
+        return ActiveRepairService.instance.consistent.local.isSessionInProgress(sessionID);
+    }
+
     public void doVerb(final MessageIn<RepairMessage> message, final int id)
     {
         // TODO add cancel/interrupt message
@@ -121,7 +127,8 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         return;
                     }
 
-                    Validator validator = new Validator(desc, message.from, validationRequest.gcBefore);
+                    ActiveRepairService.instance.consistent.local.maybeSetRepairing(desc.parentSessionId);
+                    Validator validator = new Validator(desc, message.from, validationRequest.gcBefore, isConsistent(desc.parentSessionId));
                     CompactionManager.instance.submitValidation(store, validator);
                     break;
 
@@ -133,7 +140,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     if (desc.parentSessionId != null && ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId) != null)
                         repairedAt = ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId).getRepairedAt();
 
-                    StreamingRepairTask task = new StreamingRepairTask(desc, request, repairedAt);
+                    StreamingRepairTask task = new StreamingRepairTask(desc, request, repairedAt, isConsistent(desc.parentSessionId));
                     task.run();
                     break;
 
@@ -156,6 +163,32 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     CleanupMessage cleanup = (CleanupMessage) message.payload;
                     ActiveRepairService.instance.removeParentRepairSession(cleanup.parentRepairSession);
                     MessagingService.instance().sendReply(new MessageOut(MessagingService.Verb.INTERNAL_RESPONSE), id, message.from);
+                    break;
+
+                case CONSISTENT_REQUEST:
+                    ActiveRepairService.instance.consistent.local.handlePrepareMessage((PrepareConsistentRequest) message.payload);
+                    break;
+
+                case CONSISTENT_RESPONSE:
+                    ActiveRepairService.instance.consistent.coordinated.handlePrepareResponse((PrepareConsistentResponse) message.payload);
+                    break;
+
+                case FINALIZE_PROPOSE:
+                    ActiveRepairService.instance.consistent.local.handleFinalizeProposeMessage((FinalizePropose) message.payload, message.from);
+                    break;
+
+                case FINALIZE_PROMISE:
+                    ActiveRepairService.instance.consistent.coordinated.handleFinalizePromiseMessage((FinalizePromise) message.payload);
+                    break;
+
+                case FINALIZE_COMMIT:
+                    ActiveRepairService.instance.consistent.local.handleFinalizeCommitMessage((FinalizeCommit) message.payload);
+                    break;
+
+                case FAILED_SESSION:
+                    FailSession failure = (FailSession) message.payload;
+                    ActiveRepairService.instance.consistent.coordinated.handleFailSessionMessage(failure);
+                    ActiveRepairService.instance.consistent.local.handleFailSessionMessage(failure);
                     break;
 
                 default:

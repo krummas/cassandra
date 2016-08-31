@@ -42,6 +42,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
     private final RepairParallelism parallelismDegree;
     private final long repairedAt;
     private final ListeningExecutorService taskExecutor;
+    private final boolean isConsistent;
 
     /**
      * Create repair job to run on specific columnfamily
@@ -49,13 +50,14 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
      * @param session RepairSession that this RepairJob belongs
      * @param columnFamily name of the ColumnFamily to repair
      */
-    public RepairJob(RepairSession session, String columnFamily)
+    public RepairJob(RepairSession session, String columnFamily, boolean isConsistent)
     {
         this.session = session;
         this.desc = new RepairJobDesc(session.parentRepairSession, session.getId(), session.keyspace, columnFamily, session.getRanges());
         this.repairedAt = session.repairedAt;
         this.taskExecutor = session.taskExecutor;
         this.parallelismDegree = session.parallelismDegree;
+        this.isConsistent = isConsistent;
     }
 
     /**
@@ -118,7 +120,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                         SyncTask task;
                         if (r1.endpoint.equals(local) || r2.endpoint.equals(local))
                         {
-                            task = new LocalSyncTask(desc, r1, r2, repairedAt, session.pullRepair);
+                            task = new LocalSyncTask(desc, r1, r2, repairedAt, isConsistent ? desc.parentSessionId : null, session.pullRepair);
                         }
                         else
                         {

@@ -20,6 +20,7 @@ package org.apache.cassandra.io.sstable;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.UUID;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -98,10 +99,10 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
     }
 
     @SuppressWarnings("resource") // log and writer closed during doPostCleanup
-    public static SSTableTxnWriter create(ColumnFamilyStore cfs, Descriptor descriptor, long keyCount, long repairedAt, int sstableLevel, SerializationHeader header)
+    public static SSTableTxnWriter create(ColumnFamilyStore cfs, Descriptor descriptor, long keyCount, long repairedAt, UUID pendingRepair, int sstableLevel, SerializationHeader header)
     {
         LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.WRITE);
-        SSTableMultiWriter writer = cfs.createSSTableMultiWriter(descriptor, keyCount, repairedAt, sstableLevel, header, txn);
+        SSTableMultiWriter writer = cfs.createSSTableMultiWriter(descriptor, keyCount, repairedAt, pendingRepair, sstableLevel, header, txn);
         return new SSTableTxnWriter(txn, writer);
     }
 
@@ -110,6 +111,7 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
     public static SSTableTxnWriter createRangeAware(CFMetaData cfm,
                                                     long keyCount,
                                                     long repairedAt,
+                                                    UUID pendingRepair,
                                                     SSTableFormat.Type type,
                                                     int sstableLevel,
                                                     SerializationHeader header)
@@ -120,7 +122,7 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
         SSTableMultiWriter writer;
         try
         {
-            writer = new RangeAwareSSTableWriter(cfs, keyCount, repairedAt, type, sstableLevel, 0, txn, header);
+            writer = new RangeAwareSSTableWriter(cfs, keyCount, repairedAt, pendingRepair, type, sstableLevel, 0, txn, header);
         }
         catch (IOException e)
         {
@@ -137,6 +139,7 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
                                           Descriptor descriptor,
                                           long keyCount,
                                           long repairedAt,
+                                          UUID pendingRepair,
                                           int sstableLevel,
                                           SerializationHeader header,
                                           Collection<Index> indexes)
@@ -144,18 +147,18 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
         // if the column family store does not exist, we create a new default SSTableMultiWriter to use:
         LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.WRITE);
         MetadataCollector collector = new MetadataCollector(cfm.comparator).sstableLevel(sstableLevel);
-        SSTableMultiWriter writer = SimpleSSTableMultiWriter.create(descriptor, keyCount, repairedAt, cfm, collector, header, indexes, txn);
+        SSTableMultiWriter writer = SimpleSSTableMultiWriter.create(descriptor, keyCount, repairedAt, pendingRepair, cfm, collector, header, indexes, txn);
         return new SSTableTxnWriter(txn, writer);
     }
 
-    public static SSTableTxnWriter create(ColumnFamilyStore cfs, String filename, long keyCount, long repairedAt, int sstableLevel, SerializationHeader header)
+    public static SSTableTxnWriter create(ColumnFamilyStore cfs, String filename, long keyCount, long repairedAt, UUID pendingRepair, int sstableLevel, SerializationHeader header)
     {
         Descriptor desc = Descriptor.fromFilename(filename);
-        return create(cfs, desc, keyCount, repairedAt, sstableLevel, header);
+        return create(cfs, desc, keyCount, repairedAt, pendingRepair, sstableLevel, header);
     }
 
-    public static SSTableTxnWriter create(ColumnFamilyStore cfs, String filename, long keyCount, long repairedAt, SerializationHeader header)
+    public static SSTableTxnWriter create(ColumnFamilyStore cfs, String filename, long keyCount, long repairedAt, UUID pendingRepair, SerializationHeader header)
     {
-        return create(cfs, filename, keyCount, repairedAt, 0, header);
+        return create(cfs, filename, keyCount, repairedAt, pendingRepair, 0, header);
     }
 }

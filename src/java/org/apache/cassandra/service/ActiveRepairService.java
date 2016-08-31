@@ -18,14 +18,20 @@
 package org.apache.cassandra.service;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AbstractFuture;
@@ -36,6 +42,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionManager;
@@ -63,6 +70,9 @@ import org.apache.cassandra.repair.AnticompactionTask;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.RepairSession;
+import org.apache.cassandra.repair.consistent.CoordinatorSessions;
+import org.apache.cassandra.repair.consistent.LocalSession;
+import org.apache.cassandra.repair.consistent.LocalSessions;
 import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.utils.CassandraVersion;
 import org.apache.cassandra.utils.Clock;
@@ -85,7 +95,7 @@ import org.apache.cassandra.utils.concurrent.Refs;
  * The creation of a repair session is done through the submitRepairSession that
  * returns a future on the completion of that session.
  */
-public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFailureDetectionEventListener
+public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFailureDetectionEventListener, ActiveRepairServiceMBean
 {
     /**
      * @deprecated this statuses are from the previous JMX notification service,
@@ -97,6 +107,15 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     {
         STARTED, SESSION_SUCCESS, SESSION_FAILED, FINISHED
     }
+
+    public class ConsistentSessions
+    {
+        public final LocalSessions local = new LocalSessions();
+        public final CoordinatorSessions coordinated = new CoordinatorSessions();
+    }
+
+    public final ConsistentSessions consistent = new ConsistentSessions();
+
     private boolean registeredForEndpointChanges = false;
 
     public static CassandraVersion SUPPORTS_GLOBAL_PREPARE_FLAG_VERSION = new CassandraVersion("2.2.1");
@@ -106,6 +125,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     public static final ActiveRepairService instance = new ActiveRepairService(FailureDetector.instance, Gossiper.instance);
 
     public static final long UNREPAIRED_SSTABLE = 0;
+    public static final UUID NO_PENDING_REPAIR = null;
 
     /**
      * A map of active coordinator session.
@@ -121,6 +141,37 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     {
         this.failureDetector = failureDetector;
         this.gossiper = gossiper;
+
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+        try
+        {
+            mbs.registerMBean(this, new ObjectName(MBEAN_NAME));
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void start()
+    {
+        consistent.local.start();
+        ScheduledExecutors.optionalTasks.scheduleAtFixedRate(consistent.local::cleanup, 0,
+                                                             LocalSessions.CLEANUP_INTERVAL,
+                                                             TimeUnit.SECONDS);
+    }
+
+    @Override
+    public List<Map<String, String>> getSessions(boolean all)
+    {
+        return consistent.local.sessionInfo(all);
+    }
+
+    @Override
+    public void failSession(String session, boolean force)
+    {
+        UUID sessionID = UUID.fromString(session);
+        consistent.local.cancelSession(sessionID, force);
     }
 
     /**
@@ -134,6 +185,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                                              RepairParallelism parallelismDegree,
                                              Set<InetAddress> endpoints,
                                              long repairedAt,
+                                             boolean isConsistent,
                                              boolean pullRepair,
                                              ListeningExecutorService executor,
                                              String... cfnames)
@@ -144,7 +196,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         if (cfnames.length == 0)
             return null;
 
-        final RepairSession session = new RepairSession(parentRepairSession, UUIDGen.getTimeUUID(), range, keyspace, parallelismDegree, endpoints, repairedAt, pullRepair, cfnames);
+        final RepairSession session = new RepairSession(parentRepairSession, UUIDGen.getTimeUUID(), range, keyspace, parallelismDegree, endpoints, repairedAt, isConsistent, pullRepair, cfnames);
 
         sessions.put(session.getId(), session);
         // register listeners
@@ -451,7 +503,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             {
                 Refs<SSTableReader> sstables = prs.getActiveRepairedSSTableRefsForAntiCompaction(columnFamilyStoreEntry.getKey(), parentRepairSession);
                 ColumnFamilyStore cfs = columnFamilyStoreEntry.getValue();
-                futures.add(CompactionManager.instance.submitAntiCompaction(cfs, successfulRanges, sstables, prs.repairedAt));
+                futures.add(CompactionManager.instance.submitAntiCompaction(cfs, successfulRanges, sstables, prs.repairedAt, NO_PENDING_REPAIR));
             }
         }
 
@@ -705,6 +757,21 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             if (isGlobal)
                 return repairedAt;
             return ActiveRepairService.UNREPAIRED_SSTABLE;
+        }
+
+        public Collection<ColumnFamilyStore> getColumnFamilyStores()
+        {
+            return ImmutableSet.<ColumnFamilyStore>builder().addAll(columnFamilyStores.values()).build();
+        }
+
+        public Set<UUID> getCfIds()
+        {
+            return ImmutableSet.copyOf(Iterables.transform(getColumnFamilyStores(), cfs -> cfs.metadata.cfId));
+        }
+
+        public Collection<Range<Token>> getRanges()
+        {
+            return ImmutableSet.copyOf(ranges);
         }
 
         @Override
