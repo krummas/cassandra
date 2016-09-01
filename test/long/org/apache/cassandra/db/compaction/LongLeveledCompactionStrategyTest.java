@@ -174,6 +174,9 @@ public class LongLeveledCompactionStrategyTest
 
         value = ByteBuffer.wrap(new byte[10 * 1024]); // 10 KB value
         LeveledCompactionStrategyTest.waitForLeveling(store);
+        // wait for higher-level compactions to finish
+        while (store.getCompactionStrategy().getEstimatedRemainingTasks() > 0)
+            Thread.sleep(100);
         store.disableAutoCompaction();
         // Adds 10 partitions
         for (int r = 0; r < 10; r++)
