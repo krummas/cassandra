@@ -149,9 +149,9 @@ public class LongLeveledCompactionStrategyTest
     public void testLeveledScanner() throws Exception
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
-        ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF_STANDARDLVL2);
+        final ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF_STANDARDLVL2);
         WrappingCompactionStrategy strategy = ((WrappingCompactionStrategy) store.getCompactionStrategy());
-        LeveledCompactionStrategy lcs = (LeveledCompactionStrategy) strategy.getWrappedStrategies().get(1);
+        final LeveledCompactionStrategy lcs = (LeveledCompactionStrategy) strategy.getWrappedStrategies().get(1);
 
         ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
 
@@ -175,8 +175,6 @@ public class LongLeveledCompactionStrategyTest
         value = ByteBuffer.wrap(new byte[10 * 1024]); // 10 KB value
         LeveledCompactionStrategyTest.waitForLeveling(store);
         // wait for higher-level compactions to finish
-        while (store.getCompactionStrategy().getEstimatedRemainingTasks() > 0)
-            Thread.sleep(100);
         store.disableAutoCompaction();
         // Adds 10 partitions
         for (int r = 0; r < 10; r++)
@@ -193,33 +191,40 @@ public class LongLeveledCompactionStrategyTest
         //Flush sstable
         store.forceBlockingFlush();
 
-        Collection<SSTableReader> allSSTables = store.getSSTables();
-        for (SSTableReader sstable : allSSTables)
+        store.runWithCompactionsDisabled(new Callable<Void>()
         {
-            if (sstable.getSSTableLevel() == 0)
+            public Void call() throws Exception
             {
-                System.out.println("Mutating L0-SSTABLE level to L1 to simulate a bug: " + sstable.getFilename());
-                sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 1);
-                sstable.reloadSSTableMetadata();
-            }
-        }
-
-        try (AbstractCompactionStrategy.ScannerList scannerList = lcs.getScanners(allSSTables))
-        {
-            //Verify that leveled scanners will always iterate in ascending order (CASSANDRA-9935)
-            for (ISSTableScanner scanner : scannerList.scanners)
-            {
-                DecoratedKey lastKey = null;
-                while (scanner.hasNext())
+                Collection<SSTableReader> allSSTables = store.getSSTables();
+                for (SSTableReader sstable : allSSTables)
                 {
-                    OnDiskAtomIterator row = scanner.next();
-                    if (lastKey != null)
+                    if (sstable.getSSTableLevel() == 0)
                     {
-                        assertTrue("row " + row.getKey() + " received out of order wrt " + lastKey, row.getKey().compareTo(lastKey) >= 0);
+                        System.out.println("Mutating L0-SSTABLE level to L1 to simulate a bug: " + sstable.getFilename());
+                        sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 1);
+                        sstable.reloadSSTableMetadata();
                     }
-                    lastKey = row.getKey();
                 }
+
+                try (AbstractCompactionStrategy.ScannerList scannerList = lcs.getScanners(allSSTables))
+                {
+                    //Verify that leveled scanners will always iterate in ascending order (CASSANDRA-9935)
+                    for (ISSTableScanner scanner : scannerList.scanners)
+                    {
+                        DecoratedKey lastKey = null;
+                        while (scanner.hasNext())
+                        {
+                            OnDiskAtomIterator row = scanner.next();
+                            if (lastKey != null)
+                            {
+                                assertTrue("row " + row.getKey() + " received out of order wrt " + lastKey, row.getKey().compareTo(lastKey) >= 0);
+                            }
+                            lastKey = row.getKey();
+                        }
+                    }
+                }
+                return null;
             }
-        }
+        }, true);
     }
 }
