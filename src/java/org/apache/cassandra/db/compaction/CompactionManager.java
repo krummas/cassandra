@@ -606,6 +606,28 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
+    public ListenableFuture<?> submitPendingAntiCompaction(ColumnFamilyStore cfs, Collection<Range<Token>> ranges, Refs<SSTableReader> sstables, LifecycleTransaction txn, UUID pendingRepair)
+    {
+        Runnable runnable = new WrappedRunnable()
+        {
+            protected void runMayThrow() throws Exception
+            {
+                performAnticompaction(cfs, ranges, sstables, txn, ActiveRepairService.UNREPAIRED_SSTABLE, pendingRepair);
+            }
+        };
+
+        if (executor.isShutdown())
+        {
+            logger.info("Compaction executor has shut down, not submitting anticompaction");
+            sstables.release();
+            return Futures.immediateCancelledFuture();
+        }
+
+        ListenableFutureTask<?> task = ListenableFutureTask.create(runnable, null);
+        executor.submit(task);
+        return task;
+    }
+
     /**
      * Make sure the {validatedForRepair} are marked for compaction before calling this.
      *

@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Futures;
@@ -449,11 +450,6 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         return allAntiCompactionResults;
     }
 
-    public void doPendingAntiCompaction(UUID parentRepairSession, Collection<Range<Token>> ranges)
-    {
-        // TODO: this
-    }
-
     public void handleMessage(InetAddress endpoint, RepairMessage message)
     {
         RepairJobDesc desc = message.desc;
@@ -691,6 +687,11 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             if (isGlobal)
                 return repairedAt;
             return ActiveRepairService.UNREPAIRED_SSTABLE;
+        }
+
+        public Collection<ColumnFamilyStore> getColumnFamilyStores()
+        {
+            return ImmutableSet.<ColumnFamilyStore>builder().addAll(columnFamilyStores.values()).build();
         }
 
         @Override
