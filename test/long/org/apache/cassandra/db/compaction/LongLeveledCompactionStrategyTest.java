@@ -25,6 +25,7 @@ import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
@@ -145,6 +146,7 @@ public class LongLeveledCompactionStrategyTest
         }
     }
 
+    @Ignore
     @Test
     public void testLeveledScanner() throws Exception
     {
