@@ -61,6 +61,7 @@ public class LongLeveledCompactionStrategyTest
                                                 .compactionStrategyOptions(leveledOptions));
     }
 
+    @Ignore
     @Test
     public void testParallelLeveledCompaction() throws Exception
     {
@@ -146,7 +147,6 @@ public class LongLeveledCompactionStrategyTest
         }
     }
 
-    @Ignore
     @Test
     public void testLeveledScanner() throws Exception
     {
