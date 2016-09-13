@@ -61,7 +61,6 @@ public class LongLeveledCompactionStrategyTest
                                                 .compactionStrategyOptions(leveledOptions));
     }
 
-    @Ignore
     @Test
     public void testParallelLeveledCompaction() throws Exception
     {
@@ -185,7 +184,7 @@ public class LongLeveledCompactionStrategyTest
             Mutation rm = new Mutation(KEYSPACE1, key.getKey());
             for (int c = 0; c < 10; c++)
             {
-                rm.add(CF_STANDARDLVL, Util.cellname("column" + c), value, 0);
+                rm.add(CF_STANDARDLVL2, Util.cellname("column" + c), value, 0);
             }
             rm.apply();
         }
