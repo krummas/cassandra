@@ -46,7 +46,14 @@ public abstract class RepairMessage
         ANTICOMPACTION_REQUEST(4, AnticompactionRequest.serializer),
         PREPARE_MESSAGE(5, PrepareMessage.serializer),
         SNAPSHOT(6, SnapshotMessage.serializer),
-        CLEANUP(7, CleanupMessage.serializer);
+        CLEANUP(7, CleanupMessage.serializer),
+
+        CONSISTENT_REQUEST(8, PrepareConsistentRequest.serializer),
+        CONSISTENT_RESPONSE(9, PrepareConsistentResponse.serializer),
+        FINALIZE_PROPOSE(10, FinalizePropose.serializer),
+        FINALIZE_PROMISE(11, FinalizePromise.serializer),
+        FINALIZE_COMMIT(12, FinalizeCommit.serializer),
+        FAILED_SESSION(13, FailSession.serializer);
 
         private final byte type;
         private final MessageSerializer<RepairMessage> serializer;
