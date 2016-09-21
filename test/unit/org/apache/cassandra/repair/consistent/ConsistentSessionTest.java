@@ -57,6 +57,7 @@ public class ConsistentSessionTest
             throw new AssertionError(e);
         }
 
+        DatabaseDescriptor.daemonInitialization();
     }
 
     protected static final Set<InetAddress> PARTICIPANTS = ImmutableSet.of(PARTICIPANT1, PARTICIPANT2, PARTICIPANT3);
