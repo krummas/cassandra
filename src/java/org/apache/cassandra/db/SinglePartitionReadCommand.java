@@ -774,11 +774,11 @@ public class SinglePartitionReadCommand extends ReadCommand
                 if (!sstable.hasTombstones())
                     continue; // no tombstone at all, we can skip that sstable
 
-                // We need to get the partition deletion and include it if it's live. In any case though, we're done with that sstable.
+                // We need to get the partition deletion and include it if it's not live. In any case though, we're done with that sstable.
                 sstable.incrementReadCount();
                 try (UnfilteredRowIterator iter = StorageHook.instance.makeRowIterator(cfs, sstable, partitionKey(), Slices.ALL, columnFilter(), filter.isReversed(), isForThrift()))
                 {
-                    if (iter.partitionLevelDeletion().isLive())
+                    if (!iter.partitionLevelDeletion().isLive())
                     {
                         sstablesIterated++;
                         result = add(UnfilteredRowIterators.noRowsIterator(iter.metadata(), iter.partitionKey(), Rows.EMPTY_STATIC_ROW, iter.partitionLevelDeletion(), filter.isReversed()), result, filter, sstable.isRepaired());
