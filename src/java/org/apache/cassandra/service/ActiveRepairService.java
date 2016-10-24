@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Futures;
@@ -692,6 +693,16 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         public Collection<ColumnFamilyStore> getColumnFamilyStores()
         {
             return ImmutableSet.<ColumnFamilyStore>builder().addAll(columnFamilyStores.values()).build();
+        }
+
+        public Set<UUID> getCfIds()
+        {
+            return ImmutableSet.copyOf(Iterables.transform(getColumnFamilyStores(), cfs -> cfs.metadata.cfId));
+        }
+
+        public Collection<Range<Token>> getRanges()
+        {
+            return ImmutableSet.copyOf(ranges);
         }
 
         @Override

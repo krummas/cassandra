@@ -101,6 +101,7 @@ public final class SystemKeyspace
     public static final String VIEWS_BUILDS_IN_PROGRESS = "views_builds_in_progress";
     public static final String BUILT_VIEWS = "built_views";
     public static final String PREPARED_STATEMENTS = "prepared_statements";
+    public static final String REPAIRS = "repairs";
 
     @Deprecated public static final String LEGACY_HINTS = "hints";
     @Deprecated public static final String LEGACY_BATCHLOG = "batchlog";
@@ -288,6 +289,21 @@ public final class SystemKeyspace
                 + "query_string text,"
                 + "PRIMARY KEY ((prepared_id)))");
 
+    private static final CFMetaData Repairs =
+        compile(REPAIRS,
+                "repairs",
+                "CREATE TABLE %s ("
+                + "parent_id timeuuid, "
+                + "started_at timestamp, "
+                + "last_update timestamp, "
+                + "repaired_at timestamp, "
+                + "state int, "
+                + "coordinator inet, "
+                + "participants set<inet>, "
+                + "ranges set<blob>, "
+                + "cfids set<uuid>, "
+                + "PRIMARY KEY (parent_id))");
+
     @Deprecated
     public static final CFMetaData LegacyHints =
         compile(LEGACY_HINTS,
@@ -457,6 +473,7 @@ public final class SystemKeyspace
                          TransferredRanges,
                          ViewsBuildsInProgress,
                          BuiltViews,
+                         Repairs,
                          LegacyHints,
                          LegacyBatchlog,
                          PreparedStatements,
