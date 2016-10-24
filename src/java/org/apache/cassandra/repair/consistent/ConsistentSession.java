@@ -41,8 +41,8 @@ public abstract class ConsistentSession
         PREPARING(0),
         PREPARED(1),
         REPAIRING(2),
-        FINALIZING(3),
-        FINISHED(4),
+        FINALIZE_PROMISED(3),
+        FINALIZED(4),
         FAILED(5);
 
         State(int expectedOrdinal)
@@ -53,10 +53,10 @@ public abstract class ConsistentSession
         private static final Map<State, Set<State>> transitions = new EnumMap<State, Set<State>>(State.class) {{
             put(PREPARING, ImmutableSet.of(PREPARED, FAILED));
             put(PREPARED, ImmutableSet.of(REPAIRING, FAILED));
-            put(REPAIRING, ImmutableSet.of(FINALIZING, FAILED));
-            put(FINALIZING, ImmutableSet.of(FINISHED, FAILED));
-            put(FINISHED, ImmutableSet.of());
-            put(FAILED, ImmutableSet.of());
+            put(REPAIRING, ImmutableSet.of(FINALIZE_PROMISED, FAILED));
+            put(FINALIZE_PROMISED, ImmutableSet.of(FINALIZED, FAILED));
+            put(FINALIZED, ImmutableSet.of());
+            put(FAILED, ImmutableSet.of(FAILED));
         }};
 
         public boolean canTransitionTo(State state)
