@@ -37,6 +37,9 @@ import com.google.common.util.concurrent.MoreExecutors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.concurrent.ScheduledExecutors;
+import org.apache.cassandra.concurrent.Stage;
+import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionManager;
@@ -64,6 +67,8 @@ import org.apache.cassandra.repair.AnticompactionTask;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.RepairSession;
+import org.apache.cassandra.repair.consistent.CoordinatorSessions;
+import org.apache.cassandra.repair.consistent.LocalSessions;
 import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.utils.CassandraVersion;
 import org.apache.cassandra.utils.Clock;
@@ -98,6 +103,15 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     {
         STARTED, SESSION_SUCCESS, SESSION_FAILED, FINISHED
     }
+
+    public class ConsistentSessions
+    {
+        public final LocalSessions local = new LocalSessions();
+        public final CoordinatorSessions coordinated = new CoordinatorSessions();
+    }
+
+    public final ConsistentSessions consistent = new ConsistentSessions();
+
     private boolean registeredForEndpointChanges = false;
 
     public static CassandraVersion SUPPORTS_GLOBAL_PREPARE_FLAG_VERSION = new CassandraVersion("2.2.1");
@@ -123,6 +137,14 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     {
         this.failureDetector = failureDetector;
         this.gossiper = gossiper;
+    }
+
+    public void start()
+    {
+        consistent.local.start();
+        ScheduledExecutors.optionalTasks.scheduleAtFixedRate(consistent.local::cleanup, 0,
+                                                             LocalSessions.CLEANUP_INTERVAL,
+                                                             TimeUnit.SECONDS);
     }
 
     /**
