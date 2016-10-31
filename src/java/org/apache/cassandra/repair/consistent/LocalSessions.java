@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -37,6 +38,8 @@ import javax.annotation.Nullable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -121,6 +124,37 @@ public class LocalSessions
     int getNumSessions()
     {
         return sessions.size();
+    }
+
+    public List<Map<String, String>> sessionInfo(boolean all)
+    {
+        Iterable<LocalSession> currentSessions = sessions.values();
+        if (!all)
+        {
+            currentSessions = Iterables.filter(currentSessions, s -> !s.isCompleted());
+        }
+        return Lists.newArrayList(Iterables.transform(currentSessions, LocalSessionInfo::sessionToMap));
+    }
+
+    /**
+     * hook for operators to cancel sessions, cancelling from a non-coordinator is an error, unless
+     * force is set to true. Messages are sent out to other participants, but we don't wait for a response
+     */
+    public void cancelSession(UUID sessionID, boolean force)
+    {
+        logger.debug("cancelling session {}", sessionID);
+        LocalSession session = getSession(sessionID);
+        Preconditions.checkArgument(session != null, "Session {} does not exist", sessionID);
+        Preconditions.checkArgument(force || session.coordinator.equals(FBUtilities.getBroadcastAddress()),
+                                    "Cancel session %s from it's coordinator (%s) or use --force",
+                                    sessionID, session.coordinator);
+
+        setStateAndSave(session, FAILED);
+        for (InetAddress participant: session.participants)
+        {
+            if (!participant.equals(FBUtilities.getBroadcastAddress()))
+                sendMessage(participant, new FailSession(sessionID));
+        }
     }
 
     /**

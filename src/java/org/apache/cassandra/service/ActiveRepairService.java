@@ -18,11 +18,15 @@
 package org.apache.cassandra.service;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
@@ -38,8 +42,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.ScheduledExecutors;
-import org.apache.cassandra.concurrent.Stage;
-import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionManager;
@@ -68,6 +70,7 @@ import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.RepairSession;
 import org.apache.cassandra.repair.consistent.CoordinatorSessions;
+import org.apache.cassandra.repair.consistent.LocalSession;
 import org.apache.cassandra.repair.consistent.LocalSessions;
 import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.utils.CassandraVersion;
@@ -91,7 +94,7 @@ import org.apache.cassandra.utils.concurrent.Refs;
  * The creation of a repair session is done through the submitRepairSession that
  * returns a future on the completion of that session.
  */
-public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFailureDetectionEventListener
+public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFailureDetectionEventListener, ActiveRepairServiceMBean
 {
     /**
      * @deprecated this statuses are from the previous JMX notification service,
@@ -137,6 +140,16 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     {
         this.failureDetector = failureDetector;
         this.gossiper = gossiper;
+
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+        try
+        {
+            mbs.registerMBean(this, new ObjectName(MBEAN_NAME));
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     public void start()
@@ -145,6 +158,19 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         ScheduledExecutors.optionalTasks.scheduleAtFixedRate(consistent.local::cleanup, 0,
                                                              LocalSessions.CLEANUP_INTERVAL,
                                                              TimeUnit.SECONDS);
+    }
+
+    @Override
+    public List<Map<String, String>> getSessions(boolean all)
+    {
+        return consistent.local.sessionInfo(all);
+    }
+
+    @Override
+    public void failSession(String session, boolean force)
+    {
+        UUID sessionID = UUID.fromString(session);
+        consistent.local.cancelSession(sessionID, force);
     }
 
     /**
