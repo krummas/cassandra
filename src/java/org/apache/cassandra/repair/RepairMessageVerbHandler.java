@@ -159,6 +159,32 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     MessagingService.instance().sendReply(new MessageOut(MessagingService.Verb.INTERNAL_RESPONSE), id, message.from);
                     break;
 
+                case CONSISTENT_REQUEST:
+                    ActiveRepairService.instance.consistent.local.handlePrepareMessage((PrepareConsistentRequest) message.payload);
+                    break;
+
+                case CONSISTENT_RESPONSE:
+                    ActiveRepairService.instance.consistent.coordinated.handlePrepareResponse((PrepareConsistentResponse) message.payload);
+                    break;
+
+                case FINALIZE_PROPOSE:
+                    ActiveRepairService.instance.consistent.local.handleFinalizeProposeMessage((FinalizePropose) message.payload, message.from);
+                    break;
+
+                case FINALIZE_PROMISE:
+                    ActiveRepairService.instance.consistent.coordinated.handleFinalizePromiseMessage((FinalizePromise) message.payload);
+                    break;
+
+                case FINALIZE_COMMIT:
+                    ActiveRepairService.instance.consistent.local.handleFinalizeCommitMessage((FinalizeCommit) message.payload);
+                    break;
+
+                case FAILED_SESSION:
+                    FailSession failure = (FailSession) message.payload;
+                    ActiveRepairService.instance.consistent.coordinated.handleFailSessionMessage(failure);
+                    ActiveRepairService.instance.consistent.local.handleFailSessionMessage(failure);
+                    break;
+
                 default:
                     ActiveRepairService.instance.handleMessage(message.from, message.payload);
                     break;
