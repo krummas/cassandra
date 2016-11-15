@@ -71,6 +71,8 @@ import org.apache.cassandra.repair.messages.FinalizePropose;
 import org.apache.cassandra.repair.messages.PrepareConsistentRequest;
 import org.apache.cassandra.repair.messages.PrepareConsistentResponse;
 import org.apache.cassandra.repair.messages.RepairMessage;
+import org.apache.cassandra.repair.messages.StatusRequest;
+import org.apache.cassandra.repair.messages.StatusResponse;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -86,6 +88,13 @@ import static org.apache.cassandra.repair.consistent.ConsistentSession.State.*;
 public class LocalSessions
 {
     private static final Logger logger = LoggerFactory.getLogger(LocalSessions.class);
+
+    /**
+     * Amount of time a session can go without any activity before we start checking the status of other
+     * participants to see if we've missed a message
+     */
+    static final int CHECK_STATUS_TIMEOUT = Integer.getInteger("cassandra.repair_status_check_timeout_seconds",
+                                                               Ints.checkedCast(TimeUnit.HOURS.toSeconds(1)));
 
     /**
      * Amount of time a session can go without any activity before being automatically set to FAILED
@@ -193,6 +202,11 @@ public class LocalSessions
         return started;
     }
 
+    private static boolean shouldCheckStatus(LocalSession session, int now)
+    {
+        return !session.isCompleted() && (now > session.getLastUpdate() + CHECK_STATUS_TIMEOUT);
+    }
+
     private static boolean shouldFail(LocalSession session, int now)
     {
         return !session.isCompleted() && (now > session.getLastUpdate() + AUTO_FAIL_TIMEOUT);
@@ -225,6 +239,10 @@ public class LocalSessions
                 {
                     logger.warn("Auto deleting repair session {}", session);
                     deleteSession(session.sessionID);
+                }
+                else if (shouldCheckStatus(session, now))
+                {
+                    sendStatusRequest(session);
                 }
             }
         }
@@ -563,6 +581,55 @@ public class LocalSessions
     public void handleFailSessionMessage(FailSession msg)
     {
         failSession(msg.sessionID, false);
+    }
+
+    public void sendStatusRequest(LocalSession session)
+    {
+        StatusRequest request = new StatusRequest(session.sessionID);
+        for (InetAddress participant: session.participants)
+        {
+            if (!getBroadcastAddress().equals(participant) && isAlive(participant))
+            {
+                sendMessage(participant, request);
+            }
+        }
+    }
+
+    public void handleStatusRequest(InetAddress from, StatusRequest request)
+    {
+        logger.debug("received {}", request);
+        UUID sessionID = request.sessionID;
+        LocalSession session = getSession(sessionID);
+        if (session == null)
+        {
+            logger.warn("Received status response message for unknown session {}", sessionID);
+            return;
+        }
+
+        sendMessage(from, new StatusResponse(sessionID, session.getState()));
+    }
+
+    public void handleStatusResponse(StatusResponse response)
+    {
+        logger.debug("received {}", response);
+        UUID sessionID = response.sessionID;
+        LocalSession session = getSession(sessionID);
+        if (session == null)
+        {
+            logger.warn("Received status response message for unknown session {}", sessionID);
+            return;
+        }
+
+        // only change local state if response state is FINALIZED or FAILED, since those are
+        // the only statuses that would indicate we've missed a message completing the session
+        if (response.state == FINALIZED || response.state == FAILED)
+        {
+            setStateAndSave(session, response.state);
+        }
+        else
+        {
+            logger.debug("{} is not actionable");
+        }
     }
 
     /**

@@ -191,6 +191,14 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ActiveRepairService.instance.consistent.local.handleFailSessionMessage(failure);
                     break;
 
+                case STATUS_REQUEST:
+                    ActiveRepairService.instance.consistent.local.handleStatusRequest(message.from, (StatusRequest) message.payload);
+                    break;
+                
+                case STATUS_RESPONSE:
+                    ActiveRepairService.instance.consistent.local.handleStatusResponse((StatusResponse) message.payload);
+                    break;
+
                 default:
                     ActiveRepairService.instance.handleMessage(message.from, message.payload);
                     break;

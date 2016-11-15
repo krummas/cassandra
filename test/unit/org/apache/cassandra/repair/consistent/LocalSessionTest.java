@@ -26,8 +26,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -51,6 +53,8 @@ import org.apache.cassandra.repair.messages.FinalizePropose;
 import org.apache.cassandra.repair.messages.PrepareConsistentRequest;
 import org.apache.cassandra.repair.messages.PrepareConsistentResponse;
 import org.apache.cassandra.repair.messages.RepairMessage;
+import org.apache.cassandra.repair.messages.StatusRequest;
+import org.apache.cassandra.repair.messages.StatusResponse;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.FBUtilities;
@@ -494,6 +498,102 @@ public class LocalSessionTest extends ConsistentSessionTest
         Assert.assertTrue(sessions.sentMessages.isEmpty());
     }
 
+    @Test
+    public void sendStatusRequest() throws Exception
+    {
+        UUID sessionID = registerSession();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+        LocalSession session = sessions.prepareForTest(sessionID);
+
+        sessions.sentMessages.clear();
+        sessions.sendStatusRequest(session);
+
+        assertNoMessagesSent(sessions, PARTICIPANT1);
+        StatusRequest expected = new StatusRequest(sessionID);
+        assertMessagesSent(sessions, PARTICIPANT2, expected);
+        assertMessagesSent(sessions, PARTICIPANT3, expected);
+    }
+
+    @Test
+    public void handleStatusRequest() throws Exception
+    {
+        UUID sessionID = registerSession();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+        LocalSession session = sessions.prepareForTest(sessionID);
+        Assert.assertEquals(PREPARED, session.getState());
+
+        sessions.sentMessages.clear();
+        sessions.handleStatusRequest(PARTICIPANT2, new StatusRequest(sessionID));
+        assertNoMessagesSent(sessions, PARTICIPANT1);
+        assertMessagesSent(sessions, PARTICIPANT2, new StatusResponse(sessionID, PREPARED));
+        assertNoMessagesSent(sessions, PARTICIPANT3);
+    }
+
+    @Test
+    public void handleStatusRequestNoSession() throws Exception
+    {
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+
+        sessions.sentMessages.clear();
+        sessions.handleStatusRequest(PARTICIPANT2, new StatusRequest(UUIDGen.getTimeUUID()));
+        assertNoMessagesSent(sessions, PARTICIPANT1);
+        assertNoMessagesSent(sessions, PARTICIPANT2);
+        assertNoMessagesSent(sessions, PARTICIPANT3);
+    }
+
+    @Test
+    public void handleStatusResponseFinalized() throws Exception
+    {
+        UUID sessionID = registerSession();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+        LocalSession session = sessions.prepareForTest(sessionID);
+        session.setState(FINALIZE_PROMISED);
+
+        sessions.handleStatusResponse(new StatusResponse(sessionID, FINALIZED));
+        Assert.assertEquals(FINALIZED, session.getState());
+    }
+
+    @Test
+    public void handleStatusResponseFailed() throws Exception
+    {
+        UUID sessionID = registerSession();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+        LocalSession session = sessions.prepareForTest(sessionID);
+        session.setState(FINALIZE_PROMISED);
+
+        sessions.handleStatusResponse(new StatusResponse(sessionID, FAILED));
+        Assert.assertEquals(FAILED, session.getState());
+    }
+
+    @Test
+    public void handleStatusResponseNoop() throws Exception
+    {
+        UUID sessionID = registerSession();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+        LocalSession session = sessions.prepareForTest(sessionID);
+        session.setState(REPAIRING);
+
+        sessions.handleStatusResponse(new StatusResponse(sessionID, FINALIZE_PROMISED));
+        Assert.assertEquals(REPAIRING, session.getState());
+    }
+
+    @Test
+    public void handleStatusResponseNoSession() throws Exception
+    {
+        UUID sessionID = UUIDGen.getTimeUUID();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
+        sessions.start();
+
+        sessions.handleStatusResponse(new StatusResponse(sessionID, FINALIZE_PROMISED));
+        Assert.assertNull(sessions.getSession(sessionID));
+    }
+
     /**
      * Check all states (except failed)
      */
@@ -722,6 +822,34 @@ public class LocalSessionTest extends ConsistentSessionTest
 
         Assert.assertNull(sessions.loadUnsafe(failed.sessionID));
         Assert.assertNull(sessions.loadUnsafe(finalized.sessionID));
+    }
+
+    /**
+     * Sessions should start checking the status of their participants if
+     * there hasn't been activity for the CHECK_STATUS_TIMEOUT period
+     */
+    @Test
+    public void cleanupStatusRequest() throws Exception
+    {
+        AtomicReference<LocalSession> checkedSession = new AtomicReference<>();
+        InstrumentedLocalSessions sessions = new InstrumentedLocalSessions() {
+            public void sendStatusRequest(LocalSession session)
+            {
+                Assert.assertTrue(checkedSession.compareAndSet(null, session));
+            }
+        };
+        sessions.start();
+
+        int time = FBUtilities.nowInSeconds() - LocalSessions.CHECK_STATUS_TIMEOUT - 1;
+        LocalSession session = sessionWithTime(time - 1, time);
+        session.setState(REPAIRING);
+
+        sessions.putSessionUnsafe(session);
+        Assert.assertNotNull(sessions.getSession(session.sessionID));
+
+        sessions.cleanup();
+
+        Assert.assertEquals(session, checkedSession.get());
     }
 }
 
