@@ -32,7 +32,7 @@ import org.apache.cassandra.repair.messages.PrepareConsistentResponse;
 import org.apache.cassandra.service.ActiveRepairService;
 
 /**
- * holds all consistent repair sessions a node is coordinating
+ * Container for all consistent repair sessions a node is coordinating
  */
 public class CoordinatorSessions
 {

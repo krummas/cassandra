@@ -22,6 +22,9 @@ import com.google.common.base.Preconditions;
 
 import org.apache.cassandra.utils.FBUtilities;
 
+/**
+ * Basically just a record of a local session. All of the local session logic is implemented in {@link LocalSessions}
+ */
 public class LocalSession extends ConsistentSession
 {
     public final int startedAt;

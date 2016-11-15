@@ -47,9 +47,12 @@ import org.apache.cassandra.repair.messages.FinalizeCommit;
 import org.apache.cassandra.repair.messages.FinalizePropose;
 import org.apache.cassandra.repair.messages.PrepareConsistentRequest;
 import org.apache.cassandra.repair.messages.RepairMessage;
+import org.apache.cassandra.service.ActiveRepairService;
 
 /**
- * Coordinator side view of a consistent repair session.
+ * Coordinator side logic and state of a consistent repair session. Like {@link ActiveRepairService.ParentRepairSession},
+ * there is only one {@code CoordinatorSession} per user repair command, regardless of the number of tables and token
+ * ranges involved.
  */
 public class CoordinatorSession extends ConsistentSession
 {
@@ -212,7 +215,6 @@ public class CoordinatorSession extends ConsistentSession
         Preconditions.checkArgument(allStates(State.FINALIZE_PROMISED));
         logger.debug("Sending FinalizeCommit message to {}", participants);
         FinalizeCommit message = new FinalizeCommit(sessionID);
-        // TODO: do local commit first ?
         for (final InetAddress participant: participants)
         {
             executor.execute(() -> sendMessage(participant, message));
@@ -240,8 +242,7 @@ public class CoordinatorSession extends ConsistentSession
     }
 
     /**
-     * Runs the asynchronous consistent repair session.
-     * actual repair sessions are scheduled via a submitter to make unit testing easier
+     * Runs the asynchronous consistent repair session. Actual repair sessions are scheduled via a submitter to make unit testing easier
      */
     public ListenableFuture execute(Executor executor, Supplier<ListenableFuture<List<RepairSessionResult>>> sessionSubmitter, AtomicBoolean hasFailure)
     {
