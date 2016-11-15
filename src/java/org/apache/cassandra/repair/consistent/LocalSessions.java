@@ -59,6 +59,7 @@ import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessageOut;
@@ -126,6 +127,18 @@ public class LocalSessions
         return sessions.size();
     }
 
+    @VisibleForTesting
+    protected InetAddress getBroadcastAddress()
+    {
+        return FBUtilities.getBroadcastAddress();
+    }
+
+    @VisibleForTesting
+    protected boolean isAlive(InetAddress address)
+    {
+        return FailureDetector.instance.isAlive(address);
+    }
+
     public List<Map<String, String>> sessionInfo(boolean all)
     {
         Iterable<LocalSession> currentSessions = sessions.values();
@@ -145,14 +158,14 @@ public class LocalSessions
         logger.debug("cancelling session {}", sessionID);
         LocalSession session = getSession(sessionID);
         Preconditions.checkArgument(session != null, "Session {} does not exist", sessionID);
-        Preconditions.checkArgument(force || session.coordinator.equals(FBUtilities.getBroadcastAddress()),
+        Preconditions.checkArgument(force || session.coordinator.equals(getBroadcastAddress()),
                                     "Cancel session %s from it's coordinator (%s) or use --force",
                                     sessionID, session.coordinator);
 
         setStateAndSave(session, FAILED);
         for (InetAddress participant: session.participants)
         {
-            if (!participant.equals(FBUtilities.getBroadcastAddress()))
+            if (!participant.equals(getBroadcastAddress()))
                 sendMessage(participant, new FailSession(sessionID));
         }
     }
@@ -486,7 +499,7 @@ public class LocalSessions
             {
                 logger.debug("pending anti-compaction for {} completed", sessionID);
                 setStateAndSave(session, PREPARED);
-                sendMessage(coordinator, new PrepareConsistentResponse(sessionID, FBUtilities.getBroadcastAddress(), true));
+                sendMessage(coordinator, new PrepareConsistentResponse(sessionID, getBroadcastAddress(), true));
                 executor.shutdown();
             }
 
@@ -524,7 +537,7 @@ public class LocalSessions
         try
         {
             setStateAndSave(session, FINALIZE_PROMISED);
-            sendMessage(from, new FinalizePromise(sessionID, FBUtilities.getBroadcastAddress(), true));
+            sendMessage(from, new FinalizePromise(sessionID, getBroadcastAddress(), true));
         }
         catch (IllegalArgumentException e)
         {
