@@ -79,11 +79,11 @@ import org.apache.cassandra.utils.FBUtilities;
 import static org.apache.cassandra.repair.consistent.ConsistentSession.State.*;
 
 /**
- * holds all consistent repair sessions a node is a participant in.
- * Since sessions need to be loaded, and since we need to handle cases
- * where sessions might not exist, most of the logic around local sessions is implemented
- * in this class, with the LocalSession class being treated more like a simple struct, in
- * contrast with the CoordinatorSession
+ * Manages all consistent repair sessions a node is participating in.
+ * <p/>
+ * Since sessions need to be loaded, and since we need to handle cases where sessions might not exist, most of the logic
+ * around local sessions is implemented in this class, with the LocalSession class being treated more like a simple struct,
+ * in contrast with {@link CoordinatorSession}
  */
 public class LocalSessions
 {
@@ -485,6 +485,15 @@ public class LocalSessions
         return pac.run();
     }
 
+    /**
+     * The PrepareConsistentRequest effectively promotes the parent repair session to a consistent
+     * incremental session, and begins the 'pending anti compaction' which moves all sstable data
+     * that is to be repaired into it's own silo, preventing it from mixing with other data.
+     *
+     * No response is sent to the repair coordinator until the pending anti compaction has completed
+     * successfully. If the pending anti compaction fails, a failure message is sent to the coordinator,
+     * cancelling the session.
+     */
     public void handlePrepareMessage(PrepareConsistentRequest request)
     {
         logger.debug("received {}", request);
@@ -564,6 +573,13 @@ public class LocalSessions
         }
     }
 
+    /**
+     * Finalizes the repair session, completing it as successful.
+     *
+     * This only changes the state of the session, it doesn't promote the siloed sstables to repaired. That will happen
+     * as part of the compaction process, and avoids having to worry about in progress compactions interfering with the
+     * promotion.
+     */
     public void handleFinalizeCommitMessage(FinalizeCommit commit)
     {
         logger.debug("received {}", commit);

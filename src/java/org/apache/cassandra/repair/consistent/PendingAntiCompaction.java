@@ -48,7 +48,9 @@ import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.concurrent.Refs;
 
 /**
- * Performs anti compaction on sstables prior to the validation phase.
+ * Performs an anti compaction on a set of tables and token ranges, isolating the unrepaired sstables
+ * for a give token range into a pending repair group so they can't be compacted with other sstables
+ * while they are being repaired.
  */
 public class PendingAntiCompaction
 {

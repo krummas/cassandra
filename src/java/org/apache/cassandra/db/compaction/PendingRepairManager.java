@@ -49,7 +49,12 @@ import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.Pair;
 
 /**
- * Companion to CompactionStrategyManager which manages the sstables marked pending repair
+ * Companion to CompactionStrategyManager which manages the sstables marked pending repair.
+ *
+ * SSTables are classified as pending repair by the anti-compaction performed at the beginning
+ * of an incremental repair, or when they're streamed in with a pending repair id. This prevents
+ * unrepaired / pending repaired sstables from being compacted together. Once the repair session
+ * has completed, or failed, sstables will be re-classified as part of the compaction process.
  */
 class PendingRepairManager
 {
