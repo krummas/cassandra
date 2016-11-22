@@ -30,7 +30,6 @@ import javax.management.openmbean.OpenDataException;
 import javax.management.openmbean.TabularData;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Predicate;
 import com.google.common.collect.*;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.*;
@@ -618,16 +617,17 @@ public class CompactionManager implements CompactionManagerMBean
             }
         };
 
-        if (executor.isShutdown())
-        {
-            logger.info("Compaction executor has shut down, not submitting anticompaction");
-            sstables.release();
-            return Futures.immediateCancelledFuture();
-        }
-
         ListenableFutureTask<?> task = ListenableFutureTask.create(runnable, null);
-        executor.submit(task);
-        return task;
+        try
+        {
+            executor.submitIfRunning(task, "pending anticompaction");
+            return task;
+        }
+        finally
+        {
+            if (task.isCancelled())
+                sstables.release();
+        }
     }
 
     /**
@@ -1468,7 +1468,7 @@ public class CompactionManager implements CompactionManagerMBean
         if (prs.isGlobal)
             prs.markSSTablesRepairing(cfs.metadata.cfId, validator.desc.parentSessionId);
 
-        Predicate<SSTableReader> predicate;
+        com.google.common.base.Predicate<SSTableReader> predicate;
         if (validator.isConsistent)
         {
             predicate = s -> validator.desc.parentSessionId.equals(s.getSSTableMetadata().pendingRepair);

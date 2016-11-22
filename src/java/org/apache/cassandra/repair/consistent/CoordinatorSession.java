@@ -231,7 +231,7 @@ public class CoordinatorSession extends ConsistentSession
     {
         logger.debug("Failing session {}", sessionID);
         FailSession message = new FailSession(sessionID);
-        for (final InetAddress participant: participants)
+        for (final InetAddress participant : participants)
         {
             if (participantStates.get(participant) != State.FAILED)
             {

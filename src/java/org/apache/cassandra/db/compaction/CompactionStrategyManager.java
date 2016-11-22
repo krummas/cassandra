@@ -132,9 +132,11 @@ public class CompactionStrategyManager implements INotificationConsumer
             Iterator<Supplier<AbstractCompactionTask>> suppliers = Iterables.transform(sortedSuppliers, p -> p.right).iterator();
             assert suppliers.hasNext();
 
-            do {
+            do
+            {
                 task = suppliers.next().get();
-            } while (suppliers.hasNext() && task == null);
+            }
+            while (suppliers.hasNext() && task == null);
 
             return task;
         }
@@ -258,20 +260,30 @@ public class CompactionStrategyManager implements INotificationConsumer
         Directories.DataDirectory[] directories = locations.getWriteableLocations();
         List<PartitionPosition> boundaries = StorageService.getDiskBoundaries(cfs, directories);
         if (boundaries == null)
-        {
-            // try to figure out location based on sstable directory:
-            for (int i = 0; i < directories.length; i++)
-            {
-                Directories.DataDirectory directory = directories[i];
-                if (sstable.descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
-                    return i;
-            }
-            return 0;
-        }
+            return getCompactionStrategyIndex(locations, sstable.descriptor);
 
         int pos = Collections.binarySearch(boundaries, sstable.first);
         assert pos < 0; // boundaries are .minkeybound and .maxkeybound so they should never be equal
         return -pos - 1;
+    }
+
+    /**
+     * get the index for the descriptor based on the existing directories
+     * @param locations
+     * @param descriptor
+     * @return
+     */
+    private static int getCompactionStrategyIndex(Directories locations, Descriptor descriptor)
+    {
+         Directories.DataDirectory[] directories = locations.getWriteableLocations();
+         // try to figure out location based on sstable directory:
+         for (int i = 0; i < directories.length; i++)
+         {
+             Directories.DataDirectory directory = directories[i];
+             if (descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
+                 return i;
+         }
+         return 0;
     }
 
     @VisibleForTesting
@@ -294,6 +306,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         return strategies;
     }
 
+    @VisibleForTesting
     Set<UUID> pendingRepairs()
     {
         Set<UUID> ids = new HashSet<>();
@@ -1025,19 +1038,14 @@ public class CompactionStrategyManager implements INotificationConsumer
         readLock.lock();
         try
         {
+            // to avoid creating a compaction strategy for the wrong pending repair manager, we get the index based on where the sstable is to be written
+            int index = getCompactionStrategyIndex(getDirectories(), descriptor);
             if (pendingRepair != ActiveRepairService.NO_PENDING_REPAIR)
-            {
-                return pendingRepairs.get(0).getOrCreate(pendingRepair).createSSTableMultiWriter(descriptor, keyCount, ActiveRepairService.UNREPAIRED_SSTABLE, pendingRepair, collector, header, indexes, txn);
-
-            }
+                return pendingRepairs.get(index).getOrCreate(pendingRepair).createSSTableMultiWriter(descriptor, keyCount, ActiveRepairService.UNREPAIRED_SSTABLE, pendingRepair, collector, header, indexes, txn);
             else if (repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
-            {
-                return unrepaired.get(0).createSSTableMultiWriter(descriptor, keyCount, repairedAt, pendingRepair, collector, header, indexes, txn);
-            }
+                return unrepaired.get(index).createSSTableMultiWriter(descriptor, keyCount, repairedAt, ActiveRepairService.NO_PENDING_REPAIR, collector, header, indexes, txn);
             else
-            {
-                return repaired.get(0).createSSTableMultiWriter(descriptor, keyCount, repairedAt, pendingRepair, collector, header, indexes, txn);
-            }
+                return repaired.get(index).createSSTableMultiWriter(descriptor, keyCount, repairedAt, ActiveRepairService.NO_PENDING_REPAIR, collector, header, indexes, txn);
         }
         finally
         {
@@ -1065,7 +1073,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             {
                 return Collections.singletonList(locations[repairedIndex].location.getAbsolutePath());
             }
-            for (int i=0; i<pendingRepairs.size(); i++)
+            for (int i = 0; i < pendingRepairs.size(); i++)
             {
                 PendingRepairManager pending = pendingRepairs.get(i);
                 if (pending.hasStrategy(strategy))
