@@ -303,7 +303,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
                                                                    () -> submitRepairSessions(parentSession, repairedAt, true, executor, commonRanges, cfnames),
                                                                    hasFailure);
         Collection<Range<Token>> ranges = new HashSet<>();
-        for (Collection<Range<Token>> range: Iterables.transform(commonRanges, cr -> cr.right))
+        for (Collection<Range<Token>> range : Iterables.transform(commonRanges, cr -> cr.right))
         {
             ranges.addAll(range);
         }

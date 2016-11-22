@@ -141,7 +141,7 @@ public class PendingAntiCompaction
             if (Iterables.any(results, t -> t == null))
             {
                 // Release all sstables, and report failure back to coordinator
-                for (AcquireResult result: results)
+                for (AcquireResult result : results)
                 {
                     if (result != null)
                     {

@@ -98,7 +98,7 @@ class PendingRepairManager
 
                 if (strategy == null)
                 {
-                    logger.info("Creating {}.{} compaction strategy for pending repair: {}", cfs.metadata.ksName, cfs.metadata.cfName, id);
+                    logger.debug("Creating {}.{} compaction strategy for pending repair: {}", cfs.metadata.ksName, cfs.metadata.cfName, id);
                     strategy = CFMetaData.createCompactionStrategyInstance(cfs, params);
                     strategies = mapBuilder().putAll(strategies).put(id, strategy).build();
                 }
@@ -113,12 +113,12 @@ class PendingRepairManager
         return getOrCreate(sstable.getSSTableMetadata().pendingRepair);
     }
 
-    synchronized void removeSession(UUID sessionID)
+    private synchronized void removeSession(UUID sessionID)
     {
         if (!strategies.containsKey(sessionID))
             return;
 
-        logger.info("Removing compaction strategy for pending repair {} on  {}.{}", sessionID, cfs.metadata.ksName, cfs.metadata.cfName);
+        logger.debug("Removing compaction strategy for pending repair {} on  {}.{}", sessionID, cfs.metadata.ksName, cfs.metadata.cfName);
         strategies = ImmutableMap.copyOf(Maps.filterKeys(strategies, k -> !k.equals(sessionID)));
     }
 
@@ -167,14 +167,9 @@ class PendingRepairManager
             Set<SSTableReader> groupAdded = entry.getValue().right;
 
             if (!groupRemoved.isEmpty())
-            {
                 strategy.replaceSSTables(groupRemoved, groupAdded);
-            }
             else
-            {
-                for (SSTableReader sstable : groupAdded)
-                    strategy.addSSTable(sstable);
-            }
+                strategy.addSSTables(groupAdded);
         }
     }
 
@@ -198,12 +193,7 @@ class PendingRepairManager
         strategies.values().forEach(AbstractCompactionStrategy::disable);
     }
 
-    synchronized void clear()
-    {
-        strategies = ImmutableMap.of();
-    }
-
-    int getEstimatedRemainingTasks(UUID sessionID, AbstractCompactionStrategy strategy)
+    private int getEstimatedRemainingTasks(UUID sessionID, AbstractCompactionStrategy strategy)
     {
         if (needsCleanup(sessionID))
         {
