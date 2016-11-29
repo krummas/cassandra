@@ -48,11 +48,6 @@ public class HeapPool extends MemtablePool
             return ByteBuffer.allocate(size);
         }
 
-        public DataReclaimer reclaimer()
-        {
-            return NO_OP;
-        }
-
         public EnsureOnHeap ensureOnHeap()
         {
             return ENSURE_NOOP;
