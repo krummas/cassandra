@@ -147,8 +147,8 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         Assert.assertEquals(2, prm.getSessions().size());
         AbstractCompactionTask compactionTask = prm.getNextBackgroundTask(FBUtilities.nowInSeconds());
         Assert.assertNotNull(compactionTask);
-        Assert.assertSame(PendingRepairManager.CleanupCompactionTask.class, compactionTask.getClass());
-        PendingRepairManager.CleanupCompactionTask cleanupTask = (PendingRepairManager.CleanupCompactionTask) compactionTask;
+        Assert.assertSame(PendingRepairManager.RepairFinishedCompactionTask.class, compactionTask.getClass());
+        PendingRepairManager.RepairFinishedCompactionTask cleanupTask = (PendingRepairManager.RepairFinishedCompactionTask) compactionTask;
         Assert.assertEquals(repairID, cleanupTask.getSessionID());
     }
 
