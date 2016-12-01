@@ -105,6 +105,16 @@ public class CompactionTask extends AbstractCompactionTask
         return false;
     }
 
+    protected long expectedWriteSize()
+    {
+        return cfs.getExpectedCompactedFileSize(transaction.originals(), compactionType);
+    }
+
+    protected long estimateSSTables(long expectedWriteSize)
+    {
+        return Math.max(1, expectedWriteSize / cfs.getCompactionStrategyManager().getMaxSSTableBytes());
+    }
+
     /**
      * For internal use and testing only.  The rest of the system should go through the submit* methods,
      * which are properly serialized.
@@ -126,11 +136,7 @@ public class CompactionTask extends AbstractCompactionTask
         if (DatabaseDescriptor.isSnapshotBeforeCompaction())
             cfs.snapshotWithoutFlush(System.currentTimeMillis() + "-compact-" + cfs.name);
 
-        // note that we need to do a rough estimate early if we can fit the compaction on disk - this is pessimistic, but
-        // since we might remove sstables from the compaction in checkAvailableDiskSpace it needs to be done here
-        long expectedWriteSize = cfs.getExpectedCompactedFileSize(transaction.originals(), compactionType);
-        long earlySSTableEstimate = Math.max(1, expectedWriteSize / strategy.getMaxSSTableBytes());
-        checkAvailableDiskSpace(earlySSTableEstimate, expectedWriteSize);
+        checkAvailableDiskSpace();
 
         // sanity check: all sstables must belong to the same cfs
         assert !Iterables.any(transaction.originals(), new Predicate<SSTableReader>()
@@ -279,18 +285,25 @@ public class CompactionTask extends AbstractCompactionTask
         return minRepairedAt;
     }
 
+    @Deprecated
     protected void checkAvailableDiskSpace(long estimatedSSTables, long expectedWriteSize)
+    {
+        checkAvailableDiskSpace();
+    }
+
+    protected void checkAvailableDiskSpace()
     {
         if(!cfs.isCompactionDiskSpaceCheckEnabled() && compactionType == OperationType.COMPACTION)
         {
             logger.info("Compaction space check is disabled");
             return;
         }
-
-        while (!getDirectories().hasAvailableDiskSpace(estimatedSSTables, expectedWriteSize))
+        long expectedWriteSize = expectedWriteSize();
+        while (!getDirectories().hasAvailableDiskSpace(estimateSSTables(expectedWriteSize), expectedWriteSize))
         {
             if (!reduceScopeForLimitedSpace())
-                throw new RuntimeException(String.format("Not enough space for compaction, estimated sstables = %d, expected write size = %d", estimatedSSTables, expectedWriteSize));
+                throw new RuntimeException(String.format("Not enough space for compaction, estimated sstables = %d, expected write size = %d", estimateSSTables(expectedWriteSize), expectedWriteSize));
+            expectedWriteSize = expectedWriteSize();
         }
     }
 
