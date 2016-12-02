@@ -1071,6 +1071,7 @@
         </tarfileset>
       </rat:report>
     </target>
+    <taskdef name="junit" classname="org.apache.cassandra.junit.JStackJUnitTask" classpath="lib/JStackJUnit.jar"/>
 
   <target name="build-test" depends="build" description="Compile test classes">
     <javac
