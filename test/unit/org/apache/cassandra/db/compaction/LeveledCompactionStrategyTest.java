@@ -190,7 +190,7 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
         // Enough data to have a level 1 and 2
         int rows = 20;
         int columns = 10;
-
+        cfs.disableAutoCompaction();
         // Adds enough data to trigger multiple sstable per level
         for (int r = 0; r < rows; r++)
         {
@@ -203,13 +203,8 @@ public class LeveledCompactionStrategyTest extends SchemaLoader
             rm.apply();
             cfs.forceBlockingFlush();
         }
-        waitForLeveling(cfs);
         cfs.forceBlockingFlush();
         LeveledCompactionStrategy strategy = (LeveledCompactionStrategy) ((WrappingCompactionStrategy) cfs.getCompactionStrategy()).getWrappedStrategies().get(1);
-        cfs.disableAutoCompaction();
-
-        while(CompactionManager.instance.isCompacting(Arrays.asList(cfs)))
-            Thread.sleep(100);
 
         for (SSTableReader s : cfs.getSSTables())
         {
