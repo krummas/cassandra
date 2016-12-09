@@ -608,10 +608,12 @@ public class LocalSessions
         if (session == null)
         {
             logger.warn("Received status response message for unknown session {}", sessionID);
-            return;
+            sendMessage(from, new StatusResponse(sessionID, FAILED));
         }
-
-        sendMessage(from, new StatusResponse(sessionID, session.getState()));
+        else
+        {
+            sendMessage(from, new StatusResponse(sessionID, session.getState()));
+        }
     }
 
     public void handleStatusResponse(StatusResponse response)

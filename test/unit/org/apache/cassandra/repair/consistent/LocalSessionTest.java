@@ -538,9 +538,10 @@ public class LocalSessionTest extends ConsistentSessionTest
         sessions.start();
 
         sessions.sentMessages.clear();
-        sessions.handleStatusRequest(PARTICIPANT2, new StatusRequest(UUIDGen.getTimeUUID()));
+        UUID sessionID = UUIDGen.getTimeUUID();
+        sessions.handleStatusRequest(PARTICIPANT2, new StatusRequest(sessionID));
         assertNoMessagesSent(sessions, PARTICIPANT1);
-        assertNoMessagesSent(sessions, PARTICIPANT2);
+        assertMessagesSent(sessions, PARTICIPANT2, new StatusResponse(sessionID, FAILED));
         assertNoMessagesSent(sessions, PARTICIPANT3);
     }
 
