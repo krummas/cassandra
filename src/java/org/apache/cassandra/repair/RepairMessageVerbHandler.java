@@ -21,8 +21,6 @@ import java.net.InetAddress;
 import java.util.*;
 
 import com.google.common.base.Predicate;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,20 +140,6 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
 
                     StreamingRepairTask task = new StreamingRepairTask(desc, request, repairedAt, isConsistent(desc.parentSessionId));
                     task.run();
-                    break;
-
-                case ANTICOMPACTION_REQUEST:
-                    AnticompactionRequest anticompactionRequest = (AnticompactionRequest) message.payload;
-                    logger.debug("Got anticompaction request {}", anticompactionRequest);
-                    ListenableFuture<?> compactionDone = ActiveRepairService.instance.doAntiCompaction(anticompactionRequest.parentRepairSession, anticompactionRequest.successfulRanges);
-                    compactionDone.addListener(new Runnable()
-                    {
-                        @Override
-                        public void run()
-                        {
-                            MessagingService.instance().sendReply(new MessageOut(MessagingService.Verb.INTERNAL_RESPONSE), id, message.from);
-                        }
-                    }, MoreExecutors.directExecutor());
                     break;
 
                 case CLEANUP:

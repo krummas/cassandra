@@ -30,7 +30,6 @@ import javax.management.openmbean.TabularData;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.*;
-import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1350,7 +1349,7 @@ public class CompactionManager implements CompactionManagerMBean
                 // If there is a snapshot created for the session then read from there.
                 // note that we populate the parent repair session when creating the snapshot, meaning the sstables in the snapshot are the ones we
                 // are supposed to validate.
-                sstables = cfs.getSnapshotSSTableReader(snapshotName);
+                sstables = cfs.getSnapshotSSTableReaders(snapshotName);
 
 
                 // Computing gcbefore based on the current time wouldn't be very good because we know each replica will execute
@@ -1464,8 +1463,6 @@ public class CompactionManager implements CompactionManagerMBean
         if (prs == null)
             return null;
         Set<SSTableReader> sstablesToValidate = new HashSet<>();
-        if (prs.isGlobal)
-            prs.markSSTablesRepairing(cfs.metadata.cfId, validator.desc.parentSessionId);
 
         com.google.common.base.Predicate<SSTableReader> predicate;
         if (validator.isConsistent)

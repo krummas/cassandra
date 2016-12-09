@@ -46,7 +46,6 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.repair.consistent.CoordinatorSession;
-import org.apache.cassandra.repair.consistent.CoordinatorSessions;
 import org.apache.cassandra.repair.messages.RepairOption;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.QueryState;
@@ -238,12 +237,11 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
         }
         else
         {
-            normalRepair(parentSession, repairedAt, startTime, traceState, allNeighbors, commonRanges, cfnames);
+            normalRepair(parentSession, startTime, traceState, allNeighbors, commonRanges, cfnames);
         }
     }
 
     private void normalRepair(UUID parentSession,
-                              long repairedAt,
                               long startTime,
                               TraceState traceState,
                               Set<InetAddress> allNeighbors,
@@ -254,7 +252,8 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
         // Set up RepairJob executor for this repair command.
         ListeningExecutorService executor = createExecutor();
 
-        final ListenableFuture<List<RepairSessionResult>> allSessions = submitRepairSessions(parentSession, repairedAt, false, executor, commonRanges, cfnames);
+        // Setting the repairedAt time to UNREPAIRED_SSTABLE causes the repairedAt times to be preserved across streamed sstables
+        final ListenableFuture<List<RepairSessionResult>> allSessions = submitRepairSessions(parentSession, ActiveRepairService.UNREPAIRED_SSTABLE, false, executor, commonRanges, cfnames);
 
         // After all repair sessions completes(successful or not),
         // run anticompaction if necessary and send finish notice back to client
@@ -277,7 +276,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
                         hasFailure.compareAndSet(false, true);
                     }
                 }
-                return ActiveRepairService.instance.finishParentSession(parentSession, allNeighbors, successfulRanges);
+                return Futures.immediateFuture(null);
             }
         });
         Futures.addCallback(anticompactionResult, new RepairCompleteCallback(parentSession, successfulRanges, startTime, traceState, hasFailure, executor));

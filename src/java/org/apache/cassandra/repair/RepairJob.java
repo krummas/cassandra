@@ -75,16 +75,26 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
         // Create a snapshot at all nodes unless we're using pure parallel repairs
         if (parallelismDegree != RepairParallelism.PARALLEL)
         {
-            // Request snapshot to all replica
-            List<ListenableFuture<InetAddress>> snapshotTasks = new ArrayList<>(allEndpoints.size());
-            for (InetAddress endpoint : allEndpoints)
+            ListenableFuture<List<InetAddress>> allSnapshotTasks;
+            if (isConsistent)
             {
-                SnapshotTask snapshotTask = new SnapshotTask(desc, endpoint);
-                snapshotTasks.add(snapshotTask);
-                taskExecutor.execute(snapshotTask);
+                // consistent repair does it's own "snapshotting"
+                allSnapshotTasks = Futures.immediateFuture(allEndpoints);
             }
+            else
+            {
+                // Request snapshot to all replica
+                List<ListenableFuture<InetAddress>> snapshotTasks = new ArrayList<>(allEndpoints.size());
+                for (InetAddress endpoint : allEndpoints)
+                {
+                    SnapshotTask snapshotTask = new SnapshotTask(desc, endpoint);
+                    snapshotTasks.add(snapshotTask);
+                    taskExecutor.execute(snapshotTask);
+                }
+                allSnapshotTasks = Futures.allAsList(snapshotTasks);
+            }
+
             // When all snapshot complete, send validation requests
-            ListenableFuture<List<InetAddress>> allSnapshotTasks = Futures.allAsList(snapshotTasks);
             validations = Futures.transform(allSnapshotTasks, new AsyncFunction<List<InetAddress>, List<TreeResponse>>()
             {
                 public ListenableFuture<List<TreeResponse>> apply(List<InetAddress> endpoints)

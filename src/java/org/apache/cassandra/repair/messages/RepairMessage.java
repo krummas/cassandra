@@ -43,7 +43,6 @@ public abstract class RepairMessage
         VALIDATION_COMPLETE(1, ValidationComplete.serializer),
         SYNC_REQUEST(2, SyncRequest.serializer),
         SYNC_COMPLETE(3, SyncComplete.serializer),
-        ANTICOMPACTION_REQUEST(4, AnticompactionRequest.serializer),
         PREPARE_MESSAGE(5, PrepareMessage.serializer),
         SNAPSHOT(6, SnapshotMessage.serializer),
         CLEANUP(7, CleanupMessage.serializer),

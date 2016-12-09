@@ -1862,7 +1862,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         }
     }
 
-    public Refs<SSTableReader> getSnapshotSSTableReader(String tag) throws IOException
+    public Refs<SSTableReader> getSnapshotSSTableReaders(String tag) throws IOException
     {
         Map<Integer, SSTableReader> active = new HashMap<>();
         for (SSTableReader sstable : getSSTables(SSTableSet.CANONICAL))
