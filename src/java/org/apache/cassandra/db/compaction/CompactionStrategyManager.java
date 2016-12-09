@@ -113,6 +113,31 @@ public class CompactionStrategyManager implements INotificationConsumer
                 return null;
 
             maybeReload(cfs.metadata);
+
+            // first try to promote/demote sstables from completed repairs
+            ArrayList<Pair<Integer, PendingRepairManager>> pendingRepairManagers = new ArrayList<>(pendingRepairs.size());
+            for (PendingRepairManager pendingRepair: pendingRepairs)
+            {
+                int numPending = pendingRepair.getNumPendingRepairFinishedTasks();
+                if (numPending > 0)
+                {
+                    pendingRepairManagers.add(Pair.create(numPending, pendingRepair));
+                }
+            }
+            if (!pendingRepairManagers.isEmpty())
+            {
+                pendingRepairManagers.sort((x, y) -> y.left - x.left);
+                for (Pair<Integer, PendingRepairManager> pair: pendingRepairManagers)
+                {
+                    AbstractCompactionTask task = pair.right.getNextRepairFinishedTask();
+                    if (task != null)
+                    {
+                        return task;
+                    }
+                }
+            }
+
+
             // sort compaction task suppliers by remaining tasks descending
             ArrayList<Pair<Integer, Supplier<AbstractCompactionTask>>> sortedSuppliers = new ArrayList<>(repaired.size() + unrepaired.size() + 1);
 

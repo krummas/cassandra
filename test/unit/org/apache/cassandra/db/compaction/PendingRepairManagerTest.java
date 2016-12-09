@@ -107,10 +107,11 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         Assert.assertNotNull(prm.get(repairID));
 
         Assert.assertEquals(0, prm.getEstimatedRemainingTasks());
+        Assert.assertEquals(0, prm.getNumPendingRepairFinishedTasks());
     }
 
     @Test
-    public void estimateRemainingTasksNeedsCleanup()
+    public void estimateRemainingFinishedRepairTasks()
     {
         PendingRepairManager prm = csm.getPendingRepairManagers().get(0);
 
@@ -123,7 +124,8 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         Assert.assertNotNull(prm.get(repairID));
         LocalSessionAccessor.finalizeUnsafe(repairID);
 
-        Assert.assertEquals(1, prm.getEstimatedRemainingTasks());
+        Assert.assertEquals(0, prm.getEstimatedRemainingTasks());
+        Assert.assertEquals(1, prm.getNumPendingRepairFinishedTasks());
     }
 
     @Test
@@ -145,7 +147,8 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         LocalSessionAccessor.finalizeUnsafe(repairID);
 
         Assert.assertEquals(2, prm.getSessions().size());
-        AbstractCompactionTask compactionTask = prm.getNextBackgroundTask(FBUtilities.nowInSeconds());
+        Assert.assertNull(prm.getNextBackgroundTask(FBUtilities.nowInSeconds()));
+        AbstractCompactionTask compactionTask = prm.getNextRepairFinishedTask();
         Assert.assertNotNull(compactionTask);
         Assert.assertSame(PendingRepairManager.RepairFinishedCompactionTask.class, compactionTask.getClass());
         PendingRepairManager.RepairFinishedCompactionTask cleanupTask = (PendingRepairManager.RepairFinishedCompactionTask) compactionTask;

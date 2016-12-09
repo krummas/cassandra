@@ -197,7 +197,7 @@ class PendingRepairManager
     {
         if (needsCleanup(sessionID))
         {
-            return 1;
+            return 0;
         }
         else
         {
@@ -236,6 +236,31 @@ class PendingRepairManager
         return txn == null ? null : new RepairFinishedCompactionTask(cfs, txn, sessionID, repairedAt);
     }
 
+    synchronized int getNumPendingRepairFinishedTasks()
+    {
+        int count = 0;
+        for (UUID sessionID: strategies.keySet())
+        {
+            if (needsCleanup(sessionID))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    synchronized AbstractCompactionTask getNextRepairFinishedTask()
+    {
+        for (UUID sessionID: strategies.keySet())
+        {
+            if (needsCleanup(sessionID))
+            {
+                return getRepairFinishedCompactionTask(sessionID);
+            }
+        }
+        return null;
+    }
+
     synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
         if (strategies.isEmpty())
@@ -245,6 +270,10 @@ class PendingRepairManager
         ArrayList<UUID> sessions = new ArrayList<>(strategies.size());
         for (Map.Entry<UUID, AbstractCompactionStrategy> entry: strategies.entrySet())
         {
+            if (needsCleanup(entry.getKey()))
+            {
+                continue;
+            }
             numTasks.put(entry.getKey(), getEstimatedRemainingTasks(entry.getKey(), entry.getValue()));
             sessions.add(entry.getKey());
         }
@@ -253,14 +282,7 @@ class PendingRepairManager
         sessions.sort((o1, o2) -> numTasks.get(o2) - numTasks.get(o1));
 
         UUID sessionID = sessions.get(0);
-        if (needsCleanup(sessionID))
-        {
-            return getRepairFinishedCompactionTask(sessionID);
-        }
-        else
-        {
-            return get(sessionID).getNextBackgroundTask(gcBefore);
-        }
+        return get(sessionID).getNextBackgroundTask(gcBefore);
     }
 
     synchronized Collection<AbstractCompactionTask> getMaximalTasks(int gcBefore, boolean splitOutput)
