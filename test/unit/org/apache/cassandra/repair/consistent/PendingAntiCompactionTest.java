@@ -65,6 +65,7 @@ public class PendingAntiCompactionTest
     private static final Collection<Range<Token>> FULL_RANGE;
     static
     {
+        DatabaseDescriptor.daemonInitialization();
         Token minToken = DatabaseDescriptor.getPartitioner().getMinimumToken();
         FULL_RANGE = Collections.singleton(new Range<>(minToken, minToken));
     }
