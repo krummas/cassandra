@@ -56,8 +56,8 @@ import org.apache.cassandra.utils.Pair;
 /**
  * Manages the compaction strategies.
  *
- * Currently has two instances of actual compaction strategies per data directory - one for repaired data and one for
- * unrepaired data. This is done to be able to totally separate the different sets of sstables.
+ * For each directory, a separate compaction strategy instance for both repaired and unrepaired data, and also one instance
+ * for each pending repair. This is done to keep the different sets of sstables completely separate.
  */
 
 public class CompactionStrategyManager implements INotificationConsumer

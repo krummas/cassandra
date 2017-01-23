@@ -253,7 +253,7 @@ public abstract class ConsistentSession
                '}';
     }
 
-    public abstract static class AbstractBuilder
+    abstract static class AbstractBuilder
     {
         private State state;
         private UUID sessionID;
@@ -263,37 +263,37 @@ public abstract class ConsistentSession
         private Collection<Range<Token>> ranges;
         private Set<InetAddress> participants;
 
-        public void withState(State state)
+        void withState(State state)
         {
             this.state = state;
         }
 
-        public void withSessionID(UUID sessionID)
+        void withSessionID(UUID sessionID)
         {
             this.sessionID = sessionID;
         }
 
-        public void withCoordinator(InetAddress coordinator)
+        void withCoordinator(InetAddress coordinator)
         {
             this.coordinator = coordinator;
         }
 
-        public void withCfIds(Set<UUID> cfIds)
+        void withCfIds(Set<UUID> cfIds)
         {
             this.cfIds = cfIds;
         }
 
-        public void withRepairedAt(long repairedAt)
+        void withRepairedAt(long repairedAt)
         {
             this.repairedAt = repairedAt;
         }
 
-        public void withRanges(Collection<Range<Token>> ranges)
+        void withRanges(Collection<Range<Token>> ranges)
         {
             this.ranges = ranges;
         }
 
-        public void withParticipants(Set<InetAddress> peers)
+        void withParticipants(Set<InetAddress> peers)
         {
             this.participants = peers;
         }
