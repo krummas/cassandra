@@ -43,6 +43,7 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.config.SchemaConstants;
+import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.SystemKeyspace;
@@ -742,6 +743,28 @@ public class LocalSessionTest extends ConsistentSessionTest
         InstrumentedLocalSessions initialSessions = new InstrumentedLocalSessions();
         initialSessions.start();
         initialSessions.start();
+    }
+
+    /**
+     * If there are problems with the rows we're reading out of the repair table, we should
+     * do the best we can to repair them, but not refuse to startup.
+     */
+    @Test
+    public void loadCorruptRow() throws Exception
+    {
+        LocalSessions sessions = new LocalSessions();
+        LocalSession session = createSession();
+        sessions.save(session);
+
+        sessions = new LocalSessions();
+        sessions.start();
+        Assert.assertNotNull(sessions.getSession(session.sessionID));
+
+        QueryProcessor.instance.executeInternal("DELETE participants FROM system.repairs WHERE parent_id=?", session.sessionID);
+
+        sessions = new LocalSessions();
+        sessions.start();
+        Assert.assertNull(sessions.getSession(session.sessionID));
     }
 
     private static LocalSession sessionWithTime(int started, int updated)

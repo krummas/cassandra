@@ -179,8 +179,15 @@ public class LocalSessions
         Map<UUID, LocalSession> loadedSessions = new HashMap<>();
         for (UntypedResultSet.Row row: rows)
         {
-            LocalSession session = load(row);
-            loadedSessions.put(session.sessionID, session);
+            try
+            {
+                LocalSession session = load(row);
+                loadedSessions.put(session.sessionID, session);
+            }
+            catch (IllegalArgumentException | NullPointerException e)
+            {
+                logger.warn("Unable to load malformed repair session {}, ignoring", row.has("parent_id") ? row.getUUID("parent_id") : null);
+            }
         }
         sessions = ImmutableMap.copyOf(loadedSessions);
         started = true;
