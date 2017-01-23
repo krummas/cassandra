@@ -150,7 +150,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     break;
 
                 case CONSISTENT_REQUEST:
-                    ActiveRepairService.instance.consistent.local.handlePrepareMessage((PrepareConsistentRequest) message.payload);
+                    ActiveRepairService.instance.consistent.local.handlePrepareMessage(message.from, (PrepareConsistentRequest) message.payload);
                     break;
 
                 case CONSISTENT_RESPONSE:
@@ -158,7 +158,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     break;
 
                 case FINALIZE_PROPOSE:
-                    ActiveRepairService.instance.consistent.local.handleFinalizeProposeMessage((FinalizePropose) message.payload, message.from);
+                    ActiveRepairService.instance.consistent.local.handleFinalizeProposeMessage(message.from, (FinalizePropose) message.payload);
                     break;
 
                 case FINALIZE_PROMISE:
@@ -166,13 +166,13 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     break;
 
                 case FINALIZE_COMMIT:
-                    ActiveRepairService.instance.consistent.local.handleFinalizeCommitMessage((FinalizeCommit) message.payload);
+                    ActiveRepairService.instance.consistent.local.handleFinalizeCommitMessage(message.from, (FinalizeCommit) message.payload);
                     break;
 
                 case FAILED_SESSION:
                     FailSession failure = (FailSession) message.payload;
                     ActiveRepairService.instance.consistent.coordinated.handleFailSessionMessage(failure);
-                    ActiveRepairService.instance.consistent.local.handleFailSessionMessage(failure);
+                    ActiveRepairService.instance.consistent.local.handleFailSessionMessage(message.from, failure);
                     break;
 
                 case STATUS_REQUEST:
@@ -180,7 +180,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     break;
                 
                 case STATUS_RESPONSE:
-                    ActiveRepairService.instance.consistent.local.handleStatusResponse((StatusResponse) message.payload);
+                    ActiveRepairService.instance.consistent.local.handleStatusResponse(message.from, (StatusResponse) message.payload);
                     break;
 
                 default:

@@ -45,7 +45,7 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         prm.addSSTable(sstable);
         Assert.assertNotNull(prm.get(repairID));
 
-        Assert.assertFalse(prm.needsCleanup(repairID));
+        Assert.assertFalse(prm.canCleanup(repairID));
     }
 
     /**
@@ -64,7 +64,7 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         Assert.assertNotNull(prm.get(repairID));
         LocalSessionAccessor.finalizeUnsafe(repairID);
 
-        Assert.assertTrue(prm.needsCleanup(repairID));
+        Assert.assertTrue(prm.canCleanup(repairID));
     }
 
     /**
@@ -83,7 +83,7 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         Assert.assertNotNull(prm.get(repairID));
         LocalSessionAccessor.failUnsafe(repairID);
 
-        Assert.assertTrue(prm.needsCleanup(repairID));
+        Assert.assertTrue(prm.canCleanup(repairID));
     }
 
     @Test
@@ -91,7 +91,7 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
     {
         UUID fakeID = UUIDGen.getTimeUUID();
         PendingRepairManager prm = new PendingRepairManager(cfs, null);
-        Assert.assertTrue(prm.needsCleanup(fakeID));
+        Assert.assertTrue(prm.canCleanup(fakeID));
     }
 
     @Test

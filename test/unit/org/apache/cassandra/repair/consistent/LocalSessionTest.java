@@ -151,7 +151,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         public LocalSession prepareForTest(UUID sessionID)
         {
             pendingAntiCompactionFuture = SettableFuture.create();
-            handlePrepareMessage(new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
+            handlePrepareMessage(PARTICIPANT1, new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
             pendingAntiCompactionFuture.set(new Object());
             sentMessages.clear();
             return getSession(sessionID);
@@ -234,7 +234,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         // replacing future so we can inspect state before and after anti compaction callback
         sessions.pendingAntiCompactionFuture = SettableFuture.create();
         Assert.assertFalse(sessions.submitPendingAntiCompactionCalled);
-        sessions.handlePrepareMessage(new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
+        sessions.handlePrepareMessage(PARTICIPANT1, new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
         Assert.assertTrue(sessions.submitPendingAntiCompactionCalled);
         Assert.assertTrue(sessions.sentMessages.isEmpty());
 
@@ -269,7 +269,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         // replacing future so we can inspect state before and after anti compaction callback
         sessions.pendingAntiCompactionFuture = SettableFuture.create();
         Assert.assertFalse(sessions.submitPendingAntiCompactionCalled);
-        sessions.handlePrepareMessage(new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
+        sessions.handlePrepareMessage(PARTICIPANT1, new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
         Assert.assertTrue(sessions.submitPendingAntiCompactionCalled);
         Assert.assertTrue(sessions.sentMessages.isEmpty());
 
@@ -301,7 +301,7 @@ public class LocalSessionTest extends ConsistentSessionTest
     {
         UUID sessionID = UUIDGen.getTimeUUID();
         InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
-        sessions.handlePrepareMessage(new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
+        sessions.handlePrepareMessage(PARTICIPANT1, new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
         Assert.assertNull(sessions.getSession(sessionID));
         assertMessagesSent(sessions, COORDINATOR, new FailSession(sessionID));
     }
@@ -389,7 +389,7 @@ public class LocalSessionTest extends ConsistentSessionTest
 
         // should send a promised message to coordinator and set session state accordingly
         sessions.sentMessages.clear();
-        sessions.handleFinalizeProposeMessage(new FinalizePropose(sessionID), COORDINATOR);
+        sessions.handleFinalizeProposeMessage(COORDINATOR, new FinalizePropose(sessionID));
         Assert.assertEquals(FINALIZE_PROMISED, session.getState());
         Assert.assertEquals(session, sessions.loadUnsafe(sessionID));
         assertMessagesSent(sessions, COORDINATOR, new FinalizePromise(sessionID, PARTICIPANT1, true));
@@ -411,7 +411,7 @@ public class LocalSessionTest extends ConsistentSessionTest
 
         // should fail the session and send a failure message to the coordinator
         sessions.sentMessages.clear();
-        sessions.handleFinalizeProposeMessage(new FinalizePropose(sessionID), COORDINATOR);
+        sessions.handleFinalizeProposeMessage(COORDINATOR, new FinalizePropose(sessionID));
         Assert.assertEquals(FAILED, session.getState());
         Assert.assertEquals(session, sessions.loadUnsafe(sessionID));
         assertMessagesSent(sessions, COORDINATOR, new FailSession(sessionID));
@@ -422,7 +422,7 @@ public class LocalSessionTest extends ConsistentSessionTest
     {
         InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
         UUID fakeID = UUIDGen.getTimeUUID();
-        sessions.handleFinalizeProposeMessage(new FinalizePropose(fakeID), COORDINATOR);
+        sessions.handleFinalizeProposeMessage(COORDINATOR, new FinalizePropose(fakeID));
         Assert.assertNull(sessions.getSession(fakeID));
         assertMessagesSent(sessions, COORDINATOR, new FailSession(fakeID));
     }
@@ -441,11 +441,11 @@ public class LocalSessionTest extends ConsistentSessionTest
         // create session and move to finalized promised
         sessions.prepareForTest(sessionID);
         sessions.maybeSetRepairing(sessionID);
-        sessions.handleFinalizeProposeMessage(new FinalizePropose(sessionID), COORDINATOR);
+        sessions.handleFinalizeProposeMessage(COORDINATOR, new FinalizePropose(sessionID));
 
         sessions.sentMessages.clear();
         LocalSession session = sessions.getSession(sessionID);
-        sessions.handleFinalizeCommitMessage(new FinalizeCommit(sessionID));
+        sessions.handleFinalizeCommitMessage(PARTICIPANT1, new FinalizeCommit(sessionID));
 
         Assert.assertEquals(FINALIZED, session.getState());
         Assert.assertEquals(session, sessions.loadUnsafe(sessionID));
@@ -458,7 +458,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
         sessions.start();
         UUID fakeID = UUIDGen.getTimeUUID();
-        sessions.handleFinalizeCommitMessage(new FinalizeCommit(fakeID));
+        sessions.handleFinalizeCommitMessage(PARTICIPANT1, new FinalizeCommit(fakeID));
         Assert.assertNull(sessions.getSession(fakeID));
         Assert.assertTrue(sessions.sentMessages.isEmpty());
     }
@@ -494,7 +494,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         Assert.assertEquals(PREPARED, session.getState());
         sessions.sentMessages.clear();
 
-        sessions.handleFailSessionMessage(new FailSession(sessionID));
+        sessions.handleFailSessionMessage(PARTICIPANT1, new FailSession(sessionID));
         Assert.assertEquals(FAILED, session.getState());
         Assert.assertTrue(sessions.sentMessages.isEmpty());
     }
@@ -555,7 +555,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         LocalSession session = sessions.prepareForTest(sessionID);
         session.setState(FINALIZE_PROMISED);
 
-        sessions.handleStatusResponse(new StatusResponse(sessionID, FINALIZED));
+        sessions.handleStatusResponse(PARTICIPANT1, new StatusResponse(sessionID, FINALIZED));
         Assert.assertEquals(FINALIZED, session.getState());
     }
 
@@ -568,7 +568,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         LocalSession session = sessions.prepareForTest(sessionID);
         session.setState(FINALIZE_PROMISED);
 
-        sessions.handleStatusResponse(new StatusResponse(sessionID, FAILED));
+        sessions.handleStatusResponse(PARTICIPANT1, new StatusResponse(sessionID, FAILED));
         Assert.assertEquals(FAILED, session.getState());
     }
 
@@ -581,7 +581,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         LocalSession session = sessions.prepareForTest(sessionID);
         session.setState(REPAIRING);
 
-        sessions.handleStatusResponse(new StatusResponse(sessionID, FINALIZE_PROMISED));
+        sessions.handleStatusResponse(PARTICIPANT1, new StatusResponse(sessionID, FINALIZE_PROMISED));
         Assert.assertEquals(REPAIRING, session.getState());
     }
 
@@ -592,7 +592,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
         sessions.start();
 
-        sessions.handleStatusResponse(new StatusResponse(sessionID, FINALIZE_PROMISED));
+        sessions.handleStatusResponse(PARTICIPANT1, new StatusResponse(sessionID, FINALIZE_PROMISED));
         Assert.assertNull(sessions.getSession(sessionID));
     }
 
@@ -606,7 +606,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
         sessions.start();
         sessions.pendingAntiCompactionFuture = SettableFuture.create();  // prevent moving to prepared
-        sessions.handlePrepareMessage(new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
+        sessions.handlePrepareMessage(PARTICIPANT1, new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
 
         LocalSession session = sessions.getSession(sessionID);
         Assert.assertNotNull(session);
@@ -633,7 +633,7 @@ public class LocalSessionTest extends ConsistentSessionTest
         InstrumentedLocalSessions sessions = new InstrumentedLocalSessions();
         sessions.start();
         sessions.pendingAntiCompactionFuture = SettableFuture.create();
-        sessions.handlePrepareMessage(new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
+        sessions.handlePrepareMessage(PARTICIPANT1, new PrepareConsistentRequest(sessionID, COORDINATOR, PARTICIPANTS));
         sessions.pendingAntiCompactionFuture.set(new Object());
 
         Assert.assertTrue(sessions.isSessionInProgress(sessionID));
@@ -659,8 +659,8 @@ public class LocalSessionTest extends ConsistentSessionTest
 
         sessions.prepareForTest(sessionID);
         sessions.maybeSetRepairing(sessionID);
-        sessions.handleFinalizeProposeMessage(new FinalizePropose(sessionID), COORDINATOR);
-        sessions.handleFinalizeCommitMessage(new FinalizeCommit(sessionID));
+        sessions.handleFinalizeProposeMessage(COORDINATOR, new FinalizePropose(sessionID));
+        sessions.handleFinalizeCommitMessage(PARTICIPANT1, new FinalizeCommit(sessionID));
 
         LocalSession session = sessions.getSession(sessionID);
         Assert.assertTrue(session.repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE);

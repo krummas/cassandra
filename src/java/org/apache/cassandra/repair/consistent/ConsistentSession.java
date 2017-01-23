@@ -67,7 +67,7 @@ import org.apache.cassandra.tools.nodetool.RepairAdmin;
  *  coordinator indicating success or failure. If the pending anti-compaction fails, the local session state is set
  *  to {@code FAILED}.
  *  <p/>
- *  (see {@link LocalSessions#handlePrepareMessage(PrepareConsistentRequest)}
+ *  (see {@link LocalSessions#handlePrepareMessage(InetAddress, PrepareConsistentRequest)}
  *  <p/>
  *  Once the coordinator recieves positive {@code PrepareConsistentResponse} messages from all the participants, the
  *  coordinator begins the normal repair process.
@@ -98,8 +98,8 @@ import org.apache.cassandra.tools.nodetool.RepairAdmin;
  *  & {@link CoordinatorSession#finalizeCommit(Executor)}
  *  <p/>
  *
- *  On the local session side, see {@link LocalSessions#handleFinalizeProposeMessage(FinalizePropose, InetAddress)}
- *  & {@link LocalSessions#handleFinalizeCommitMessage(FinalizeCommit)}
+ *  On the local session side, see {@link LocalSessions#handleFinalizeProposeMessage(InetAddress, FinalizePropose)}
+ *  & {@link LocalSessions#handleFinalizeCommitMessage(InetAddress, FinalizeCommit)}
  *
  * <h1>Failure</h1>
  *  If there are any failures or problems during the process above, the session will be failed. When a session is failed,

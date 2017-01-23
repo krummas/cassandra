@@ -490,9 +490,9 @@ public class LocalSessions
      * successfully. If the pending anti compaction fails, a failure message is sent to the coordinator,
      * cancelling the session.
      */
-    public void handlePrepareMessage(PrepareConsistentRequest request)
+    public void handlePrepareMessage(InetAddress from, PrepareConsistentRequest request)
     {
-        logger.debug("received {}", request);
+        logger.debug("received {} from {}", request, from);
         UUID sessionID = request.parentSession;
         InetAddress coordinator = request.coordinator;
         Set<InetAddress> peers = request.participants;
@@ -545,7 +545,7 @@ public class LocalSessions
         }
     }
 
-    public void handleFinalizeProposeMessage(FinalizePropose propose, InetAddress from)
+    public void handleFinalizeProposeMessage(InetAddress from, FinalizePropose propose)
     {
         logger.debug("received {} from {}", propose, from);
         UUID sessionID = propose.sessionID;
@@ -576,9 +576,9 @@ public class LocalSessions
      * as part of the compaction process, and avoids having to worry about in progress compactions interfering with the
      * promotion.
      */
-    public void handleFinalizeCommitMessage(FinalizeCommit commit)
+    public void handleFinalizeCommitMessage(InetAddress from, FinalizeCommit commit)
     {
-        logger.debug("received {}", commit);
+        logger.debug("received {} from {}", commit, from);
         UUID sessionID = commit.sessionID;
         LocalSession session = getSession(sessionID);
         if (session == null)
@@ -590,8 +590,9 @@ public class LocalSessions
         setStateAndSave(session, FINALIZED);
     }
 
-    public void handleFailSessionMessage(FailSession msg)
+    public void handleFailSessionMessage(InetAddress from, FailSession msg)
     {
+        logger.debug("received {} from {}", msg, from);
         failSession(msg.sessionID, false);
     }
 
@@ -609,7 +610,7 @@ public class LocalSessions
 
     public void handleStatusRequest(InetAddress from, StatusRequest request)
     {
-        logger.debug("received {}", request);
+        logger.debug("received {} from {}", request, from);
         UUID sessionID = request.sessionID;
         LocalSession session = getSession(sessionID);
         if (session == null)
@@ -623,9 +624,9 @@ public class LocalSessions
         }
     }
 
-    public void handleStatusResponse(StatusResponse response)
+    public void handleStatusResponse(InetAddress from, StatusResponse response)
     {
-        logger.debug("received {}", response);
+        logger.debug("received {} from {}", response, from);
         UUID sessionID = response.sessionID;
         LocalSession session = getSession(sessionID);
         if (session == null)
