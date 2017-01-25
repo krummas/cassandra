@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListenableFutureTask;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -90,6 +91,12 @@ public class PendingAntiCompactionTest
         cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.cfId);
     }
 
+    @After
+    public void tearDown()
+    {
+        System.gc();
+    }
+
     private void makeSSTables(int num)
     {
         for (int i=0; i<num; i++)
@@ -114,6 +121,7 @@ public class PendingAntiCompactionTest
         ListenableFuture<?> submitPendingAntiCompaction(PendingAntiCompaction.AcquireResult result)
         {
             submittedCompactions.add(result.cfs.metadata.cfId);
+            result.abort();  // prevent ref leak complaints
             return ListenableFutureTask.create(() -> {}, null);
         }
     }
@@ -198,6 +206,7 @@ public class PendingAntiCompactionTest
         }
 
         Assert.assertEquals(Transactional.AbstractTransactional.State.IN_PROGRESS, result.txn.state());
+        result.abort();
     }
 
     @Test
@@ -223,6 +232,7 @@ public class PendingAntiCompactionTest
         logger.info("Originals: {}", result.txn.originals());
         Assert.assertEquals(1, result.txn.originals().size());
         Assert.assertTrue(result.txn.originals().contains(unrepaired));
+        result.abort(); // release sstable refs
     }
 
     @Test
@@ -249,6 +259,7 @@ public class PendingAntiCompactionTest
         logger.info("Originals: {}", result.txn.originals());
         Assert.assertEquals(1, result.txn.originals().size());
         Assert.assertTrue(result.txn.originals().contains(unrepaired));
+        result.abort();  // releases sstable refs
     }
 
     /**
