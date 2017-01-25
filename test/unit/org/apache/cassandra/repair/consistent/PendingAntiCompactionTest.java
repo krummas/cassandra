@@ -91,12 +91,6 @@ public class PendingAntiCompactionTest
         cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.cfId);
     }
 
-    @After
-    public void tearDown()
-    {
-        System.gc();
-    }
-
     private void makeSSTables(int num)
     {
         for (int i=0; i<num; i++)
