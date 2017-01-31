@@ -21,6 +21,7 @@ package org.apache.cassandra.db.compaction;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.function.Supplier;
@@ -417,6 +418,9 @@ public class CompactionStrategyManager implements INotificationConsumer
                     count += ((LeveledCompactionStrategy) strategy).getLevelSize(0);
                 for (AbstractCompactionStrategy strategy : unrepaired)
                     count += ((LeveledCompactionStrategy) strategy).getLevelSize(0);
+                for (PendingRepairManager pendingManager : pendingRepairs)
+                    for (AbstractCompactionStrategy strategy : pendingManager.getStrategies())
+                        count += ((LeveledCompactionStrategy) strategy).getLevelSize(0);
                 return count;
             }
         }
@@ -907,19 +911,25 @@ public class CompactionStrategyManager implements INotificationConsumer
         try
         {
             Map<Integer, List<SSTableReader>> repairedSSTables = sstables.stream()
-                                                                         .filter(s -> !s.isMarkedSuspect() && s.isRepaired())
+                                                                         .filter(s -> !s.isMarkedSuspect() && s.isRepaired() && !s.isPendingRepair())
                                                                          .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
 
             Map<Integer, List<SSTableReader>> unrepairedSSTables = sstables.stream()
-                                                                           .filter(s -> !s.isMarkedSuspect() && !s.isRepaired())
+                                                                           .filter(s -> !s.isMarkedSuspect() && !s.isRepaired() && !s.isPendingRepair())
                                                                            .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
 
+            Map<Integer, List<SSTableReader>> pendingSSTables = sstables.stream()
+                                                                        .filter(s -> !s.isMarkedSuspect() && s.isPendingRepair())
+                                                                        .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
 
             for (Map.Entry<Integer, List<SSTableReader>> group : repairedSSTables.entrySet())
                 ret.add(repaired.get(group.getKey()).getUserDefinedTask(group.getValue(), gcBefore));
 
             for (Map.Entry<Integer, List<SSTableReader>> group : unrepairedSSTables.entrySet())
                 ret.add(unrepaired.get(group.getKey()).getUserDefinedTask(group.getValue(), gcBefore));
+
+            for (Map.Entry<Integer, List<SSTableReader>> group : pendingSSTables.entrySet())
+                ret.addAll(pendingRepairs.get(group.getKey()).createUserDefinedTasks(group.getValue(), gcBefore));
 
             return ret;
         }

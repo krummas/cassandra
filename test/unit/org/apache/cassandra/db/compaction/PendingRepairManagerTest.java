@@ -18,8 +18,11 @@
 
 package org.apache.cassandra.db.compaction;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
+import com.google.common.collect.Lists;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -177,5 +180,34 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         LocalSessionAccessor.finalizeUnsafe(repairID);
 
         Assert.assertEquals(1, prm.getMaximalTasks(FBUtilities.nowInSeconds(), false).size());
+    }
+
+    @Test
+    public void userDefinedTaskTest()
+    {
+        PendingRepairManager prm = csm.getPendingRepairManagers().get(0);
+        UUID repairId = registerSession(cfs);
+        SSTableReader sstable = makeSSTable(true);
+        mutateRepaired(sstable, repairId);
+        prm.addSSTable(sstable);
+        List<AbstractCompactionTask> tasks = csm.getUserDefinedTasks(Collections.singleton(sstable), 100);
+        Assert.assertEquals(1, tasks.size());
+    }
+
+    @Test
+    public void mixedPendingSessionsTest()
+    {
+        PendingRepairManager prm = csm.getPendingRepairManagers().get(0);
+        UUID repairId = registerSession(cfs);
+        UUID repairId2 = registerSession(cfs);
+        SSTableReader sstable = makeSSTable(true);
+        SSTableReader sstable2 = makeSSTable(true);
+
+        mutateRepaired(sstable, repairId);
+        mutateRepaired(sstable2, repairId2);
+        prm.addSSTable(sstable);
+        prm.addSSTable(sstable2);
+        List<AbstractCompactionTask> tasks = csm.getUserDefinedTasks(Lists.newArrayList(sstable, sstable2), 100);
+        Assert.assertEquals(2, tasks.size());
     }
 }
