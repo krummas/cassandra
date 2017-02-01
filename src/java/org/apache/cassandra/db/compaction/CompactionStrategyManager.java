@@ -117,7 +117,7 @@ public class CompactionStrategyManager implements INotificationConsumer
 
             // first try to promote/demote sstables from completed repairs
             ArrayList<Pair<Integer, PendingRepairManager>> pendingRepairManagers = new ArrayList<>(pendingRepairs.size());
-            for (PendingRepairManager pendingRepair: pendingRepairs)
+            for (PendingRepairManager pendingRepair : pendingRepairs)
             {
                 int numPending = pendingRepair.getNumPendingRepairFinishedTasks();
                 if (numPending > 0)
@@ -128,7 +128,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             if (!pendingRepairManagers.isEmpty())
             {
                 pendingRepairManagers.sort((x, y) -> y.left - x.left);
-                for (Pair<Integer, PendingRepairManager> pair: pendingRepairManagers)
+                for (Pair<Integer, PendingRepairManager> pair : pendingRepairManagers)
                 {
                     AbstractCompactionTask task = pair.right.getNextRepairFinishedTask();
                     if (task != null)
@@ -142,13 +142,13 @@ public class CompactionStrategyManager implements INotificationConsumer
             // sort compaction task suppliers by remaining tasks descending
             ArrayList<Pair<Integer, Supplier<AbstractCompactionTask>>> sortedSuppliers = new ArrayList<>(repaired.size() + unrepaired.size() + 1);
 
-            for (AbstractCompactionStrategy strategy: repaired)
+            for (AbstractCompactionStrategy strategy : repaired)
                 sortedSuppliers.add(Pair.create(strategy.getEstimatedRemainingTasks(), () -> strategy.getNextBackgroundTask(gcBefore)));
 
-            for (AbstractCompactionStrategy strategy: unrepaired)
+            for (AbstractCompactionStrategy strategy : unrepaired)
                 sortedSuppliers.add(Pair.create(strategy.getEstimatedRemainingTasks(), () -> strategy.getNextBackgroundTask(gcBefore)));
 
-            for (PendingRepairManager pending: pendingRepairs)
+            for (PendingRepairManager pending : pendingRepairs)
                 sortedSuppliers.add(Pair.create(pending.getMaxEstimatedRemainingTasks(), () -> pending.getNextBackgroundTask(gcBefore)));
 
             sortedSuppliers.sort((x, y) -> y.left - x.left);
@@ -466,7 +466,7 @@ public class CompactionStrategyManager implements INotificationConsumer
                     int[] unrepairedCountPerLevel = ((LeveledCompactionStrategy) strategy).getAllLevelSize();
                     res = sumArrays(res, unrepairedCountPerLevel);
                 }
-                for (PendingRepairManager pending: pendingRepairs)
+                for (PendingRepairManager pending : pendingRepairs)
                 {
                     int[] pendingRepairCountPerLevel = pending.getSSTableCountPerLevel();
                     res = sumArrays(res, pendingRepairCountPerLevel);
@@ -879,7 +879,7 @@ public class CompactionStrategyManager implements INotificationConsumer
                             tasks.addAll(task);
                     }
 
-                    for (PendingRepairManager pending: pendingRepairs)
+                    for (PendingRepairManager pending : pendingRepairs)
                     {
                         Collection<AbstractCompactionTask> pendingRepairTasks = pending.getMaximalTasks(gcBefore, splitOutput);
                         if (pendingRepairTasks != null)
@@ -964,7 +964,7 @@ public class CompactionStrategyManager implements INotificationConsumer
                 tasks += strategy.getEstimatedRemainingTasks();
             for (AbstractCompactionStrategy strategy : unrepaired)
                 tasks += strategy.getEstimatedRemainingTasks();
-            for (PendingRepairManager pending: pendingRepairs)
+            for (PendingRepairManager pending : pendingRepairs)
                 tasks += pending.getEstimatedRemainingTasks();
         }
         finally

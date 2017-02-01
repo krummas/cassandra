@@ -85,34 +85,34 @@ public class RepairAdmin extends NodeTool.NodeToolCmd
             List<List<String>> rows = new ArrayList<>();
             rows.add(header);
             int now = FBUtilities.nowInSeconds();
-            for (Map<String, String> session: sessions)
+            for (Map<String, String> session : sessions)
             {
                 rows.add(sessionValues(session, now));
             }
 
             // get max col widths
             int[] widths = new int[header.size()];
-            for (List<String> row: rows)
+            for (List<String> row : rows)
             {
                 assert row.size() == widths.length;
-                for (int i=0; i<widths.length; i++)
+                for (int i = 0; i < widths.length; i++)
                 {
                     widths[i] = Math.max(widths[i], row.get(i).length());
                 }
             }
 
             List<String> fmts = new ArrayList<>(widths.length);
-            for (int i=0; i<widths.length; i++)
+            for (int i = 0; i < widths.length; i++)
             {
                 fmts.add("%-" + Integer.toString(widths[i]) + "s");
             }
 
 
             // print
-            for (List<String> row: rows)
+            for (List<String> row : rows)
             {
                 List<String> formatted = new ArrayList<>(row.size());
-                for (int i=0; i<widths.length; i++)
+                for (int i = 0; i < widths.length; i++)
                 {
                     formatted.add(String.format(fmts.get(i), row.get(i)));
                 }

@@ -93,9 +93,9 @@ public class PendingAntiCompactionTest
 
     private void makeSSTables(int num)
     {
-        for (int i=0; i<num; i++)
+        for (int i = 0; i < num; i++)
         {
-            int val = i*2;  // multiplied to prevent ranges from overlapping
+            int val = i * 2;  // multiplied to prevent ranges from overlapping
             QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), val, val);
             QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), val+1, val+1);
             cfs.forceBlockingFlush();
@@ -130,12 +130,12 @@ public class PendingAntiCompactionTest
         cfs.disableAutoCompaction();
 
         // create 2 sstables, one that will be split, and another that will be moved
-        for (int i=0; i<8; i++)
+        for (int i = 0; i < 8; i++)
         {
             QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), i, i);
         }
         cfs.forceBlockingFlush();
-        for (int i=8; i<12; i++)
+        for (int i = 8; i < 12; i++)
         {
             QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), i, i);
         }
@@ -164,7 +164,7 @@ public class PendingAntiCompactionTest
 
         Assert.assertEquals(3, cfs.getLiveSSTables().size());
         int pendingRepair = 0;
-        for (SSTableReader sstable: cfs.getLiveSSTables())
+        for (SSTableReader sstable : cfs.getLiveSSTables())
         {
             if (sstable.isPendingRepair())
                 pendingRepair++;
@@ -180,7 +180,7 @@ public class PendingAntiCompactionTest
         List<SSTableReader> sstables = new ArrayList<>(cfs.getLiveSSTables());
         List<SSTableReader> expected = sstables.subList(0, 3);
         Collection<Range<Token>> ranges = new HashSet<>();
-        for (SSTableReader sstable: expected)
+        for (SSTableReader sstable : expected)
         {
             ranges.add(new Range<>(sstable.first.getToken(), sstable.last.getToken()));
         }
@@ -193,7 +193,7 @@ public class PendingAntiCompactionTest
         Assert.assertNotNull(result);
         logger.info("Originals: {}", result.txn.originals());
         Assert.assertEquals(3, result.txn.originals().size());
-        for (SSTableReader sstable: expected)
+        for (SSTableReader sstable : expected)
         {
             logger.info("Checking {}", sstable);
             Assert.assertTrue(result.txn.originals().contains(sstable));

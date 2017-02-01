@@ -89,7 +89,7 @@ public class PrepareConsistentRequest extends RepairMessage
             UUIDSerializer.serializer.serialize(request.parentSession, out, version);
             ByteBufferUtil.writeWithShortLength(inetSerializer.serialize(request.coordinator), out);
             out.writeInt(request.participants.size());
-            for (InetAddress peer: request.participants)
+            for (InetAddress peer : request.participants)
             {
                 ByteBufferUtil.writeWithShortLength(inetSerializer.serialize(peer), out);
             }
@@ -101,7 +101,7 @@ public class PrepareConsistentRequest extends RepairMessage
             InetAddress coordinator = inetSerializer.deserialize(ByteBufferUtil.readWithShortLength(in));
             int numPeers = in.readInt();
             Set<InetAddress> peers = new HashSet<>(numPeers);
-            for (int i=0; i<numPeers; i++)
+            for (int i = 0; i < numPeers; i++)
             {
                 InetAddress peer = inetSerializer.deserialize(ByteBufferUtil.readWithShortLength(in));
                 peers.add(peer);
@@ -114,7 +114,7 @@ public class PrepareConsistentRequest extends RepairMessage
             long size = UUIDSerializer.serializer.serializedSize(request.parentSession, version);
             size += ByteBufferUtil.serializedSizeWithShortLength(inetSerializer.serialize(request.coordinator));
             size += TypeSizes.sizeof(request.participants.size());
-            for (InetAddress peer: request.participants)
+            for (InetAddress peer : request.participants)
             {
                 size += ByteBufferUtil.serializedSizeWithShortLength(inetSerializer.serialize(peer));
             }

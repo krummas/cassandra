@@ -66,7 +66,7 @@ public class CoordinatorSession extends ConsistentSession
     public CoordinatorSession(Builder builder)
     {
         super(builder);
-        for (InetAddress participant: participants)
+        for (InetAddress participant : participants)
         {
             participantStates.put(participant, State.PREPARING);
         }
@@ -112,7 +112,7 @@ public class CoordinatorSession extends ConsistentSession
 
     synchronized void setAll(State state)
     {
-        for (InetAddress participant: participants)
+        for (InetAddress participant : participants)
         {
             setParticipantState(participant, state);
         }
@@ -140,7 +140,7 @@ public class CoordinatorSession extends ConsistentSession
 
         logger.debug("Sending PrepareConsistentRequest message to {}", participants);
         PrepareConsistentRequest message = new PrepareConsistentRequest(sessionID, coordinator, participants);
-        for (final InetAddress participant: participants)
+        for (final InetAddress participant : participants)
         {
             executor.execute(() -> sendMessage(participant, message));
         }
@@ -180,7 +180,7 @@ public class CoordinatorSession extends ConsistentSession
         Preconditions.checkArgument(allStates(State.REPAIRING));
         logger.debug("Sending FinalizePropose message to {}", participants);
         FinalizePropose message = new FinalizePropose(sessionID);
-        for (final InetAddress participant: participants)
+        for (final InetAddress participant : participants)
         {
             executor.execute(() -> sendMessage(participant, message));
         }
@@ -215,7 +215,7 @@ public class CoordinatorSession extends ConsistentSession
         Preconditions.checkArgument(allStates(State.FINALIZE_PROMISED));
         logger.debug("Sending FinalizeCommit message to {}", participants);
         FinalizeCommit message = new FinalizeCommit(sessionID);
-        for (final InetAddress participant: participants)
+        for (final InetAddress participant : participants)
         {
             executor.execute(() -> sendMessage(participant, message));
         }

@@ -530,7 +530,7 @@ public class LeveledManifest
     public synchronized Set<SSTableReader> getSSTables()
     {
         ImmutableSet.Builder<SSTableReader> builder = ImmutableSet.builder();
-        for (List<SSTableReader> sstables: generations)
+        for (List<SSTableReader> sstables : generations)
         {
             builder.addAll(sstables);
         }

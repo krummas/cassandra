@@ -209,7 +209,7 @@ class PendingRepairManager
     int getEstimatedRemainingTasks()
     {
         int tasks = 0;
-        for (Map.Entry<UUID, AbstractCompactionStrategy> entry: strategies.entrySet())
+        for (Map.Entry<UUID, AbstractCompactionStrategy> entry : strategies.entrySet())
         {
             tasks += getEstimatedRemainingTasks(entry.getKey(), entry.getValue());
         }
@@ -222,7 +222,7 @@ class PendingRepairManager
     int getMaxEstimatedRemainingTasks()
     {
         int tasks = 0;
-        for (Map.Entry<UUID, AbstractCompactionStrategy> entry: strategies.entrySet())
+        for (Map.Entry<UUID, AbstractCompactionStrategy> entry : strategies.entrySet())
         {
             tasks = Math.max(tasks, getEstimatedRemainingTasks(entry.getKey(), entry.getValue()));
         }
@@ -240,7 +240,7 @@ class PendingRepairManager
     synchronized int getNumPendingRepairFinishedTasks()
     {
         int count = 0;
-        for (UUID sessionID: strategies.keySet())
+        for (UUID sessionID : strategies.keySet())
         {
             if (canCleanup(sessionID))
             {
@@ -252,7 +252,7 @@ class PendingRepairManager
 
     synchronized AbstractCompactionTask getNextRepairFinishedTask()
     {
-        for (UUID sessionID: strategies.keySet())
+        for (UUID sessionID : strategies.keySet())
         {
             if (canCleanup(sessionID))
             {
@@ -269,7 +269,7 @@ class PendingRepairManager
 
         Map<UUID, Integer> numTasks = new HashMap<>(strategies.size());
         ArrayList<UUID> sessions = new ArrayList<>(strategies.size());
-        for (Map.Entry<UUID, AbstractCompactionStrategy> entry: strategies.entrySet())
+        for (Map.Entry<UUID, AbstractCompactionStrategy> entry : strategies.entrySet())
         {
             if (canCleanup(entry.getKey()))
             {
@@ -292,7 +292,7 @@ class PendingRepairManager
             return null;
 
         List<AbstractCompactionTask> maximalTasks = new ArrayList<>(strategies.size());
-        for (Map.Entry<UUID, AbstractCompactionStrategy> entry: strategies.entrySet())
+        for (Map.Entry<UUID, AbstractCompactionStrategy> entry : strategies.entrySet())
         {
             if (canCleanup(entry.getKey()))
             {
@@ -329,7 +329,7 @@ class PendingRepairManager
     synchronized int[] getSSTableCountPerLevel()
     {
         int [] res = new int[LeveledManifest.MAX_LEVEL_COUNT];
-        for (AbstractCompactionStrategy strategy: strategies.values())
+        for (AbstractCompactionStrategy strategy : strategies.values())
         {
             assert strategy instanceof LeveledCompactionStrategy;
             int[] counts = ((LeveledCompactionStrategy) strategy).getAllLevelSize();
@@ -347,7 +347,7 @@ class PendingRepairManager
         }
 
         Map<UUID, Set<SSTableReader>> sessionSSTables = new HashMap<>();
-        for (SSTableReader sstable: sstables)
+        for (SSTableReader sstable : sstables)
         {
             UUID sessionID = sstable.getSSTableMetadata().pendingRepair;
             assert sessionID != null;
@@ -355,7 +355,7 @@ class PendingRepairManager
         }
 
         Set<ISSTableScanner> scanners = new HashSet<>(sessionSSTables.size());
-        for (Map.Entry<UUID, Set<SSTableReader>> entry: sessionSSTables.entrySet())
+        for (Map.Entry<UUID, Set<SSTableReader>> entry : sessionSSTables.entrySet())
         {
             scanners.addAll(get(entry.getKey()).getScanners(entry.getValue(), ranges).scanners);
         }
@@ -396,7 +396,7 @@ class PendingRepairManager
 
         protected void runMayThrow() throws Exception
         {
-            for (SSTableReader sstable: transaction.originals())
+            for (SSTableReader sstable : transaction.originals())
             {
                 logger.debug("Setting repairedAt to {} on {} for {}", repairedAt, sstable, sessionID);
                 sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, repairedAt, ActiveRepairService.NO_PENDING_REPAIR);

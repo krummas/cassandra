@@ -190,7 +190,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
 
         coordinator.fail();
         Assert.assertEquals(FAILED, coordinator.getState());
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             assertMessageSent(coordinator, participant, new FailSession(coordinator.sessionID));
         }
@@ -223,7 +223,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertTrue(coordinator.sentMessages.isEmpty());
         ListenableFuture sessionResult = coordinator.execute(executor, sessionSupplier, hasFailures);
 
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
 
             RepairMessage expected = new PrepareConsistentRequest(coordinator.sessionID, COORDINATOR, new HashSet<>(PARTICIPANTS));
@@ -256,7 +256,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         repairFuture.set(results);
 
         // propose messages should have been sent once all repair sessions completed successfully
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             RepairMessage expected = new FinalizePropose(coordinator.sessionID);
             assertMessageSent(coordinator, participant, expected);
@@ -279,7 +279,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertTrue(coordinator.finalizeCommitCalled);
 
         Assert.assertEquals(ConsistentSession.State.FINALIZED, coordinator.getState());
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             RepairMessage expected = new FinalizeCommit(coordinator.sessionID);
             assertMessageSent(coordinator, participant, expected);
@@ -307,7 +307,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertFalse(repairSubmitted.get());
         Assert.assertTrue(coordinator.sentMessages.isEmpty());
         ListenableFuture sessionResult = coordinator.execute(executor, sessionSupplier, hasFailures);
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             PrepareConsistentRequest expected = new PrepareConsistentRequest(coordinator.sessionID, COORDINATOR, new HashSet<>(PARTICIPANTS));
             assertMessageSent(coordinator, participant, expected);
@@ -342,7 +342,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertTrue(coordinator.failCalled);
 
         // all participants should have been notified of session failure
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             RepairMessage expected = new FailSession(coordinator.sessionID);
             assertMessageSent(coordinator, participant, expected);
@@ -370,7 +370,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertFalse(repairSubmitted.get());
         Assert.assertTrue(coordinator.sentMessages.isEmpty());
         ListenableFuture sessionResult = coordinator.execute(executor, sessionSupplier, hasFailures);
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             PrepareConsistentRequest expected = new PrepareConsistentRequest(coordinator.sessionID, COORDINATOR, new HashSet<>(PARTICIPANTS));
             assertMessageSent(coordinator, participant, expected);
@@ -398,7 +398,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertFalse(repairSubmitted.get());
 
         // all participants should have been notified of session failure
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             RepairMessage expected = new FailSession(coordinator.sessionID);
             assertMessageSent(coordinator, participant, expected);
@@ -427,7 +427,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertTrue(coordinator.sentMessages.isEmpty());
         ListenableFuture sessionResult = coordinator.execute(executor, sessionSupplier, hasFailures);
 
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
 
             RepairMessage expected = new PrepareConsistentRequest(coordinator.sessionID, COORDINATOR, new HashSet<>(PARTICIPANTS));
@@ -460,7 +460,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         repairFuture.set(results);
 
         // propose messages should have been sent once all repair sessions completed successfully
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             RepairMessage expected = new FinalizePropose(coordinator.sessionID);
             assertMessageSent(coordinator, participant, expected);
@@ -486,7 +486,7 @@ public class CoordinatorSessionTest extends ConsistentSessionTest
         Assert.assertEquals(ConsistentSession.State.FAILED, coordinator.getState());
 
         // failure messages should have been sent to all participants
-        for (InetAddress participant: PARTICIPANTS)
+        for (InetAddress participant : PARTICIPANTS)
         {
             RepairMessage expected = new FailSession(coordinator.sessionID);
             assertMessageSent(coordinator, participant, expected);

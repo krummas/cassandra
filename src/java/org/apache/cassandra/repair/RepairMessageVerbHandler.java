@@ -178,7 +178,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                 case STATUS_REQUEST:
                     ActiveRepairService.instance.consistent.local.handleStatusRequest(message.from, (StatusRequest) message.payload);
                     break;
-                
+
                 case STATUS_RESPONSE:
                     ActiveRepairService.instance.consistent.local.handleStatusResponse(message.from, (StatusResponse) message.payload);
                     break;

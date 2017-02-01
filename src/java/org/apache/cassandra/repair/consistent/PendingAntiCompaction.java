@@ -154,7 +154,7 @@ public class PendingAntiCompaction
             else
             {
                 List<ListenableFuture<?>> pendingAntiCompactions = new ArrayList<>(results.size());
-                for (AcquireResult result: results)
+                for (AcquireResult result : results)
                 {
                     if (result.txn != null)
                     {
@@ -183,7 +183,7 @@ public class PendingAntiCompaction
     {
         ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(prsId);
         List<ListenableFutureTask<AcquireResult>> tasks = new ArrayList<>();
-        for (ColumnFamilyStore cfs: prs.getColumnFamilyStores())
+        for (ColumnFamilyStore cfs : prs.getColumnFamilyStores())
         {
             cfs.forceBlockingFlush();
             ListenableFutureTask<AcquireResult> task = ListenableFutureTask.create(new AcquisitionCallable(cfs, ranges, prsId));

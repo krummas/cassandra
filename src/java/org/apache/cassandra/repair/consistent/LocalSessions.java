@@ -161,7 +161,7 @@ public class LocalSessions
                                     sessionID, session.coordinator);
 
         setStateAndSave(session, FAILED);
-        for (InetAddress participant: session.participants)
+        for (InetAddress participant : session.participants)
         {
             if (!participant.equals(getBroadcastAddress()))
                 sendMessage(participant, new FailSession(sessionID));
@@ -177,7 +177,7 @@ public class LocalSessions
         Preconditions.checkArgument(sessions.isEmpty(), "No sessions should be added before start");
         UntypedResultSet rows = QueryProcessor.executeInternalWithPaging(String.format("SELECT * FROM %s.%s", keyspace, table), 1000);
         Map<UUID, LocalSession> loadedSessions = new HashMap<>();
-        for (UntypedResultSet.Row row: rows)
+        for (UntypedResultSet.Row row : rows)
         {
             try
             {
@@ -552,7 +552,7 @@ public class LocalSessions
         LocalSession session = getSession(sessionID);
         if (session == null)
         {
-            logger.debug("No LocalSession found for for session {}, responding with failure", sessionID);
+            logger.debug("No LocalSession found for session {}, responding with failure", sessionID);
             sendMessage(from, new FailSession(sessionID));
             return;
         }
