@@ -514,6 +514,7 @@
         <dependency groupId="org.openjdk.jmh" artifactId="jmh-generator-annprocess"/>
         <dependency groupId="net.ju-n.compile-command-annotations" artifactId="compile-command-annotations"/>
         <dependency groupId="org.apache.ant" artifactId="ant-junit" version="1.9.4" />
+        <dependency groupId="com.google.errorprone" artifactId="error_prone_ant" version="2.0.14"/>
       </artifact:pom>
       <!-- this build-deps-pom-sources "artifact" is the same as build-deps-pom but only with those
            artifacts that have "-source.jar" files -->
@@ -670,6 +671,9 @@
         </patternset>
         <mapper type="flatten"/>
       </unzip>
+
+      <!-- Define Error Prone code analyzer -->
+       <componentdef name="errorprone" classname="com.google.errorprone.ErrorProneExternalCompilerAdapter" classpathref="cassandra.classpath"/>
     </target>
 
     <target name="maven-ant-tasks-retrieve-test" depends="maven-ant-tasks-init">
@@ -734,6 +738,10 @@
                memorymaximumsize="512M">
             <src path="${build.src.java}"/>
             <src path="${build.src.gen-java}"/>
+            <errorprone/>
+            <compilerarg value="-Xep:MissingOverride:OFF"/>
+            <compilerarg value="-Xep:ReferenceEquality:OFF"/>
+            <compilerarg value="-XepAllErrorsAsWarnings"/>
             <compilerarg value="-XDignore.symbol.file"/>
             <compilerarg value="-Xbootclasspath/p:${build.src.jdkoverride}"/>
             <classpath refid="cassandra.classpath"/>
@@ -1050,6 +1058,7 @@
   <target name="build-test" depends="build" description="Compile test classes">
     <javac
      compiler="modern"
+     fork="yes"
      debug="true"
      debuglevel="${debuglevel}"
      destdir="${test.classes}"
@@ -1060,6 +1069,10 @@
      <classpath>
         <path refid="cassandra.classpath"/>
      </classpath>
+     <errorprone/>
+     <compilerarg value="-Xep:MissingOverride:OFF"/>
+     <compilerarg value="-Xep:ReferenceEquality:OFF"/>
+     <compilerarg value="-XepAllErrorsAsWarnings"/>
      <compilerarg value="-XDignore.symbol.file"/>
      <src path="${test.unit.src}"/>
      <src path="${test.long.src}"/>
