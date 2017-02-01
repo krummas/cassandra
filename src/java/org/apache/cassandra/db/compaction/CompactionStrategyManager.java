@@ -839,12 +839,15 @@ public class CompactionStrategyManager implements INotificationConsumer
         assert firstSSTable != null;
         boolean repaired = firstSSTable.isRepaired();
         int firstIndex = getCompactionStrategyIndex(cfs, directories, firstSSTable);
+        boolean isPending = firstSSTable.isPendingRepair();
         for (SSTableReader sstable : input)
         {
             if (sstable.isRepaired() != repaired)
                 throw new UnsupportedOperationException("You can't mix repaired and unrepaired data in a compaction");
             if (firstIndex != getCompactionStrategyIndex(cfs, directories, sstable))
                 throw new UnsupportedOperationException("You can't mix sstables from different directories in a compaction");
+            if (isPending != sstable.isPendingRepair())
+                throw new UnsupportedOperationException("You can't compact sstables pending for repair with non-pending ones");
         }
     }
 
