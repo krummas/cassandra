@@ -376,7 +376,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         }
         try
         {
-            prepareLatch.await(1, TimeUnit.HOURS);
+            prepareLatch.await(DatabaseDescriptor.getRpcTimeout(), TimeUnit.MILLISECONDS);
         }
         catch (InterruptedException e)
         {
