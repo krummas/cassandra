@@ -515,6 +515,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
                                                                                      options.isPullRepair(),
                                                                                      force,
                                                                                      options.getPreviewKind(),
+                                                                                     options.asymmetricSyncing(),
                                                                                      executor,
                                                                                      cfnames);
             if (session == null)
