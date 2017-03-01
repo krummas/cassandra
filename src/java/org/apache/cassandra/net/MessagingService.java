@@ -232,13 +232,42 @@ public final class MessagingService implements MessagingServiceMBean
         UNUSED_5,
         ;
 
+        private int id;
+        Verb()
+        {
+            id = ordinal();
+        }
+
+        /**
+         * Unused, but it is an extension point for adding custom verbs
+         * @param id
+         */
+        Verb(int id)
+        {
+            this.id = id;
+        }
+
         public long getTimeout()
         {
             return DatabaseDescriptor.getRpcTimeout();
         }
-    }
 
-    public static final Verb[] verbValues = Verb.values();
+        public int getId()
+        {
+            return id;
+        }
+        private static final Map<Integer, Verb> idToVerbMap = new HashMap<>(values().length);
+        static
+        {
+            for (Verb v : values())
+                idToVerbMap.put(v.getId(), v);
+        }
+
+        public static Verb fromId(int id)
+        {
+            return idToVerbMap.get(id);
+        }
+    }
 
     public static final EnumMap<MessagingService.Verb, Stage> verbStages = new EnumMap<MessagingService.Verb, Stage>(MessagingService.Verb.class)
     {{
