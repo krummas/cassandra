@@ -91,6 +91,10 @@ public class Repair extends NodeToolCmd
     @Option(title = "pull_repair", name = {"-pl", "--pull"}, description = "Use --pull to perform a one way repair where data is only streamed from a remote node to this node.")
     private boolean pullRepair = false;
 
+    @Option(title = "symmetric_syncing", name = {"-ss", "--symmetric-syncing"}, description = "Use --symmetric-syncing to do old-style symmetric syncing.")
+    private boolean symmetricSyncing = false;
+
+
     private PreviewKind getPreviewKind()
     {
         if (validate)
@@ -140,7 +144,7 @@ public class Repair extends NodeToolCmd
             options.put(RepairOption.COLUMNFAMILIES_KEY, StringUtils.join(cfnames, ","));
             options.put(RepairOption.PULL_REPAIR_KEY, Boolean.toString(pullRepair));
             options.put(RepairOption.PREVIEW, getPreviewKind().toString());
-
+            options.put(RepairOption.ASYMMETRIC_KEY, Boolean.toString(!symmetricSyncing));
             if (!startToken.isEmpty() || !endToken.isEmpty())
             {
                 options.put(RepairOption.RANGES_KEY, startToken + ":" + endToken);

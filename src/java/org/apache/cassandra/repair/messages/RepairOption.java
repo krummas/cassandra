@@ -49,6 +49,7 @@ public class RepairOption
     public static final String SUB_RANGE_REPAIR_KEY = "sub_range_repair";
     public static final String PULL_REPAIR_KEY = "pullRepair";
     public static final String PREVIEW = "previewKind";
+    public static final String ASYMMETRIC_KEY = "asymmetricSyncing";
 
     // we don't want to push nodes too much for repair
     public static final int MAX_JOB_THREADS = 4;
@@ -125,6 +126,12 @@ public class RepairOption
      *             This is only allowed if exactly 2 hosts are specified along with a token range that they share.</td>
      *             <td>false</td>
      *         </tr>
+     *         <tr>
+     *             <td>asymmetricSyncing</td>
+     *             <td>"true" if we should try to optimise the syncing to avoid transfering identical
+     *             ranges to the same host multiple times</td>
+     *             <td>true</td>
+     *         </tr>
      *     </tbody>
      * </table>
      *
@@ -177,8 +184,9 @@ public class RepairOption
                 ranges.add(new Range<>(parsedBeginToken, parsedEndToken));
             }
         }
+        boolean asymmetricSyncing = Boolean.parseBoolean(options.get(ASYMMETRIC_KEY));
 
-        RepairOption option = new RepairOption(parallelism, primaryRange, incremental, trace, jobThreads, ranges, !ranges.isEmpty(), pullRepair, previewKind);
+        RepairOption option = new RepairOption(parallelism, primaryRange, incremental, trace, jobThreads, ranges, !ranges.isEmpty(), pullRepair, previewKind, asymmetricSyncing);
 
         // data centers
         String dataCentersStr = options.get(DATACENTERS_KEY);
@@ -260,13 +268,14 @@ public class RepairOption
     private final boolean isSubrangeRepair;
     private final boolean pullRepair;
     private final PreviewKind previewKind;
+    private final boolean asymmetricSyncing;
 
     private final Collection<String> columnFamilies = new HashSet<>();
     private final Collection<String> dataCenters = new HashSet<>();
     private final Collection<String> hosts = new HashSet<>();
     private final Collection<Range<Token>> ranges = new HashSet<>();
 
-    public RepairOption(RepairParallelism parallelism, boolean primaryRange, boolean incremental, boolean trace, int jobThreads, Collection<Range<Token>> ranges, boolean isSubrangeRepair, boolean pullRepair, PreviewKind previewKind)
+    public RepairOption(RepairParallelism parallelism, boolean primaryRange, boolean incremental, boolean trace, int jobThreads, Collection<Range<Token>> ranges, boolean isSubrangeRepair, boolean pullRepair, PreviewKind previewKind, boolean asymmetricSyncing)
     {
         if (FBUtilities.isWindows &&
             (DatabaseDescriptor.getDiskAccessMode() != Config.DiskAccessMode.standard || DatabaseDescriptor.getIndexAccessMode() != Config.DiskAccessMode.standard) &&
@@ -286,6 +295,7 @@ public class RepairOption
         this.isSubrangeRepair = isSubrangeRepair;
         this.pullRepair = pullRepair;
         this.previewKind = previewKind;
+        this.asymmetricSyncing = asymmetricSyncing;
     }
 
     public RepairParallelism getParallelism()
@@ -376,6 +386,7 @@ public class RepairOption
                ", previewKind: " + previewKind +
                ", # of ranges: " + ranges.size() +
                ", pull repair: " + pullRepair +
+               ", asymmetric syncing: "+asymmetricSyncing+
                ')';
     }
 
@@ -394,6 +405,12 @@ public class RepairOption
         options.put(RANGES_KEY, Joiner.on(",").join(ranges));
         options.put(PULL_REPAIR_KEY, Boolean.toString(pullRepair));
         options.put(PREVIEW, previewKind.toString());
+        options.put(ASYMMETRIC_KEY, Boolean.toString(asymmetricSyncing));
         return options;
+    }
+
+    public boolean asymmetricSyncing()
+    {
+        return asymmetricSyncing;
     }
 }
