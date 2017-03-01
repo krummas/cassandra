@@ -45,6 +45,8 @@ import org.cliffc.high_scale_lib.NonBlockingHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.carrotsearch.hppc.IntObjectMap;
+import com.carrotsearch.hppc.IntObjectOpenHashMap;
 import org.apache.cassandra.concurrent.ExecutorLocals;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.concurrent.Stage;
@@ -256,7 +258,7 @@ public final class MessagingService implements MessagingServiceMBean
         {
             return id;
         }
-        private static final Map<Integer, Verb> idToVerbMap = new HashMap<>(values().length);
+        private static final IntObjectMap<Verb> idToVerbMap = new IntObjectOpenHashMap<>(values().length);
         static
         {
             for (Verb v : values())
