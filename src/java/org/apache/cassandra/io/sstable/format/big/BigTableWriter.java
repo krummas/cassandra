@@ -396,10 +396,10 @@ public class BigTableWriter extends SSTableWriter
     private void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components)
     {
         File file = new File(desc.filenameFor(Component.STATS));
-        try (SequentialWriter out = new SequentialWriter(file, writerOption))
+        File crcFile = new File(desc.filenameFor(Component.STATS_CRC));
+        try
         {
-            desc.getMetadataSerializer().serialize(components, out, desc.version);
-            out.finish();
+            desc.getMetadataSerializer().writeMetadata(desc, components, file, crcFile);
         }
         catch (IOException e)
         {

@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.io.sstable.metadata;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.Map;
@@ -74,4 +75,6 @@ public interface IMetadataSerializer
      * Mutate the repairedAt time and pendingRepair ID
      */
     void mutateRepaired(Descriptor descriptor, long newRepairedAt, UUID newPendingRepair) throws IOException;
+
+    void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException;
 }

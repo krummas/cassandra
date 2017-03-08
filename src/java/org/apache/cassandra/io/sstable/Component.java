@@ -46,6 +46,8 @@ public class Component
         COMPRESSION_INFO("CompressionInfo.db"),
         // statistical metadata about the content of the sstable
         STATS("Statistics.db"),
+        // holds crc32 checksum of the Statistics file
+        STATS_CRC("Statistics.crc32"),
         // holds CRC32 checksum of the data file
         DIGEST("Digest.crc32"),
         // holds the CRC32 for chunks in an a uncompressed file.
@@ -82,6 +84,7 @@ public class Component
     public final static Component FILTER = new Component(Type.FILTER);
     public final static Component COMPRESSION_INFO = new Component(Type.COMPRESSION_INFO);
     public final static Component STATS = new Component(Type.STATS);
+    public final static Component STATS_CRC = new Component(Type.STATS_CRC);
     public final static Component DIGEST = new Component(Type.DIGEST);
     public final static Component CRC = new Component(Type.CRC);
     public final static Component SUMMARY = new Component(Type.SUMMARY);
@@ -132,6 +135,7 @@ public class Component
             case FILTER:           return Component.FILTER;
             case COMPRESSION_INFO: return Component.COMPRESSION_INFO;
             case STATS:            return Component.STATS;
+            case STATS_CRC:        return Component.STATS_CRC;
             case DIGEST:           return Component.DIGEST;
             case CRC:              return Component.CRC;
             case SUMMARY:          return Component.SUMMARY;

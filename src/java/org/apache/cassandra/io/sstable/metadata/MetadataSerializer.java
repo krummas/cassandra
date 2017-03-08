@@ -24,15 +24,20 @@ import com.google.common.collect.Lists;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.Version;
+import org.apache.cassandra.io.util.ChecksummedRandomAccessReader;
+import org.apache.cassandra.io.util.ChecksummedSequentialWriter;
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.util.BufferedDataOutputStreamPlus;
 import org.apache.cassandra.io.util.RandomAccessReader;
+import org.apache.cassandra.io.util.SequentialWriter;
+import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -48,7 +53,10 @@ import org.apache.cassandra.utils.FBUtilities;
 public class MetadataSerializer implements IMetadataSerializer
 {
     private static final Logger logger = LoggerFactory.getLogger(MetadataSerializer.class);
-
+    private static final SequentialWriterOption writerOption = SequentialWriterOption.newBuilder()
+                                                                              .trickleFsync(DatabaseDescriptor.getTrickleFsync())
+                                                                              .trickleFsyncByteInterval(DatabaseDescriptor.getTrickleFsyncIntervalInKb() * 1024)
+                                                                              .build();
     public void serialize(Map<MetadataType, MetadataComponent> components, DataOutputPlus out, Version version) throws IOException
     {
         // sort components by type
@@ -80,6 +88,7 @@ public class MetadataSerializer implements IMetadataSerializer
         Map<MetadataType, MetadataComponent> components;
         logger.trace("Load metadata for {}", descriptor);
         File statsFile = new File(descriptor.filenameFor(Component.STATS));
+        File crcFile = new File(descriptor.filenameFor(Component.STATS_CRC));
         if (!statsFile.exists())
         {
             logger.trace("No sstable stats for {}", descriptor);
@@ -88,9 +97,13 @@ public class MetadataSerializer implements IMetadataSerializer
         }
         else
         {
-            try (RandomAccessReader r = RandomAccessReader.open(statsFile))
+            try (RandomAccessReader r = crcFile.exists() ? ChecksummedRandomAccessReader.open(statsFile, crcFile) : RandomAccessReader.open(statsFile))
             {
                 components = deserialize(descriptor, r, types);
+            }
+            catch (Exception e)
+            {
+                throw new CorruptSSTableException(e, statsFile);
             }
         }
         return components;
@@ -149,16 +162,25 @@ public class MetadataSerializer implements IMetadataSerializer
 
     private void rewriteSSTableMetadata(Descriptor descriptor, Map<MetadataType, MetadataComponent> currentComponents) throws IOException
     {
-        String filePath = descriptor.tmpFilenameFor(Component.STATS);
-        try (DataOutputStreamPlus out = new BufferedDataOutputStreamPlus(new FileOutputStream(filePath)))
-        {
-            serialize(currentComponents, out, descriptor.version);
-            out.flush();
-        }
+        File file = new File(descriptor.tmpFilenameFor(Component.STATS));
+        File crcFile = new File(descriptor.tmpFilenameFor(Component.STATS_CRC));
         // we cant move a file on top of another file in windows:
+        writeMetadata(descriptor, currentComponents, file, crcFile);
         if (FBUtilities.isWindows)
+        {
             FileUtils.delete(descriptor.filenameFor(Component.STATS));
-        FileUtils.renameWithConfirm(filePath, descriptor.filenameFor(Component.STATS));
+            FileUtils.delete(descriptor.filenameFor(Component.STATS_CRC));
+        }
+        FileUtils.renameWithConfirm(file, new File(descriptor.filenameFor(Component.STATS)));
+        FileUtils.renameWithConfirm(crcFile, new File(descriptor.filenameFor(Component.STATS_CRC)));
+    }
 
+    public void writeMetadata(Descriptor descriptor, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException
+    {
+        try (SequentialWriter out = new ChecksummedSequentialWriter(file, crcFile, null, writerOption))
+        {
+            serialize(components, out, descriptor.version);
+            out.finish();
+        }
     }
 }

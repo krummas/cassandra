@@ -17,10 +17,16 @@
  */
 package org.apache.cassandra.io.sstable;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
+import java.nio.file.Files;
+import java.nio.file.OpenOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,6 +41,7 @@ import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.IntegerType;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.util.ChecksummedRandomAccessReader;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
@@ -73,6 +80,7 @@ public class SSTableMetadataTest
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore store = keyspace.getColumnFamilyStore("Standard1");
+        store.truncateBlocking();
         long timestamp = System.currentTimeMillis();
         for(int i = 0; i < 10; i++)
         {
@@ -342,4 +350,57 @@ public class SSTableMetadataTest
         assertFalse(cfs.getLiveSSTables().iterator().next().getSSTableMetadata().hasLegacyCounterShards);
         cfs.truncateBlocking();
     } */
+
+    @Test(expected = CorruptSSTableException.class)
+    public void testFileCorruption() throws IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore("Standard1");
+        store.truncateBlocking();
+        long timestamp = System.currentTimeMillis();
+        for(int i = 0; i < 10; i++)
+        {
+            for (int j = 0; j < 10; j++)
+                new RowUpdateBuilder(store.metadata.get(), timestamp, 10 + j, Integer.toString(i))
+                .clustering(Integer.toString(j))
+                .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                .build()
+                .applyUnsafe();
+        }
+
+        store.forceBlockingFlush();
+        for(SSTableReader sstable : store.getLiveSSTables())
+        {
+            File toCorrupt = new File(sstable.descriptor.filenameFor(Component.STATS));
+            byte [] bytes = Files.readAllBytes(toCorrupt.toPath());
+            bytes[bytes.length / 2]++;
+            Files.write(toCorrupt.toPath(), bytes, StandardOpenOption.TRUNCATE_EXISTING);
+            sstable.reloadSSTableMetadata();
+        }
+    }
+
+    @Test
+    public void testMutateLevelNoCorruption() throws IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore("Standard1");
+        store.truncateBlocking();
+        long timestamp = System.currentTimeMillis();
+        for(int i = 0; i < 10; i++)
+        {
+            for (int j = 0; j < 10; j++)
+                new RowUpdateBuilder(store.metadata.get(), timestamp, 10 + j, Integer.toString(i))
+                .clustering(Integer.toString(j))
+                .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                .build()
+                .applyUnsafe();
+        }
+
+        store.forceBlockingFlush();
+        for(SSTableReader sstable : store.getLiveSSTables())
+        {
+            sstable.getSSTableMetadata().mutateLevel(10);
+            sstable.reloadSSTableMetadata();
+        }
+    }
 }
