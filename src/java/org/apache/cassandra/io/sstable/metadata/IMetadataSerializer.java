@@ -76,5 +76,5 @@ public interface IMetadataSerializer
      */
     void mutateRepaired(Descriptor descriptor, long newRepairedAt, UUID newPendingRepair) throws IOException;
 
-    void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException;
+    void serializeWithChecksum(Descriptor desc, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException;
 }

@@ -150,6 +150,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         Set<Component> components = new HashSet<Component>(Arrays.asList(Component.DATA,
                 Component.PRIMARY_INDEX,
                 Component.STATS,
+                Component.STATS_CRC,
                 Component.SUMMARY,
                 Component.TOC,
                 Component.DIGEST));

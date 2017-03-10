@@ -112,6 +112,8 @@ public class SSTableLoader implements StreamEventHandler
                                               components.add(Component.COMPRESSION_INFO);
                                           if (new File(desc.filenameFor(Component.STATS)).exists())
                                               components.add(Component.STATS);
+                                          if (new File(desc.filenameFor(Component.STATS_CRC)).exists())
+                                              components.add(Component.STATS);
 
                                           try
                                           {

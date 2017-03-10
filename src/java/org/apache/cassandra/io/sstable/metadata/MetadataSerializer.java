@@ -165,7 +165,7 @@ public class MetadataSerializer implements IMetadataSerializer
         File file = new File(descriptor.tmpFilenameFor(Component.STATS));
         File crcFile = new File(descriptor.tmpFilenameFor(Component.STATS_CRC));
         // we cant move a file on top of another file in windows:
-        writeMetadata(descriptor, currentComponents, file, crcFile);
+        serializeWithChecksum(descriptor, currentComponents, file, crcFile);
         if (FBUtilities.isWindows)
         {
             FileUtils.delete(descriptor.filenameFor(Component.STATS));
@@ -175,7 +175,11 @@ public class MetadataSerializer implements IMetadataSerializer
         FileUtils.renameWithConfirm(crcFile, new File(descriptor.filenameFor(Component.STATS_CRC)));
     }
 
-    public void writeMetadata(Descriptor descriptor, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException
+    /**
+     * Writes the given metadata components to file with a checksum in crcFile
+     * @throws IOException
+     */
+    public void serializeWithChecksum(Descriptor descriptor, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException
     {
         try (SequentialWriter out = new ChecksummedSequentialWriter(file, crcFile, null, writerOption))
         {

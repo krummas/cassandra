@@ -399,7 +399,7 @@ public class BigTableWriter extends SSTableWriter
         File crcFile = new File(desc.filenameFor(Component.STATS_CRC));
         try
         {
-            desc.getMetadataSerializer().writeMetadata(desc, components, file, crcFile);
+            desc.getMetadataSerializer().serializeWithChecksum(desc, components, file, crcFile);
         }
         catch (IOException e)
         {
