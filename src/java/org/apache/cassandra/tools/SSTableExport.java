@@ -27,6 +27,8 @@ import java.util.stream.StreamSupport;
 
 import org.apache.commons.cli.*;
 
+import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.VersionedComponent;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -98,9 +100,10 @@ public class SSTableExport
             throw new IOException("Cannot process old and unsupported SSTable version.");
 
         EnumSet<MetadataType> types = EnumSet.of(MetadataType.STATS, MetadataType.HEADER);
-        Map<MetadataType, MetadataComponent> sstableMetadata = desc.getMetadataSerializer().deserialize(desc, types);
+        VersionedComponent component = VersionedComponent.getLatestVersion(desc, Component.Type.STATS);
+        Map<MetadataType, MetadataComponent> sstableMetadata = desc.getMetadataSerializer().deserialize(desc, types, component.version);
         SerializationHeader.Component header = (SerializationHeader.Component) sstableMetadata.get(MetadataType.HEADER);
-        IPartitioner partitioner = FBUtilities.newPartitioner(desc);
+        IPartitioner partitioner = FBUtilities.newPartitioner(desc, component.version);
 
         TableMetadata.Builder builder = TableMetadata.builder("keyspace", "table").partitioner(partitioner);
         header.getStaticColumns().entrySet().stream()

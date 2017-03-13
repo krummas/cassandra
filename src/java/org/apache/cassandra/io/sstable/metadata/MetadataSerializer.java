@@ -29,6 +29,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.VersionedComponent;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.util.ChecksummedRandomAccessReader;
 import org.apache.cassandra.io.util.ChecksummedSequentialWriter;
@@ -83,15 +84,14 @@ public class MetadataSerializer implements IMetadataSerializer
         }
     }
 
-    public Map<MetadataType, MetadataComponent> deserialize( Descriptor descriptor, EnumSet<MetadataType> types) throws IOException
+    public Map<MetadataType, MetadataComponent> deserialize( Descriptor descriptor, EnumSet<MetadataType> types, int fileVersion) throws IOException
     {
         Map<MetadataType, MetadataComponent> components;
         logger.trace("Load metadata for {}", descriptor);
-        File statsFile = new File(descriptor.filenameFor(Component.STATS));
-        File crcFile = new File(descriptor.filenameFor(Component.STATS_CRC));
+        File statsFile = new File(descriptor.filenameFor(new VersionedComponent(Component.Type.STATS, fileVersion)));
+        File crcFile = new File(descriptor.filenameFor(new VersionedComponent(Component.Type.STATS_CRC, fileVersion)));
         if (!statsFile.exists())
         {
-            logger.trace("No sstable stats for {}", descriptor);
             components = new EnumMap<>(MetadataType.class);
             components.put(MetadataType.STATS, MetadataCollector.defaultStatsMetadata());
         }
@@ -109,9 +109,9 @@ public class MetadataSerializer implements IMetadataSerializer
         return components;
     }
 
-    public MetadataComponent deserialize(Descriptor descriptor, MetadataType type) throws IOException
+    public MetadataComponent deserialize(Descriptor descriptor, MetadataType type, int fileVersion) throws IOException
     {
-        return deserialize(descriptor, EnumSet.of(type)).get(type);
+        return deserialize(descriptor, EnumSet.of(type), fileVersion).get(type);
     }
 
     public Map<MetadataType, MetadataComponent> deserialize(Descriptor descriptor, FileDataInput in, EnumSet<MetadataType> types) throws IOException
@@ -139,40 +139,33 @@ public class MetadataSerializer implements IMetadataSerializer
         return components;
     }
 
-    public void mutateLevel(Descriptor descriptor, int newLevel) throws IOException
+    public void mutateLevel(Descriptor descriptor, int fileVersion, int newLevel) throws IOException
     {
-        logger.trace("Mutating {} to level {}", descriptor.filenameFor(Component.STATS), newLevel);
-        Map<MetadataType, MetadataComponent> currentComponents = deserialize(descriptor, EnumSet.allOf(MetadataType.class));
+        logger.trace("Mutating {} to level {}", descriptor, newLevel);
+        Map<MetadataType, MetadataComponent> currentComponents = deserialize(descriptor, EnumSet.allOf(MetadataType.class), fileVersion);
         StatsMetadata stats = (StatsMetadata) currentComponents.remove(MetadataType.STATS);
         // mutate level
         currentComponents.put(MetadataType.STATS, stats.mutateLevel(newLevel));
-        rewriteSSTableMetadata(descriptor, currentComponents);
+        rewriteSSTableMetadata(descriptor, fileVersion + 1, currentComponents);
     }
 
-    public void mutateRepaired(Descriptor descriptor, long newRepairedAt, UUID newPendingRepair) throws IOException
+    public void mutateRepaired(Descriptor descriptor, int fileVersion, long newRepairedAt, UUID newPendingRepair) throws IOException
     {
         logger.trace("Mutating {} to repairedAt time {} and pendingRepair {}",
-                     descriptor.filenameFor(Component.STATS), newRepairedAt, newPendingRepair);
-        Map<MetadataType, MetadataComponent> currentComponents = deserialize(descriptor, EnumSet.allOf(MetadataType.class));
+                     descriptor, newRepairedAt, newPendingRepair);
+        Map<MetadataType, MetadataComponent> currentComponents = deserialize(descriptor, EnumSet.allOf(MetadataType.class), fileVersion);
         StatsMetadata stats = (StatsMetadata) currentComponents.remove(MetadataType.STATS);
         // mutate time & id
         currentComponents.put(MetadataType.STATS, stats.mutateRepairedAt(newRepairedAt).mutatePendingRepair(newPendingRepair));
-        rewriteSSTableMetadata(descriptor, currentComponents);
+        rewriteSSTableMetadata(descriptor, fileVersion + 1, currentComponents);
     }
 
-    private void rewriteSSTableMetadata(Descriptor descriptor, Map<MetadataType, MetadataComponent> currentComponents) throws IOException
+    private void rewriteSSTableMetadata(Descriptor descriptor, int fileVersion, Map<MetadataType, MetadataComponent> currentComponents) throws IOException
     {
-        File file = new File(descriptor.tmpFilenameFor(Component.STATS));
-        File crcFile = new File(descriptor.tmpFilenameFor(Component.STATS_CRC));
-        // we cant move a file on top of another file in windows:
+        File file = new File(descriptor.filenameFor(new VersionedComponent(Component.Type.STATS, fileVersion)));
+        File crcFile = new File(descriptor.filenameFor(new VersionedComponent(Component.Type.STATS_CRC, fileVersion)));
+        assert !file.exists() && !crcFile.exists() : file + " : " + crcFile;
         serializeWithChecksum(descriptor, currentComponents, file, crcFile);
-        if (FBUtilities.isWindows)
-        {
-            FileUtils.delete(descriptor.filenameFor(Component.STATS));
-            FileUtils.delete(descriptor.filenameFor(Component.STATS_CRC));
-        }
-        FileUtils.renameWithConfirm(file, new File(descriptor.filenameFor(Component.STATS)));
-        FileUtils.renameWithConfirm(crcFile, new File(descriptor.filenameFor(Component.STATS_CRC)));
     }
 
     /**

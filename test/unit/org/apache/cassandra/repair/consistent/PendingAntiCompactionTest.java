@@ -214,8 +214,7 @@ public class PendingAntiCompactionTest
         Assert.assertTrue(repaired.intersects(FULL_RANGE));
         Assert.assertTrue(unrepaired.intersects(FULL_RANGE));
 
-        repaired.descriptor.getMetadataSerializer().mutateRepaired(repaired.descriptor, 1, null);
-        repaired.reloadSSTableMetadata();
+        repaired.mutateRepaired(1, null);
 
         PendingAntiCompaction.AcquisitionCallable acquisitionCallable = new PendingAntiCompaction.AcquisitionCallable(cfs, FULL_RANGE, UUIDGen.getTimeUUID());
         PendingAntiCompaction.AcquireResult result = acquisitionCallable.call();
@@ -240,8 +239,7 @@ public class PendingAntiCompactionTest
         Assert.assertTrue(repaired.intersects(FULL_RANGE));
         Assert.assertTrue(unrepaired.intersects(FULL_RANGE));
 
-        repaired.descriptor.getMetadataSerializer().mutateRepaired(repaired.descriptor, 0, UUIDGen.getTimeUUID());
-        repaired.reloadSSTableMetadata();
+        repaired.mutateRepaired(0, UUIDGen.getTimeUUID());
         Assert.assertTrue(repaired.isPendingRepair());
 
         PendingAntiCompaction.AcquisitionCallable acquisitionCallable = new PendingAntiCompaction.AcquisitionCallable(cfs, FULL_RANGE, UUIDGen.getTimeUUID());

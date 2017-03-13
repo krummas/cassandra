@@ -118,8 +118,7 @@ public class AbstractPendingRepairTest extends AbstractRepairTest
     {
         try
         {
-            sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, repairedAt, pendingRepair);
-            sstable.reloadSSTableMetadata();
+            sstable.mutateRepaired(repairedAt, pendingRepair);
         }
         catch (IOException e)
         {

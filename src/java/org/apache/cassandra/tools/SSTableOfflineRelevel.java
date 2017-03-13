@@ -213,7 +213,7 @@ public class SSTableOfflineRelevel
                 for (SSTableReader sstable : l0)
                 {
                     if (sstable.getSSTableLevel() != 0)
-                        sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 0);
+                        sstable.mutateLevel(0);
                 }
                 for (int i = levels.size() - 1; i >= 0; i--)
                 {
@@ -221,7 +221,7 @@ public class SSTableOfflineRelevel
                     {
                         int newLevel = levels.size() - i;
                         if (newLevel != sstable.getSSTableLevel())
-                            sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, newLevel);
+                            sstable.mutateLevel(newLevel);
                     }
                 }
             }

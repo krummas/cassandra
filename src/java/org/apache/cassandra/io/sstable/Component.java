@@ -45,9 +45,9 @@ public class Component
         // file to hold information about uncompressed data length, chunk offsets etc.
         COMPRESSION_INFO("CompressionInfo.db"),
         // statistical metadata about the content of the sstable
-        STATS("Statistics.db"),
+        STATS(".*Statistics(\\d+)?\\.db", true, "Statistics%d.db", "Statistics.db"),
         // holds crc32 checksum of the Statistics file
-        STATS_CRC("Statistics.crc32"),
+        STATS_CRC(".*Statistics(\\d+)?\\.crc32", true, "Statistics%d.crc32", "Statistics.crc32"),
         // holds CRC32 checksum of the data file
         DIGEST("Digest.crc32"),
         // holds the CRC32 for chunks in an a uncompressed file.
@@ -62,9 +62,20 @@ public class Component
         CUSTOM(null);
 
         final String repr;
+        public final boolean isVersioned;
+        public final String fileFormat;
+        public final String legacyName;
+
         Type(String repr)
         {
+            this(repr, false, repr, null);
+        }
+        Type(String repr, boolean isVersioned, String fileFormat, String legacyName)
+        {
             this.repr = repr;
+            this.isVersioned = isVersioned;
+            this.fileFormat = fileFormat;
+            this.legacyName = legacyName;
         }
 
         static Type fromRepresentation(String repr)
@@ -83,8 +94,6 @@ public class Component
     public final static Component PRIMARY_INDEX = new Component(Type.PRIMARY_INDEX);
     public final static Component FILTER = new Component(Type.FILTER);
     public final static Component COMPRESSION_INFO = new Component(Type.COMPRESSION_INFO);
-    public final static Component STATS = new Component(Type.STATS);
-    public final static Component STATS_CRC = new Component(Type.STATS_CRC);
     public final static Component DIGEST = new Component(Type.DIGEST);
     public final static Component CRC = new Component(Type.CRC);
     public final static Component SUMMARY = new Component(Type.SUMMARY);
@@ -134,8 +143,8 @@ public class Component
             case PRIMARY_INDEX:    return Component.PRIMARY_INDEX;
             case FILTER:           return Component.FILTER;
             case COMPRESSION_INFO: return Component.COMPRESSION_INFO;
-            case STATS:            return Component.STATS;
-            case STATS_CRC:        return Component.STATS_CRC;
+            case STATS:            return new VersionedComponent(type, name);
+            case STATS_CRC:        return new VersionedComponent(type, name);
             case DIGEST:           return Component.DIGEST;
             case CRC:              return Component.CRC;
             case SUMMARY:          return Component.SUMMARY;

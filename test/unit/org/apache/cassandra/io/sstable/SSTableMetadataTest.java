@@ -25,6 +25,8 @@ import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -33,6 +35,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
@@ -371,11 +374,11 @@ public class SSTableMetadataTest
         store.forceBlockingFlush();
         for(SSTableReader sstable : store.getLiveSSTables())
         {
-            File toCorrupt = new File(sstable.descriptor.filenameFor(Component.STATS));
+            File toCorrupt = new File(sstable.descriptor.filenameFor(VersionedComponent.getLatestVersion(sstable.descriptor, Component.Type.STATS)));
             byte [] bytes = Files.readAllBytes(toCorrupt.toPath());
             bytes[bytes.length / 2]++;
             Files.write(toCorrupt.toPath(), bytes, StandardOpenOption.TRUNCATE_EXISTING);
-            sstable.reloadSSTableMetadata();
+            sstable.reloadSSTableMetadata(0);
         }
     }
 
@@ -399,8 +402,39 @@ public class SSTableMetadataTest
         store.forceBlockingFlush();
         for(SSTableReader sstable : store.getLiveSSTables())
         {
-            sstable.getSSTableMetadata().mutateLevel(10);
-            sstable.reloadSSTableMetadata();
+            sstable.mutateLevel(10);
         }
+    }
+
+    @Test
+    public void testManyVersions() throws IOException, ExecutionException, InterruptedException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore store = keyspace.getColumnFamilyStore("Standard1");
+        store.truncateBlocking();
+        long timestamp = System.currentTimeMillis();
+        for(int i = 0; i < 10; i++)
+        {
+            for (int j = 0; j < 10; j++)
+                new RowUpdateBuilder(store.metadata.get(), timestamp, 10 + j, Integer.toString(i))
+                .clustering(Integer.toString(j))
+                .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                .build()
+                .applyUnsafe();
+        }
+
+        store.forceBlockingFlush();
+        store.forceMajorCompaction();
+        SSTableReader sstable = store.getLiveSSTables().iterator().next();
+
+        for (int i =  1; i < 10; i++)
+            sstable.mutateLevel(i);
+
+        assertEquals(10, VersionedComponent.getAllVersions(sstable.descriptor, Component.Type.STATS).size());
+        assertEquals(10, VersionedComponent.getAllVersions(sstable.descriptor, Component.Type.STATS_CRC).size());
+        store.snapshot("testmanyversions");
+        Descriptor snapshotDesc = new Descriptor(Directories.getSnapshotDirectory(sstable.descriptor, "testmanyversions"), store.keyspace.getName(), store.getTableName(), sstable.descriptor.generation);
+        assertEquals(10, VersionedComponent.getAllVersions(snapshotDesc, Component.Type.STATS).size());
+        assertEquals(10, VersionedComponent.getAllVersions(snapshotDesc, Component.Type.STATS_CRC).size());
     }
 }

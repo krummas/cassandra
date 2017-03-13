@@ -35,6 +35,7 @@ import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
+import org.apache.cassandra.io.sstable.VersionedComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
@@ -148,12 +149,12 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     private static Set<Component> components(TableMetadata metadata)
     {
         Set<Component> components = new HashSet<Component>(Arrays.asList(Component.DATA,
-                Component.PRIMARY_INDEX,
-                Component.STATS,
-                Component.STATS_CRC,
-                Component.SUMMARY,
-                Component.TOC,
-                Component.DIGEST));
+                                                                         Component.PRIMARY_INDEX,
+                                                                         new VersionedComponent(Component.Type.STATS),
+                                                                         new VersionedComponent(Component.Type.STATS_CRC),
+                                                                         Component.SUMMARY,
+                                                                         Component.TOC,
+                                                                         Component.DIGEST));
 
         if (metadata.params.bloomFilterFpChance < 1.0)
             components.add(Component.FILTER);

@@ -399,8 +399,7 @@ class PendingRepairManager
             for (SSTableReader sstable : transaction.originals())
             {
                 logger.debug("Setting repairedAt to {} on {} for {}", repairedAt, sstable, sessionID);
-                sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, repairedAt, ActiveRepairService.NO_PENDING_REPAIR);
-                sstable.reloadSSTableMetadata();
+                sstable.mutateRepaired(repairedAt, ActiveRepairService.NO_PENDING_REPAIR);
             }
             cfs.getTracker().notifySSTableRepairedStatusChanged(transaction.originals());
             transaction.abort();

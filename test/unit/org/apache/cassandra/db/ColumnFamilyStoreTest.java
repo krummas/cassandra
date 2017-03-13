@@ -33,6 +33,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+
 import org.apache.cassandra.*;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
@@ -42,6 +44,7 @@ import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.VersionedComponent;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.ClearableHistogram;
@@ -267,7 +270,10 @@ public class ColumnFamilyStoreTest
             Descriptor existing = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(), KEYSPACE2, CF_STANDARD1, version,
                                                  SSTableFormat.Type.BIG);
             Descriptor desc = new Descriptor(Directories.getBackupsDirectory(existing), KEYSPACE2, CF_STANDARD1, version, SSTableFormat.Type.BIG);
-            for (Component c : new Component[]{ Component.DATA, Component.PRIMARY_INDEX, Component.FILTER, Component.STATS })
+            List<Component> components = Lists.newArrayList(Component.DATA, Component.PRIMARY_INDEX, Component.FILTER);
+            components.addAll(VersionedComponent.getAllVersions(existing, Component.Type.STATS));
+            components.addAll(VersionedComponent.getAllVersions(existing, Component.Type.STATS_CRC));
+            for (Component c : components)
                 assertTrue("Cannot find backed-up file:" + desc.filenameFor(c), new File(desc.filenameFor(c)).exists());
         }
     }

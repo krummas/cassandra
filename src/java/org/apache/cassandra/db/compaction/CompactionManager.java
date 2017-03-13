@@ -641,8 +641,7 @@ public class CompactionManager implements CompactionManagerMBean
                     if (r.contains(sstableRange))
                     {
                         logger.info("[repair #{}] SSTable {} fully contained in range {}, mutating repairedAt instead of anticompacting", parentRepairSession, sstable, r);
-                        sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, repairedAt, pendingRepair);
-                        sstable.reloadSSTableMetadata();
+                        sstable.mutateRepaired(repairedAt, pendingRepair);
                         mutatedRepairStatuses.add(sstable);
                         if (!wasRepairedBefore.get(sstable))
                             mutatedRepairStatusToNotify.add(sstable);

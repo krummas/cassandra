@@ -99,16 +99,6 @@ public class Descriptor
         hashCode = Objects.hashCode(version, this.directory, generation, ksname, cfname, formatType);
     }
 
-    public Descriptor withGeneration(int newGeneration)
-    {
-        return new Descriptor(version, directory, ksname, cfname, newGeneration, formatType);
-    }
-
-    public Descriptor withFormatType(SSTableFormat.Type newType)
-    {
-        return new Descriptor(newType.info.getLatestVersion(), directory, ksname, cfname, generation, newType);
-    }
-
     public String tmpFilenameFor(Component component)
     {
         return filenameFor(component) + TMP_EXT;

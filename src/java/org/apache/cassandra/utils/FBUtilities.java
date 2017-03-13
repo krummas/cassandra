@@ -418,10 +418,10 @@ public class FBUtilities
      * @return a new IPartitioner instance
      * @throws IOException
      */
-    public static IPartitioner newPartitioner(Descriptor desc) throws IOException
+    public static IPartitioner newPartitioner(Descriptor desc, int metadataFileVersion) throws IOException
     {
         EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.HEADER);
-        Map<MetadataType, MetadataComponent> sstableMetadata = desc.getMetadataSerializer().deserialize(desc, types);
+        Map<MetadataType, MetadataComponent> sstableMetadata = desc.getMetadataSerializer().deserialize(desc, types, metadataFileVersion);
         ValidationMetadata validationMetadata = (ValidationMetadata) sstableMetadata.get(MetadataType.VALIDATION);
         SerializationHeader.Component header = (SerializationHeader.Component) sstableMetadata.get(MetadataType.HEADER);
         return newPartitioner(validationMetadata.partitioner, Optional.of(header.getKeyType()));

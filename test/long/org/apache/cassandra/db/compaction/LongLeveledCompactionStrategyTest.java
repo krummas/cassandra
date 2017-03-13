@@ -201,8 +201,7 @@ public class LongLeveledCompactionStrategyTest
                     if (sstable.getSSTableLevel() == 0)
                     {
                         System.out.println("Mutating L0-SSTABLE level to L1 to simulate a bug: " + sstable.getFilename());
-                        sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 1);
-                        sstable.reloadSSTableMetadata();
+                        sstable.mutateLevel(1);
                     }
                 }
 

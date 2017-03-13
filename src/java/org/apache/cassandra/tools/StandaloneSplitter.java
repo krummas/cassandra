@@ -90,8 +90,8 @@ public class StandaloneSplitter
                     Component.PRIMARY_INDEX,
                     Component.FILTER,
                     Component.COMPRESSION_INFO,
-                    Component.STATS,
-                    Component.STATS_CRC
+                    VersionedComponent.getLatestVersion(desc, Component.Type.STATS),
+                    VersionedComponent.getLatestVersion(desc, Component.Type.STATS_CRC)
                 }));
 
                 Iterator<Component> iter = components.iterator();

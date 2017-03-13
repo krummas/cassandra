@@ -145,5 +145,20 @@ public class DescriptorTest
         }
     }
 
+    @Test
+    public void testLegacyFormat() throws IOException
+    {
+        String fname = "ma-1-big-Statistics.db";
+        File f = new File(fname);
+        f.createNewFile();
+        f.deleteOnExit();
+
+        Descriptor desc = Descriptor.fromFilename(fname);
+        Component.Type type = Component.Type.fromRepresentation(fname);
+        VersionedComponent component = VersionedComponent.getLatestVersion(desc, type);
+        assertEquals(-1, component.version);
+
+    }
+
 
 }

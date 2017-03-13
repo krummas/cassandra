@@ -83,14 +83,6 @@ public class StreamSessionTest
         return diff.iterator().next();
     }
 
-    private static void mutateRepaired(SSTableReader sstable, long repairedAt, UUID pendingRepair) throws IOException
-    {
-        Descriptor descriptor = sstable.descriptor;
-        descriptor.getMetadataSerializer().mutateRepaired(descriptor, repairedAt, pendingRepair);
-        sstable.reloadSSTableMetadata();
-
-    }
-
     private Set<SSTableReader> selectReaders(UUID pendingRepair)
     {
         IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
@@ -119,9 +111,9 @@ public class StreamSessionTest
 
         UUID pendingRepair = UUIDGen.getTimeUUID();
         long repairedAt = System.currentTimeMillis();
-        mutateRepaired(sstable2, ActiveRepairService.UNREPAIRED_SSTABLE, pendingRepair);
-        mutateRepaired(sstable3, ActiveRepairService.UNREPAIRED_SSTABLE, UUIDGen.getTimeUUID());
-        mutateRepaired(sstable4, repairedAt, ActiveRepairService.NO_PENDING_REPAIR);
+        sstable2.mutateRepaired(ActiveRepairService.UNREPAIRED_SSTABLE, pendingRepair);
+        sstable3.mutateRepaired(ActiveRepairService.UNREPAIRED_SSTABLE, UUIDGen.getTimeUUID());
+        sstable4.mutateRepaired(repairedAt, ActiveRepairService.NO_PENDING_REPAIR);
 
         // no pending repair should return all sstables
         Assert.assertEquals(Sets.newHashSet(sstable1, sstable2, sstable3, sstable4), selectReaders(ActiveRepairService.NO_PENDING_REPAIR));

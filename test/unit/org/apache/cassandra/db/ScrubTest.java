@@ -363,7 +363,8 @@ public class ScrubTest
             components.add(Component.DATA);
             components.add(Component.PRIMARY_INDEX);
             components.add(Component.FILTER);
-            components.add(Component.STATS);
+            components.add(VersionedComponent.getLatestVersion(desc, Component.Type.STATS));
+            components.add(VersionedComponent.getLatestVersion(desc, Component.Type.STATS_CRC));
             components.add(Component.SUMMARY);
             components.add(Component.TOC);
 

@@ -30,6 +30,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.management.*;
 import javax.management.openmbean.*;
 
@@ -65,7 +66,9 @@ import org.apache.cassandra.index.transactions.UpdateTransaction;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
+import org.apache.cassandra.io.sstable.VersionedComponent;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
@@ -746,12 +749,22 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 throw new RuntimeException(String.format("Can't open incompatible SSTable! Current version %s, found file: %s",
                         descriptor.getFormat().getLatestVersion(),
                         descriptor));
-
+            Set<Component> components = new HashSet<>(entry.getValue());
             // force foreign sstables to level 0
             try
             {
-                if (new File(descriptor.filenameFor(Component.STATS)).exists())
-                    descriptor.getMetadataSerializer().mutateLevel(descriptor, 0);
+                VersionedComponent newestStatsComponent = VersionedComponent.getLatestVersion(descriptor, Component.Type.STATS);
+
+                if (new File(descriptor.filenameFor(newestStatsComponent)).exists())
+                {
+                    // the sstable is not yet opened, so we don't need to reload the metadata (it will be loaded below, in SSTableReader.open(...)
+                    descriptor.getMetadataSerializer().mutateLevel(descriptor, newestStatsComponent.version, 0);
+                    VersionedComponent statsComponent = new VersionedComponent(Component.Type.STATS, newestStatsComponent.version + 1);
+                    VersionedComponent crcComponent = new VersionedComponent(Component.Type.STATS_CRC, newestStatsComponent.version + 1);
+                    components.add(statsComponent);
+                    components.add(crcComponent);
+                    SSTable.appendTOC(descriptor, Sets.newHashSet(statsComponent, crcComponent));
+                }
             }
             catch (IOException e)
             {
@@ -774,12 +787,13 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             while (new File(newDescriptor.filenameFor(Component.DATA)).exists());
 
             logger.info("Renaming new SSTable {} to {}", descriptor, newDescriptor);
-            SSTableWriter.rename(descriptor, newDescriptor, entry.getValue());
+            SSTableWriter.rename(descriptor, newDescriptor, components);
 
             SSTableReader reader;
             try
             {
-                reader = SSTableReader.open(newDescriptor, entry.getValue(), metadata);
+                reader = SSTableReader.open(newDescriptor, components, metadata);
+
             }
             catch (IOException e)
             {

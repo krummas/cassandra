@@ -35,6 +35,7 @@ import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.IndexSummary;
+import org.apache.cassandra.io.sstable.VersionedComponent;
 import org.apache.cassandra.io.sstable.metadata.*;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
@@ -86,7 +87,8 @@ public class SSTableMetadataViewer
             if (new File(fname).exists())
             {
                 Descriptor descriptor = Descriptor.fromFilename(fname);
-                Map<MetadataType, MetadataComponent> metadata = descriptor.getMetadataSerializer().deserialize(descriptor, EnumSet.allOf(MetadataType.class));
+                VersionedComponent component = VersionedComponent.getLatestVersion(descriptor, Component.Type.STATS);
+                Map<MetadataType, MetadataComponent> metadata = descriptor.getMetadataSerializer().deserialize(descriptor, EnumSet.allOf(MetadataType.class), component.version);
                 ValidationMetadata validation = (ValidationMetadata) metadata.get(MetadataType.VALIDATION);
                 StatsMetadata stats = (StatsMetadata) metadata.get(MetadataType.STATS);
                 CompactionMetadata compaction = (CompactionMetadata) metadata.get(MetadataType.COMPACTION);
@@ -115,7 +117,7 @@ public class SSTableMetadataViewer
                     out.printf("TTL max: %s%n", stats.maxTTL);
 
                     if (validation != null && header != null)
-                        printMinMaxToken(descriptor, FBUtilities.newPartitioner(descriptor), header.getKeyType(), out);
+                        printMinMaxToken(descriptor, FBUtilities.newPartitioner(descriptor, component.version), header.getKeyType(), out);
 
                     if (header != null && header.getClusteringTypes().size() == stats.minClusteringValues.size())
                     {

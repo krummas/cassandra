@@ -79,7 +79,7 @@ public class MetadataSerializerTest
             throws IOException
     {
         // Serialize to tmp file
-        File statsFile = File.createTempFile(Component.STATS.name, null);
+        File statsFile = File.createTempFile(String.format(Component.Type.STATS.fileFormat, 0), null);
         try (DataOutputStreamPlus out = new BufferedDataOutputStreamPlus(new FileOutputStream(statsFile)))
         {
             serializer.serialize(metadata, out, version);

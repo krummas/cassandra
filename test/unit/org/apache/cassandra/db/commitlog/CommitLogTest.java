@@ -775,7 +775,7 @@ public class CommitLogTest
             cfs.forceMajorCompaction();
         // Make sure metadata saves and reads fine
         for (SSTableReader reader : cfs.getLiveSSTables())
-            reader.reloadSSTableMetadata();
+            reader.reloadSSTableMetadata(reader.sstableMetadataVersion.get());
 
         CommitLog.instance.sync();
         System.setProperty("cassandra.replayList", KEYSPACE1 + "." + STANDARD1);

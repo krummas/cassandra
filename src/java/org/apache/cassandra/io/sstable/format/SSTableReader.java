@@ -24,6 +24,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
@@ -228,6 +230,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
 
     // not final since we need to be able to change level on a file.
     protected volatile StatsMetadata sstableMetadata;
+    private final Lock sstableMetadataMutationLock = new ReentrantLock();
 
     public final SerializationHeader header;
 
@@ -266,7 +269,8 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
 
             try
             {
-                CompactionMetadata metadata = (CompactionMetadata) sstable.descriptor.getMetadataSerializer().deserialize(sstable.descriptor, MetadataType.COMPACTION);
+                // note that we access the metadata without grabbing the sstableMetadataMutationLock - this is safe since the old file is kept around if there is a mutation going on at the moment
+                CompactionMetadata metadata = (CompactionMetadata) sstable.descriptor.getMetadataSerializer().deserialize(sstable.descriptor, MetadataType.COMPACTION, sstable.sstableMetadataVersion.get());
                 // If we can't load the CompactionMetadata, we are forced to estimate the keys using the index
                 // summary. (CASSANDRA-10676)
                 if (metadata == null)
@@ -316,7 +320,8 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         {
             try
             {
-                ICardinality cardinality = ((CompactionMetadata) sstable.descriptor.getMetadataSerializer().deserialize(sstable.descriptor, MetadataType.COMPACTION)).cardinalityEstimator;
+                // since we keep the old STATS file around, we don't need to grab the lock (also the only MetadataTypes we mutate are in MetadataType.STATS, so we know we will get a good version)
+                ICardinality cardinality = ((CompactionMetadata) sstable.descriptor.getMetadataSerializer().deserialize(sstable.descriptor, MetadataType.COMPACTION, sstable.sstableMetadataVersion.get())).cardinalityEstimator;
                 if (cardinality != null)
                     cardinalities.add(cardinality);
                 else
@@ -410,7 +415,8 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         assert components.contains(Component.PRIMARY_INDEX) : "Primary index component is missing for sstable " + descriptor;
 
         EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
-        Map<MetadataType, MetadataComponent> sstableMetadata = descriptor.getMetadataSerializer().deserialize(descriptor, types);
+
+        Map<MetadataType, MetadataComponent> sstableMetadata = descriptor.getMetadataSerializer().deserialize(descriptor, types, VersionedComponent.getLatestVersion(descriptor, Component.Type.STATS).version);
 
         ValidationMetadata validationMetadata = (ValidationMetadata) sstableMetadata.get(MetadataType.VALIDATION);
         StatsMetadata statsMetadata = (StatsMetadata) sstableMetadata.get(MetadataType.STATS);
@@ -468,10 +474,11 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         assert !validate || components.contains(Component.PRIMARY_INDEX) : "Primary index component is missing for sstable " + descriptor;
 
         // For the 3.0+ sstable format, the (misnomed) stats component hold the serialization header which we need to deserialize the sstable content
-        assert components.contains(Component.STATS) : "Stats component is missing for sstable " + descriptor;
+        assert components.stream().anyMatch(component -> component.type.equals(Component.Type.STATS)) : "Stats component is missing for sstable " + descriptor;
 
         EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
-        Map<MetadataType, MetadataComponent> sstableMetadata = descriptor.getMetadataSerializer().deserialize(descriptor, types);
+
+        Map<MetadataType, MetadataComponent> sstableMetadata = descriptor.getMetadataSerializer().deserialize(descriptor, types, latestMetadataVersion(components));
         ValidationMetadata validationMetadata = (ValidationMetadata) sstableMetadata.get(MetadataType.VALIDATION);
         StatsMetadata statsMetadata = (StatsMetadata) sstableMetadata.get(MetadataType.STATS);
         SerializationHeader.Component header = (SerializationHeader.Component) sstableMetadata.get(MetadataType.HEADER);
@@ -1912,17 +1919,57 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
     }
 
     /**
-     * Reloads the sstable metadata from disk.
+     * Changes the level of this sstable by writing a new STATS file with the new level.
      *
-     * Called after level is changed on sstable, for example if the sstable is dropped to L0
-     *
-     * Might be possible to remove in future versions
-     *
+     * The sstableMetadata is then reloaded from disk
      * @throws IOException
      */
-    public void reloadSSTableMetadata() throws IOException
+    public void mutateLevel(int newLevel) throws IOException
     {
-        this.sstableMetadata = (StatsMetadata) descriptor.getMetadataSerializer().deserialize(descriptor, MetadataType.STATS);
+        sstableMetadataMutationLock.lock();
+        try
+        {
+            descriptor.getMetadataSerializer().mutateLevel(descriptor, sstableMetadataVersion.get(), newLevel);
+            reloadSSTableMetadata(sstableMetadataVersion.incrementAndGet());
+        }
+        finally
+        {
+            sstableMetadataMutationLock.unlock();
+        }
+    }
+
+    /**
+     * Changes the repaired information of this sstable by writing a new STATS file with the new information
+     *
+     * Once the new file is written, the sstableMetadata is replaced by reading the new file from disk
+     * @throws IOException
+     */
+    public void mutateRepaired(long newRepairedAt, UUID newPendingRepair) throws IOException
+    {
+        sstableMetadataMutationLock.lock();
+        try
+        {
+            descriptor.getMetadataSerializer().mutateRepaired(descriptor, sstableMetadataVersion.get(), newRepairedAt, newPendingRepair);
+            reloadSSTableMetadata(sstableMetadataVersion.incrementAndGet());
+        }
+        finally
+        {
+            sstableMetadataMutationLock.unlock();
+        }
+    }
+
+    /**
+     * Loads the sstable metadata with version newVersion from disk
+     *
+     * Used in tests to reload an existing file which has been corrupted, to show that the checksumming works
+     */
+    @VisibleForTesting
+    public void reloadSSTableMetadata(int newVersion) throws IOException
+    {
+        this.sstableMetadata = (StatsMetadata) descriptor.getMetadataSerializer().deserialize(descriptor, MetadataType.STATS, newVersion);
+        for (Component component : Iterables.concat(VersionedComponent.getAllVersions(descriptor, Component.Type.STATS),
+                                                    VersionedComponent.getAllVersions(descriptor, Component.Type.STATS_CRC)))
+            addComponents(Collections.singleton(component));
     }
 
     public StatsMetadata getSSTableMetadata()

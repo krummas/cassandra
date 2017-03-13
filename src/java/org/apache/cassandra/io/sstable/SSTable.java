@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Collections2;
@@ -74,6 +75,8 @@ public abstract class SSTable
     protected final DiskOptimizationStrategy optimizationStrategy;
     protected final TableMetadataRef metadata;
 
+    public final AtomicInteger sstableMetadataVersion;
+
     protected SSTable(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata, DiskOptimizationStrategy optimizationStrategy)
     {
         // In almost all cases, metadata shouldn't be null, but allowing null allows to create a mostly functional SSTable without
@@ -87,6 +90,18 @@ public abstract class SSTable
         this.components = new CopyOnWriteArraySet<>(dataComponents);
         this.metadata = metadata;
         this.optimizationStrategy = Objects.requireNonNull(optimizationStrategy);
+        sstableMetadataVersion = new AtomicInteger(latestMetadataVersion(components));
+    }
+
+    protected static int latestMetadataVersion(Iterable<Component> components)
+    {
+        int latestSSTableMetadataVersion = Integer.MIN_VALUE;
+        for (Component component : components)
+        {
+            if (component.type.equals(Component.Type.STATS))
+                latestSSTableMetadataVersion = Math.max(((VersionedComponent)component).version, latestSSTableMetadataVersion);
+        }
+        return latestSSTableMetadataVersion;
     }
 
     /**
@@ -249,11 +264,23 @@ public abstract class SSTable
     {
         Set<Component.Type> knownTypes = Sets.difference(Component.TYPES, Collections.singleton(Component.Type.CUSTOM));
         Set<Component> components = Sets.newHashSetWithExpectedSize(knownTypes.size());
+
         for (Component.Type componentType : knownTypes)
         {
-            Component component = new Component(componentType);
-            if (new File(desc.filenameFor(component)).exists())
-                components.add(component);
+            if (componentType.isVersioned)
+            {
+                for (VersionedComponent versioned : VersionedComponent.getAllVersions(desc, componentType))
+                {
+                    if (new File(desc.filenameFor(versioned)).exists())
+                        components.add(versioned);
+                }
+            }
+            else
+            {
+                Component component = new Component(componentType);
+                if (new File(desc.filenameFor(component)).exists())
+                    components.add(component);
+            }
         }
         return components;
     }
@@ -305,7 +332,9 @@ public abstract class SSTable
         Set<Component> components = Sets.newHashSetWithExpectedSize(componentNames.size());
         for (String componentName : componentNames)
         {
-            Component component = new Component(Component.Type.fromRepresentation(componentName), componentName);
+            Component.Type type = Component.Type.fromRepresentation(componentName);
+
+            Component component = type.isVersioned ? new VersionedComponent(type, componentName) : new Component(type, componentName);
             if (!new File(descriptor.filenameFor(component)).exists())
                 logger.error("Missing component: {}", descriptor.filenameFor(component));
             else
@@ -317,7 +346,7 @@ public abstract class SSTable
     /**
      * Appends new component names to the TOC component.
      */
-    protected static void appendTOC(Descriptor descriptor, Collection<Component> components)
+    public static void appendTOC(Descriptor descriptor, Collection<Component> components)
     {
         File tocFile = new File(descriptor.filenameFor(Component.TOC));
         try (PrintWriter w = new PrintWriter(new FileWriter(tocFile, true)))

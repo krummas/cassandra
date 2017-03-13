@@ -21,6 +21,8 @@ import java.io.PrintStream;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.cassandra.io.sstable.VersionedComponent;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
@@ -80,15 +82,15 @@ public class SSTableLevelResetter
             boolean foundSSTable = false;
             for (Map.Entry<Descriptor, Set<Component>> sstable : cfs.getDirectories().sstableLister(Directories.OnTxnErr.THROW).list().entrySet())
             {
-                if (sstable.getValue().contains(Component.STATS))
+                if (sstable.getValue().stream().anyMatch(component -> component.type.equals(Component.Type.STATS)))
                 {
                     foundSSTable = true;
                     Descriptor descriptor = sstable.getKey();
-                    StatsMetadata metadata = (StatsMetadata) descriptor.getMetadataSerializer().deserialize(descriptor, MetadataType.STATS);
-                    if (metadata.sstableLevel > 0)
+                    SSTableReader sstableReader = SSTableReader.open(descriptor);
+                    if (sstableReader.getSSTableLevel() > 0)
                     {
-                        out.println("Changing level from " + metadata.sstableLevel + " to 0 on " + descriptor.filenameFor(Component.DATA));
-                        descriptor.getMetadataSerializer().mutateLevel(descriptor, 0);
+                        out.println("Changing level from " + sstableReader.getSSTableLevel() + " to 0 on " + descriptor.filenameFor(Component.DATA));
+                        sstableReader.mutateLevel(0);
                     }
                     else
                     {

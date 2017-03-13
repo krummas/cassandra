@@ -50,7 +50,7 @@ public interface IMetadataSerializer
      * @return Deserialized metadata components, in deserialized order.
      * @throws IOException
      */
-    Map<MetadataType, MetadataComponent> deserialize(Descriptor descriptor, EnumSet<MetadataType> types) throws IOException;
+    Map<MetadataType, MetadataComponent> deserialize(Descriptor descriptor, EnumSet<MetadataType> types, int fileVersion) throws IOException;
 
     /**
      * Deserialized only metadata component specified from given descriptor.
@@ -60,7 +60,7 @@ public interface IMetadataSerializer
      * @return Deserialized metadata component. Can be null if specified type does not exist.
      * @throws IOException
      */
-    MetadataComponent deserialize(Descriptor descriptor, MetadataType type) throws IOException;
+    MetadataComponent deserialize(Descriptor descriptor, MetadataType type, int fileVersion) throws IOException;
 
     /**
      * Mutate SSTable level
@@ -69,12 +69,12 @@ public interface IMetadataSerializer
      * @param newLevel new SSTable level
      * @throws IOException
      */
-    void mutateLevel(Descriptor descriptor, int newLevel) throws IOException;
+    void mutateLevel(Descriptor descriptor, int fileVersion, int newLevel) throws IOException;
 
     /**
      * Mutate the repairedAt time and pendingRepair ID
      */
-    void mutateRepaired(Descriptor descriptor, long newRepairedAt, UUID newPendingRepair) throws IOException;
+    void mutateRepaired(Descriptor descriptor, int fileVersion, long newRepairedAt, UUID newPendingRepair) throws IOException;
 
     void serializeWithChecksum(Descriptor desc, Map<MetadataType, MetadataComponent> components, File file, File crcFile) throws IOException;
 }

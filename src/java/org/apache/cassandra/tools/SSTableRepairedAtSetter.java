@@ -25,8 +25,15 @@ import java.nio.file.attribute.FileTime;
 import java.util.Arrays;
 import java.util.List;
 
+import com.google.common.collect.Sets;
+
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTable;
+import org.apache.cassandra.io.sstable.VersionedComponent;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.service.ActiveRepairService;
 
 /**
  * Set repairedAt status on a given set of sstables.
@@ -63,7 +70,6 @@ public class SSTableRepairedAtSetter
         }
 
         Util.initDatabaseDescriptor();
-
         boolean setIsRepaired = args[1].equals("--is-repaired");
 
         List<String> fileNames;
@@ -84,16 +90,19 @@ public class SSTableRepairedAtSetter
                 System.err.println("SSTable " + fname + " is in a old and unsupported format");
                 continue;
             }
-
+            VersionedComponent latestVersion = VersionedComponent.getLatestVersion(descriptor, Component.Type.STATS);
+            // note that we can't use sstable.mutateRepaired here since that requires reading the schema and we want to
+            // be able to run this tool on a stand-alone sstable
             if (setIsRepaired)
             {
                 FileTime f = Files.getLastModifiedTime(new File(descriptor.filenameFor(Component.DATA)).toPath());
-                descriptor.getMetadataSerializer().mutateRepaired(descriptor, f.toMillis(), null);
+                descriptor.getMetadataSerializer().mutateRepaired(descriptor, latestVersion.version, f.toMillis(), null);
             }
             else
             {
-                descriptor.getMetadataSerializer().mutateRepaired(descriptor, 0, null);
+                descriptor.getMetadataSerializer().mutateRepaired(descriptor, latestVersion.version, ActiveRepairService.UNREPAIRED_SSTABLE, null);
             }
+            SSTable.appendTOC(descriptor, Sets.newHashSet(VersionedComponent.getLatestVersion(descriptor, Component.Type.STATS), VersionedComponent.getLatestVersion(descriptor, Component.Type.STATS_CRC)));
         }
     }
 }

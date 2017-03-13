@@ -335,7 +335,7 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
             }
             catch (Throwable t)
             {
-                logger.error("Failed deletion for {}, we'll retry after GC and on server restart", desc);
+                logger.error("Failed deletion for {}, we'll retry after GC and on server restart", desc, t);
                 failedDeletions.add(this);
                 return;
             }

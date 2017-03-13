@@ -163,8 +163,7 @@ public class LeveledManifest
             // The add(..):ed sstable will be sent to level 0
             try
             {
-                reader.descriptor.getMetadataSerializer().mutateLevel(reader.descriptor, 0);
-                reader.reloadSSTableMetadata();
+                reader.mutateLevel(0);
             }
             catch (IOException e)
             {
@@ -260,8 +259,7 @@ public class LeveledManifest
         remove(sstable);
         try
         {
-            sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 0);
-            sstable.reloadSSTableMetadata();
+            sstable.mutateLevel(0);
             add(sstable);
         }
         catch (IOException e)

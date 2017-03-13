@@ -395,8 +395,10 @@ public class BigTableWriter extends SSTableWriter
 
     private void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components)
     {
-        File file = new File(desc.filenameFor(Component.STATS));
-        File crcFile = new File(desc.filenameFor(Component.STATS_CRC));
+        File file = new File(desc.filenameFor(new VersionedComponent(Component.Type.STATS)));
+        File crcFile = new File(desc.filenameFor(new VersionedComponent(Component.Type.STATS_CRC)));
+        assert !file.exists();
+        assert !crcFile.exists();
         try
         {
             desc.getMetadataSerializer().serializeWithChecksum(desc, components, file, crcFile);
