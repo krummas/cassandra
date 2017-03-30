@@ -1160,7 +1160,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         writeLock.lock();
         try
         {
-            for (SSTableReader sstable: sstables)
+            for (SSTableReader sstable : sstables)
             {
                 sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, repairedAt, pendingRepair);
                 sstable.reloadSSTableMetadata();
@@ -1180,5 +1180,16 @@ public class CompactionStrategyManager implements INotificationConsumer
                 writeLock.unlock();
             }
         }
+    }
+
+    public void setBestLevelsOn(Collection<SSTableReader> sstables)
+    {
+        Map<Integer, List<SSTableReader>> repairedGroups = sstables.stream().filter(s -> s.isRepaired()).collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+        Map<Integer, List<SSTableReader>> unrepairedGroups = sstables.stream().filter(s -> !s.isRepaired()).collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+        for (Map.Entry<Integer, List<SSTableReader>> entry : repairedGroups.entrySet())
+            repaired.get(entry.getKey()).setBestLevelsOn(entry.getValue());
+        for (Map.Entry<Integer, List<SSTableReader>> entry : unrepairedGroups.entrySet())
+            unrepaired.get(entry.getKey()).setBestLevelsOn(entry.getValue());
+
     }
 }

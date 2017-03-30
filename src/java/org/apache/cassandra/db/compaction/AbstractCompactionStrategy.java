@@ -332,6 +332,12 @@ public abstract class AbstractCompactionStrategy
     @VisibleForTesting
     protected abstract Set<SSTableReader> getSSTables();
 
+    public void setBestLevelsOn(List<SSTableReader> value)
+    {
+        // only lcs needs to implement this
+        return;
+    }
+
     public static class ScannerList implements AutoCloseable
     {
         public final List<ISSTableScanner> scanners;

@@ -34,6 +34,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.SetMultimap;
 
+import org.apache.cassandra.db.compaction.LeveledCompactionStrategy;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
@@ -162,35 +163,7 @@ public class SSTableOfflineRelevel
         public void relevel(boolean dryRun) throws IOException
         {
             printLeveling(sstables);
-            List<SSTableReader> sortedSSTables = new ArrayList<>(sstables);
-            Collections.sort(sortedSSTables, new Comparator<SSTableReader>()
-            {
-                @Override
-                public int compare(SSTableReader o1, SSTableReader o2)
-                {
-                    return o1.last.compareTo(o2.last);
-                }
-            });
-
-            List<List<SSTableReader>> levels = new ArrayList<>();
-
-            while (!sortedSSTables.isEmpty())
-            {
-                Iterator<SSTableReader> it = sortedSSTables.iterator();
-                List<SSTableReader> level = new ArrayList<>();
-                DecoratedKey lastLast = null;
-                while (it.hasNext())
-                {
-                    SSTableReader sstable = it.next();
-                    if (lastLast == null || lastLast.compareTo(sstable.first) < 0)
-                    {
-                        level.add(sstable);
-                        lastLast = sstable.last;
-                        it.remove();
-                    }
-                }
-                levels.add(level);
-            }
+            List<List<SSTableReader>> levels = LeveledCompactionStrategy.potentialLeveling(sstables);
             List<SSTableReader> l0 = new ArrayList<>();
             if (approxExpectedLevels < levels.size())
             {

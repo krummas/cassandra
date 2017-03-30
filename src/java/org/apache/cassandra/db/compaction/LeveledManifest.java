@@ -237,10 +237,13 @@ public class LeveledManifest
      */
     private boolean canAddSSTable(SSTableReader sstable)
     {
-        int level = sstable.getSSTableLevel();
-        if (level == 0)
+        if (sstable.getSSTableLevel() == 0)
             return true;
+        return canAdd(sstable, sstable.getSSTableLevel(), generations);
+    }
 
+    public static boolean canAdd(SSTableReader sstable, int level, List<SSTableReader>[] generations)
+    {
         List<SSTableReader> copyLevel = new ArrayList<>(generations[level]);
         copyLevel.add(sstable);
         Collections.sort(copyLevel, SSTableReader.sstableComparator);

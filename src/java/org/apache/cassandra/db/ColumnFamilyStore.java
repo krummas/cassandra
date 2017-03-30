@@ -810,7 +810,14 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         try (Refs<SSTableReader> refs = Refs.ref(newSSTables))
         {
-            data.addSSTables(newSSTables);
+            runWithCompactionsDisabled(() ->
+                                       {
+                                           getCompactionStrategyManager().setBestLevelsOn(refs);
+                                           data.addSSTables(refs);
+                                           return null;
+                                       },
+                                       false,
+                                       false );
         }
 
         logger.info("Done loading load new SSTables for {}/{}", keyspace.getName(), name);

@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.compaction;
 
+import java.io.IOException;
 import java.util.*;
 
 
@@ -28,6 +29,7 @@ import com.google.common.primitives.Doubles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -560,5 +562,107 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
         uncheckedOptions = SizeTieredCompactionStrategyOptions.validateOptions(options, uncheckedOptions);
 
         return uncheckedOptions;
+    }
+
+    /**
+     * Tries to insert sstables as high up (ie, high level number) in the leveling as possible
+     *
+     * Does so by trying the smallest (by token range) sstables first, from the highest to the lowest level
+     *
+     * This should be run with compactions disabled!
+     *
+     * @param sstables the sstables to update the levels on
+     */
+    @Override
+    public void setBestLevelsOn(List<SSTableReader> sstables)
+    {
+
+        List<List<SSTableReader>> potentialLeveling = potentialLeveling(sstables);
+        // now try to add the sstables in order to any level:
+        List<SSTableReader> [] currentGenerations = copyGenerations(manifest.generations);
+        for (List<SSTableReader> potentialLevel : potentialLeveling)
+        {
+            // try to add sstables starting from the highest potential level to avoid adding a huge (by token range) sstable
+            // which could block many smaller (by token range) sstables from getting added to the level
+            // we skip L0 since all sstables are L0 before this method and if we haven't been able to add them higher, they will go into L0 automatically
+            for (int i = currentGenerations.length - 1; i >= 1; i--)
+            {
+                if (currentGenerations[i].isEmpty())
+                    continue;
+                Iterator<SSTableReader> potentialIter = potentialLevel.iterator();
+                while (potentialIter.hasNext())
+                {
+                    SSTableReader sstable = potentialIter.next();
+                    if (LeveledManifest.canAdd(sstable, i, currentGenerations)) // this can be optimised to use the fact that everything is sorted already
+                    {
+                        setLevel(sstable, i);
+                        logger.debug("Adding sstable {} to level {} ({})", sstable, i, sstable.getSSTableLevel());
+                        currentGenerations[i].add(sstable); // adding as a placeholder to make sure that we don't create any overlap with the newly added ones
+                        currentGenerations[i].sort(SSTableReader.sstableComparator);
+                        potentialIter.remove();
+                    }
+                }
+            }
+        }
+    }
+
+    private void setLevel(SSTableReader sstable, int level)
+    {
+        try
+        {
+            sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, level);
+            sstable.reloadSSTableMetadata();
+        }
+        catch (IOException e)
+        {
+            logger.error("Could not change level on {} to {}", sstable, level, e);
+        }
+    }
+
+    private static List<SSTableReader>[] copyGenerations(List<SSTableReader>[] generations)
+    {
+        List<SSTableReader> [] copy = new List[generations.length];
+        for (int i = 0; i < generations.length; i++)
+        {
+            copy[i] = new ArrayList<>(generations[i]);
+        }
+        return copy;
+    }
+
+    /**
+     * Creates a potential leveling from the sorted sstables (sorted by last token)
+     *
+     * Idea is to create a list of 'levels', position 0 in the returned list contains the 'top' level, containing
+     * the sstables with the smallest token range
+     *
+     * By sorting the sstables by last token, we have a good chance of trying the ones covering the smallest token range first.
+     * - this avoids adding a huge (range-wise) sstable to the top level, blocking all other sstables from getting added there.
+     *
+     * note that this might create very many levels if there are many sstables covering a wide token range
+     */
+    public static List<List<SSTableReader>> potentialLeveling(Collection<SSTableReader> sstables)
+    {
+        List<SSTableReader> sortedSSTables = Lists.newArrayList(sstables);
+        sortedSSTables.sort(Comparator.comparing(o -> o.last));
+        List<List<SSTableReader>> levels = new ArrayList<>();
+        while (!sortedSSTables.isEmpty())
+        {
+            Iterator<SSTableReader> it = sortedSSTables.iterator();
+            List<SSTableReader> level = new ArrayList<>();
+            DecoratedKey lastLast = null;
+            // try all sstables, add them to `level` if they don't cause overlap and remove the ones we added;
+            while (it.hasNext())
+            {
+                SSTableReader sstable = it.next();
+                if (lastLast == null || lastLast.compareTo(sstable.first) < 0)
+                {
+                    level.add(sstable);
+                    lastLast = sstable.last;
+                    it.remove();
+                }
+            }
+            levels.add(level);
+        }
+        return levels;
     }
 }

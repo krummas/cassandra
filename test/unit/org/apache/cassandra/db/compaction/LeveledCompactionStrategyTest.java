@@ -22,10 +22,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 import junit.framework.Assert;
 import org.junit.After;
@@ -44,9 +48,11 @@ import org.apache.cassandra.UpdateBuilder;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
@@ -454,5 +460,124 @@ public class LeveledCompactionStrategyTest
 
         // the 11 tables containing key1 should all compact to 1 table
         assertEquals(1, cfs.getLiveSSTables().size());
+    }
+
+
+    @Test
+    public void testNodetoolRefreshRelevel() throws InterruptedException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARDDLEVELED);
+        cfs.truncateBlocking();
+        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
+
+        // Enough data to have a level 1 and 2
+        int rows = 128;
+        int columns = 10;
+
+        // Adds enough data to trigger multiple sstable per level
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            UpdateBuilder builder = UpdateBuilder.create(cfs.metadata(), key);
+            for (int c = 0; c < columns; c++)
+                builder.newRow("column" + c).add("val", value);
+
+            Mutation rm = new Mutation(builder.build());
+            rm.apply();
+            cfs.forceBlockingFlush();
+        }
+        LeveledCompactionStrategyTest.waitForLeveling(cfs);
+        LeveledCompactionStrategy strategy = (LeveledCompactionStrategy) cfs.getCompactionStrategyManager().getStrategies().get(1).get(0);
+        cfs.disableAutoCompaction();
+        while (!cfs.getTracker().getCompacting().isEmpty())
+            Thread.sleep(100);
+        int [] levelsBefore = strategy.getAllLevelSize();
+        Set<SSTableReader> sstablesToRemove = new HashSet<>();
+        int totalSSTableCount = cfs.getLiveSSTables().size();
+        for (SSTableReader sstable : cfs.getLiveSSTables())
+        {
+            if (sstable.getSSTableLevel() > 0 && sstablesToRemove.stream().noneMatch(s -> s.getSSTableLevel() == sstable.getSSTableLevel()))
+                sstablesToRemove.add(sstable);
+        }
+        cfs.getTracker().removeSSTablesFromTrackerUnsafe(sstablesToRemove);
+        cfs.loadNewSSTables();
+        int [] levelsAfter = strategy.getAllLevelSize();
+        assertEquals(totalSSTableCount, cfs.getLiveSSTables().size());
+        assertTrue(levelsAfter[0] == levelsBefore[0]);
+    }
+
+    /**
+     * - create a leveling with 2-3 levels
+     * - disable autocompaction
+     * - create a single new sstable containing all the data from the leveling above
+     *   this means that this new sstable will overlap with all existing sstables
+     * - remove the sstable from the tracker
+     * - add the sstable using cfs.loadNewSSTables
+     * - verify that the sstable went to L0
+     *
+     * @throws InterruptedException
+     * @throws ExecutionException
+     */
+    @Test
+    public void testNodetoolRefreshRelevelBlocked() throws InterruptedException, ExecutionException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARDDLEVELED);
+        cfs.truncateBlocking();
+        cfs.enableAutoCompaction();
+        ByteBuffer value = ByteBuffer.wrap(new byte[100 * 1024]); // 100 KB value, make it easy to have multiple files
+
+        // Enough data to have a level 1 and 2
+        int rows = 128;
+        int columns = 10;
+
+        // Adds enough data to trigger multiple sstable per level
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            UpdateBuilder builder = UpdateBuilder.create(cfs.metadata(), key);
+            for (int c = 0; c < columns; c++)
+                builder.newRow("column" + c).add("val", value);
+
+            Mutation rm = new Mutation(builder.build());
+            rm.apply();
+            cfs.forceBlockingFlush();
+        }
+        LeveledCompactionStrategyTest.waitForLeveling(cfs);
+        LeveledCompactionStrategy strategy = (LeveledCompactionStrategy) cfs.getCompactionStrategyManager().getStrategies().get(1).get(0);
+        cfs.disableAutoCompaction();
+        while (!cfs.getTracker().getCompacting().isEmpty())
+            Thread.sleep(100);
+        int [] levelsBefore = strategy.getAllLevelSize();
+        Set<SSTableReader> sstablesOriginal = cfs.getLiveSSTables();
+        // now create a single sstable covering the whole range - this will overlap with all old sstables
+        // and it should therefor only be possible to add it in L0
+        for (int r = 0; r < rows; r++)
+        {
+            DecoratedKey key = Util.dk(String.valueOf(r));
+            UpdateBuilder builder = UpdateBuilder.create(cfs.metadata(), key);
+            for (int c = 0; c < columns; c++)
+                builder.newRow("column" + c).add("val", value);
+            Mutation rm = new Mutation(builder.build());
+            rm.apply();
+        }
+        cfs.forceBlockingFlush();
+        Set<SSTableReader> newSSTables = new HashSet<>(cfs.getLiveSSTables());
+        newSSTables.removeAll(sstablesOriginal);
+        if (newSSTables.size() > 1)
+        {
+            Set<Descriptor> descs = newSSTables.stream().map(s -> s.descriptor).collect(Collectors.toSet());
+            CompactionManager.instance.submitUserDefined(cfs, descs, 0).get();
+            newSSTables = new HashSet<>(cfs.getLiveSSTables());
+            newSSTables.removeAll(sstablesOriginal);
+            assert newSSTables.size() == 1;
+        }
+        int totalSSTableCount = cfs.getLiveSSTables().size();
+        cfs.getTracker().removeSSTablesFromTrackerUnsafe(newSSTables);
+        cfs.loadNewSSTables();
+        int [] levelsAfter = strategy.getAllLevelSize();
+        assertEquals(totalSSTableCount, cfs.getLiveSSTables().size());
+        assertTrue(levelsAfter[0] == levelsBefore[0] + 1);
     }
 }

@@ -210,6 +210,19 @@ public class Tracker
                           SSTableIntervalTree.empty()));
     }
 
+    @VisibleForTesting
+    public void removeSSTablesFromTrackerUnsafe(Collection<SSTableReader> sstablesToRemove)
+    {
+        View currentView = view.get();
+        Set<SSTableReader> toRemove = new HashSet<>(sstablesToRemove);
+        Map<SSTableReader, SSTableReader> sstables = new HashMap<>(currentView.sstablesMap);
+        for (SSTableReader sstable : toRemove)
+            sstables.remove(sstable);
+
+        view.set(new View(currentView.liveMemtables, currentView.flushingMemtables, sstables, currentView.compactingMap, currentView.intervalTree));
+        notifySSTablesChanged(sstablesToRemove, Collections.emptyList(), OperationType.UNKNOWN, null);
+    }
+
     public Throwable dropSSTablesIfInvalid(Throwable accumulate)
     {
         if (!isDummy() && !cfstore.isValid())
