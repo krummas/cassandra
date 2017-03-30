@@ -70,6 +70,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.metrics.TableMetrics.Sampler;
 import org.apache.cassandra.schema.*;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.*;
@@ -687,7 +688,10 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             try
             {
                 if (new File(descriptor.filenameFor(Component.STATS)).exists())
+                {
                     descriptor.getMetadataSerializer().mutateLevel(descriptor, 0);
+                    descriptor.getMetadataSerializer().mutateRepairedAt(descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
+                }
             }
             catch (IOException e)
             {

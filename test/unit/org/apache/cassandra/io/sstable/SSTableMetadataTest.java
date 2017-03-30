@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.io.sstable;
 
+import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.List;
@@ -290,6 +291,39 @@ public class SSTableMetadataTest
             assertEquals("a0", ByteBufferUtil.string(sstable.getSSTableMetadata().minClusteringValues.get(0)));
             assertEquals(0, ByteBufferUtil.toInt(sstable.getSSTableMetadata().minClusteringValues.get(1)));
         }
+    }
+
+    @Test
+    public void testLoadNewSSTables() throws IOException
+    {
+        Keyspace keyspace = Keyspace.open(KEYSPACE1);
+
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD);
+        cfs.truncateBlocking();
+        for(int i = 0; i < 10; i++)
+        {
+            DecoratedKey key = Util.dk(Integer.toString(i));
+            for (int j = 0; j < 10; j++)
+                new RowUpdateBuilder(cfs.metadata, System.currentTimeMillis(), Integer.toString(i))
+                .clustering(Integer.toString(j))
+                .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
+                .build()
+                .applyUnsafe();
+
+        }
+        cfs.forceBlockingFlush();
+        for (SSTableReader s : cfs.getLiveSSTables())
+        {
+            s.descriptor.getMetadataSerializer().mutateRepairedAt(s.descriptor, 12345);
+            s.reloadSSTableMetadata();
+        }
+        cfs.getTracker().notifySSTableRepairedStatusChanged(cfs.getLiveSSTables());
+        assertTrue(cfs.getLiveSSTables().stream().allMatch(s -> s.isRepaired()));
+        cfs.clearUnsafe();
+        assertEquals(0, cfs.getLiveSSTables().size());
+        cfs.loadNewSSTables();
+        assertEquals(1, cfs.getLiveSSTables().size());
+        assertTrue(cfs.getLiveSSTables().stream().allMatch(s -> !s.isRepaired()));
     }
 
     /*@Test
