@@ -297,6 +297,9 @@ public class StatsMetadata extends MetadataComponent
 
         public void serialize(Version version, StatsMetadata component, DataOutputPlus out) throws IOException
         {
+            // NOTE: we need to read back data with the same method we wrote it due to
+            // the way we calculate checksums - you can't write two ints and then read
+            // them back as a long for example
             EstimatedHistogram.serializer.serialize(component.estimatedPartitionSize, out);
             EstimatedHistogram.serializer.serialize(component.estimatedColumnCount, out);
             CommitLogPosition.serializer.serialize(component.commitLogIntervals.upperBound().orElse(CommitLogPosition.NONE), out);

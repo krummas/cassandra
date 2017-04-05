@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -39,7 +40,7 @@ import org.apache.cassandra.utils.FBUtilities;
  * Metadata serializer for SSTables {@code version >= 'k'}.
  *
  * <pre>
- * File format := | number of components (4 bytes) | toc | component1 | component2 | ... |
+ * File format := | number of components (4 bytes) | toc | component1 | c1 hash | component2 | c2 hash | ... |
  * toc         := | component type (4 bytes) | position of component |
  * </pre>
  *
@@ -51,6 +52,7 @@ public class MetadataSerializer implements IMetadataSerializer
 
     public void serialize(Map<MetadataType, MetadataComponent> components, DataOutputPlus out, Version version) throws IOException
     {
+        boolean checksum = version.hasMetadataChecksum();
         // sort components by type
         List<MetadataComponent> sortedComponents = Lists.newArrayList(components.values());
         Collections.sort(sortedComponents);
@@ -66,12 +68,16 @@ public class MetadataSerializer implements IMetadataSerializer
             out.writeInt(type.ordinal());
             // serialize position
             out.writeInt(lastPosition);
-            lastPosition += type.serializer.serializedSize(version, component);
+            lastPosition += type.serializer.serializedSize(version, component) + (checksum ? 8 : 0); // hashcode is long
         }
         // serialize components
         for (MetadataComponent component : sortedComponents)
         {
-            component.getType().serializer.serialize(version, component, out);
+            HashingDataOutputPlus hdop = new HashingDataOutputPlus(out);
+            component.getType().serializer.serialize(version, component, hdop);
+            long hash = hdop.getHash();
+            if (checksum)
+                out.writeLong(hash);
         }
     }
 
@@ -119,7 +125,15 @@ public class MetadataSerializer implements IMetadataSerializer
             if (offset != null)
             {
                 in.seek(offset);
-                MetadataComponent component = type.serializer.deserialize(descriptor.version, in);
+                HashingDataInputPlus hdip = new HashingDataInputPlus(in);
+                MetadataComponent component = type.serializer.deserialize(descriptor.version, hdip);
+                if (descriptor.version.hasMetadataChecksum())
+                {
+                    long writtenHash = in.readLong();
+                    long calculatedHash = hdip.getHash();
+                    if (writtenHash != calculatedHash)
+                        throw new CorruptSSTableException(new IOException("SSTable metadata corruption"), in.getPath());
+                }
                 components.put(type, component);
             }
         }
