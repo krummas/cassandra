@@ -13,6 +13,6 @@ test:
   post:
     - mkdir -p $CIRCLE_TEST_REPORTS/junit/:
         parallel: true
-    - if [ -d ./build/test/output/compression ]; then cp -rv ./build/test/output/compression/*.xml $CIRCLE_TEST_REPORTS/junit/; else cp -rv ./build/test/output/*.xml $CIRCLE_TEST_REPORTS/junit/; fi:
+    - find ./build/test/output/ -iname "*.xml" -exec cp {} $CIRCLE_TEST_REPORTS/junit/ \;:
         parallel: true
 
