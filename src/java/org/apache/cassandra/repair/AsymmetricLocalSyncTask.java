@@ -51,10 +51,15 @@ public class AsymmetricLocalSyncTask extends AsymmetricSyncTask implements Strea
     public void startSync(List<Range<Token>> rangesToFetch)
     {
         InetAddress preferred = SystemKeyspace.getPreferredIP(fetchFrom);
-        StreamPlan plan = new StreamPlan(StreamOperation.REPAIR, 1, false, false, null, previewKind).listeners(this)
-                                                                                                                           .flushBeforeTransfer(true)
-                                                                                                                           // request ranges from the remote node
-                                                                                                                           .requestRanges(fetchFrom, preferred, desc.keyspace, rangesToFetch, desc.columnFamily);
+        StreamPlan plan = new StreamPlan(StreamOperation.REPAIR,
+                                         1, false,
+                                         false,
+                                         null,
+                                         previewKind)
+                          .listeners(this)
+                          .flushBeforeTransfer(true)
+                          // request ranges from the remote node
+                          .requestRanges(fetchFrom, preferred, desc.keyspace, rangesToFetch, desc.columnFamily);
         plan.execute();
 
     }

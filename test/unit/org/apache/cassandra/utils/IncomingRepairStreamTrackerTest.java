@@ -19,13 +19,16 @@
 package org.apache.cassandra.utils;
 
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.junit.Test;
 
@@ -33,7 +36,11 @@ import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 
+import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class IncomingRepairStreamTrackerTest
@@ -60,7 +67,7 @@ D                 =
         {
             for (int j = i + 1; j < differences.length; j++)
             {
-                differences[i][j] = Lists.newArrayList(new Range<>(new Murmur3Partitioner.LongToken(0), new Murmur3Partitioner.LongToken(10)));
+                differences[i][j] = list(new Range<>(new Murmur3Partitioner.LongToken(0), new Murmur3Partitioner.LongToken(10)));
             }
         }
         differences[0][1] = null;
@@ -71,7 +78,108 @@ D                 =
         assertEquals(set(set(0,1), set(4,3)), tracker[2].rawRangesToFetch().values().iterator().next());
         assertEquals(set(set(0,1), set(2)), tracker[3].rawRangesToFetch().values().iterator().next());
         assertEquals(set(set(0,1), set(2)), tracker[4].rawRangesToFetch().values().iterator().next());
+
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> y);
+
+        Map<Integer, List<Range<Token>>> n0 = reduced.streamsFor(0);
+        assertNull(n0.get(0));
+        assertNull(n0.get(1));
+        assertNotNull(n0.get(2));
+        assertTrue(n0.get(3) != null ^ n0.get(4) != null);
+
+        Map<Integer, List<Range<Token>>> n1 = reduced.streamsFor(1);
+        assertNull(n1.get(0));
+        assertNull(n1.get(1));
+        assertNotNull(n1.get(2));
+        assertTrue(n1.get(3) != null ^ n1.get(4) != null);
+
+        Map<Integer, List<Range<Token>>> n2 = reduced.streamsFor(2);
+        assertTrue(n2.get(0) != null ^ n2.get(1) != null);
+        assertNull(n2.get(2));
+        assertTrue(n2.get(3) != null ^ n2.get(4) != null);
+
+        Map<Integer, List<Range<Token>>> n3 = reduced.streamsFor(3);
+        assertTrue(n3.get(0) != null ^ n3.get(1) != null);
+        assertNotNull(n3.get(2));
+        assertNull(n3.get(3));
+        assertNull(n3.get(4));
+
+        Map<Integer, List<Range<Token>>> n4 = reduced.streamsFor(4);
+        assertTrue(n4.get(0) != null ^ n4.get(1) != null);
+        assertNotNull(n4.get(2));
+        assertNull(n4.get(3));
+        assertNull(n4.get(4));
     }
+    @Test
+    public void testSimpleReducingWithPreferedNodes()
+    {
+        /*
+        A == B and D == E =>
+        A streams from C, {D, E} since D==E
+        B streams from C, {D, E} since D==E
+        C streams from {A, B}, {D, E} since A==B and D==E
+        D streams from {A, B}, C since A==B
+        E streams from {A, B}, C since A==B
+
+  A   B   C   D   E
+A     =   x   x   x
+B         x   x   x
+C             x   x
+D                 =
+         */
+        List<Range<Token>>[][] differences = new List[5][5];
+        for (int i = 0; i < differences.length - 1; i++)
+        {
+            for (int j = i + 1; j < differences.length; j++)
+            {
+                differences[i][j] = list(new Range<>(new Murmur3Partitioner.LongToken(0), new Murmur3Partitioner.LongToken(10)));
+            }
+        }
+        differences[0][1] = null;
+        differences[3][4] = null;
+        IncomingRepairStreamTracker [] tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
+        assertEquals(set(set(2), set(4,3)), tracker[0].rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(2), set(4,3)), tracker[1].rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(0,1), set(4,3)), tracker[2].rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(0,1), set(2)), tracker[3].rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(0,1), set(2)), tracker[4].rawRangesToFetch().values().iterator().next());
+
+        // if there is an option, never stream from node 1:
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> Sets.difference(y, set(1)));
+
+        Map<Integer, List<Range<Token>>> n0 = reduced.streamsFor(0);
+        assertNull(n0.get(0));
+        assertNull(n0.get(1));
+        assertNotNull(n0.get(2));
+        assertTrue(n0.get(3) != null ^ n0.get(4) != null);
+
+        Map<Integer, List<Range<Token>>> n1 = reduced.streamsFor(1);
+        assertNull(n1.get(0));
+        assertNull(n1.get(1));
+        assertNotNull(n1.get(2));
+        assertTrue(n1.get(3) != null ^ n1.get(4) != null);
+
+        Map<Integer, List<Range<Token>>> n2 = reduced.streamsFor(2);
+        assertNotNull(n2.get(0));
+        assertNull(n2.get(1));
+        assertNull(n2.get(2));
+        assertTrue(n2.get(3) != null ^ n2.get(4) != null);
+
+        Map<Integer, List<Range<Token>>> n3 = reduced.streamsFor(3);
+        assertNotNull(n3.get(0));
+        assertNull(n3.get(1));
+        assertNotNull(n3.get(2));
+        assertNull(n3.get(3));
+        assertNull(n3.get(4));
+
+        Map<Integer, List<Range<Token>>> n4 = reduced.streamsFor(4);
+        assertNotNull(n4.get(0));
+        assertNull(n4.get(1));
+        assertNotNull(n4.get(2));
+        assertNull(n4.get(3));
+        assertNull(n4.get(4));
+    }
+
     @Test
     public void testOverlapDifference()
     {
@@ -93,9 +201,9 @@ D                 =
          C streams (0, 50] from {A, B}, (50, 100] from B
          */
         List<Range<Token>>[][] differences = new List[3][3];
-        differences[0][1] = Lists.newArrayList(range(50, 100));
-        differences[0][2] = Lists.newArrayList(range(0, 50));
-        differences[1][2] = Lists.newArrayList(range(0, 100));
+        differences[0][1] = list(range(50, 100));
+        differences[0][2] = list(range(0, 50));
+        differences[1][2] = list(range(0, 100));
         IncomingRepairStreamTracker [] tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
         assertEquals(set(set(2)), tracker[0].rawRangesToFetch().get(range(0, 50)));
         assertEquals(set(set(1)), tracker[0].rawRangesToFetch().get(range(50, 100)));
@@ -103,7 +211,40 @@ D                 =
         assertEquals(set(set(0,2)), tracker[1].rawRangesToFetch().get(range(50, 100)));
         assertEquals(set(set(0,1)), tracker[2].rawRangesToFetch().get(range(0, 50)));
         assertEquals(set(set(1)), tracker[2].rawRangesToFetch().get(range(50, 100)));
+
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> y);
+
+        Map<Integer, List<Range<Token>>> n0 = reduced.streamsFor(0);
+
+        assertTrue(n0.get(1).equals(list(range(50, 100))));
+        assertTrue(n0.get(2).equals(list(range(0, 50))));
+
+        Map<Integer, List<Range<Token>>> n1 = reduced.streamsFor(1);
+        assertNull(n1.get(1));
+        if (n1.get(0) != null)
+        {
+            assertTrue(n1.get(2).equals(list(range(0, 50))));
+            assertTrue(n1.get(0).equals(list(range(50, 100))));
+        }
+        else
+        {
+            assertTrue(n1.get(2).equals(list(range(0, 50), range(50, 100))));
+        }
+        Map<Integer, List<Range<Token>>> n2 = reduced.streamsFor(2);
+        assertNull(n2.get(2));
+        if (n2.get(0) != null)
+        {
+            assertTrue(n2.get(0).equals(list(range(0,50))));
+            assertTrue(n2.get(1).equals(list(range(50, 100))));
+        }
+        else
+        {
+            assertTrue(n2.get(0).equals(list(range(0, 50), range(50, 100))));
+        }
+
+
     }
+
     @Test
     public void testOverlapDifference2()
     {
@@ -122,18 +263,18 @@ D                 =
          B == C on (5, 10], (40, 45]
          */
         List<Range<Token>>[][] differences = new List[3][3];
-        differences[0][1] = Lists.newArrayList(range(5, 45));
-        differences[0][2] = Lists.newArrayList(range(0, 10), range(40,50));
-        differences[1][2] = Lists.newArrayList(range(0, 5), range(10,40), range(45,50));
+        differences[0][1] = list(range(5, 45));
+        differences[0][2] = list(range(0, 10), range(40,50));
+        differences[1][2] = list(range(0, 5), range(10,40), range(45,50));
         IncomingRepairStreamTracker [] tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
 
-        assertEquals(5, tracker[0].rawRangesToFetch().size());
         Map<Range<Token>, Set<Set<Integer>>> ranges = tracker[0].rawRangesToFetch();
+        assertEquals(5, ranges.size());
 
         assertEquals(set(set(2)), ranges.get(range(0, 5)));
         assertEquals(set(set(1, 2)), ranges.get(range(5, 10)));
         assertEquals(set(set(1)), ranges.get(range(10, 40)));
-        assertEquals(set(set(1,2)), ranges.get(range(40, 45)));
+        assertEquals(set(set(1, 2)), ranges.get(range(40, 45)));
         assertEquals(set(set(2)), ranges.get(range(45, 50)));
 
         ranges = tracker[1].rawRangesToFetch();
@@ -151,7 +292,39 @@ D                 =
         assertEquals(set(set(1)), ranges.get(range(10, 40)));
         assertEquals(set(set(0)), ranges.get(range(40, 45)));
         assertEquals(set(set(0,1)), ranges.get(range(45, 50)));
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x, y) -> y);
 
+        assertNoOverlap(0, reduced.streamsFor(0), list(range(0, 50)));
+        assertNoOverlap(1, reduced.streamsFor(1), list(range(0, 50)));
+        assertNoOverlap(2, reduced.streamsFor(2), list(range(0, 50)));
+    }
+
+    private void assertNoOverlap(int incomingNode, Map<Integer, List<Range<Token>>> node, List<Range<Token>> expectedAfterNormalize)
+    {
+        Set<Range<Token>> allRanges = new HashSet<>();
+        Set<Integer> remoteNodes = Sets.newHashSet(0,1,2);
+        remoteNodes.remove(incomingNode);
+        Iterator<Integer> iter = remoteNodes.iterator();
+        allRanges.addAll(node.get(iter.next()));
+        int i = iter.next();
+        for (Range<Token> r : node.get(i))
+        {
+            for (Range<Token> existing : allRanges)
+                if (r.intersects(existing))
+                    fail();
+        }
+        allRanges.addAll(node.get(i));
+        List<Range<Token>> normalized = Range.normalize(allRanges);
+        assertEquals(expectedAfterNormalize, normalized);
+    }
+
+    @SafeVarargs
+    private static List<Range<Token>> list(Range<Token> r, Range<Token> ... rs)
+    {
+        List<Range<Token>> ranges = new ArrayList<>();
+        ranges.add(r);
+        Collections.addAll(ranges, rs);
+        return ranges;
     }
 
     private static Set<Integer> set(Integer ... elem)
@@ -162,8 +335,7 @@ D                 =
     private static Set<Set<Integer>> set(Set<Integer> ... elem)
     {
         Set<Set<Integer>> ret = Sets.newHashSet();
-        for (Set<Integer> i : elem)
-            ret.add(i);
+        ret.addAll(Arrays.asList(elem));
         return ret;
     }
 
@@ -176,14 +348,6 @@ D                 =
         return new Range<>(longtok(t), longtok(t2));
     }
 
-    @Test
-    public void oeu()
-    {
-        Set<Range<Token>> ranges = new HashSet<>();
-        ranges.add(range(10, 20)); ranges.add(range(40, 60));
-        System.out.println(range(0, 100).subtractAll(ranges));
-
-    }
     @Test
     public void testSubtractAllRanges()
     {

@@ -19,6 +19,7 @@ package org.apache.cassandra.repair;
 
 import java.net.InetAddress;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import com.google.common.util.concurrent.*;
 import org.slf4j.Logger;
@@ -205,18 +206,21 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                     differences[i][j] = MerkleTrees.difference(r1.trees, r2.trees);
                 }
             }
+            IncomingRepairStreamTracker.PreferedNodeFilter preferSameDCFilter = (streaming, candidates) ->
+                                                                    candidates.stream()
+                                                                              .filter(node -> getDC(trees.get(streaming).endpoint)
+                                                                                              .equals(getDC(trees.get(node).endpoint)))
+                                                                              .collect(Collectors.toSet());
+            IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, preferSameDCFilter);
 
-            IncomingRepairStreamTracker[] incomingStreams = IncomingRepairStreamTracker.reduceDifferences(differences);
-
-            for (int i = 0; i < incomingStreams.length; i++)
+            for (int i = 0; i < trees.size(); i++)
             {
                 InetAddress fetchNode = trees.get(i).endpoint;
-                IncomingRepairStreamTracker tracker = incomingStreams[i];
-                if (tracker != null)
+                Map<Integer, List<Range<Token>>> streamsFor = reduced.streamsFor(i);
+                if (streamsFor != null)
                 {
-                    Map<Integer, List<Range<Token>>> rangesToFetch = tracker.getRangesToFetch();
-                    assert !rangesToFetch.containsKey(i) : "We should not fetch ranges from ourselves";
-                    for (Map.Entry<Integer, List<Range<Token>>> entry : rangesToFetch.entrySet())
+                    assert !streamsFor.containsKey(i) : "We should not fetch ranges from ourselves";
+                    for (Map.Entry<Integer, List<Range<Token>>> entry : streamsFor.entrySet())
                     {
                         InetAddress fetchFrom = trees.get(entry.getKey()).endpoint;
                         logger.debug("{} is about to fetch {} from {}", fetchNode, entry.getValue(), fetchFrom);
@@ -235,10 +239,18 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                         taskExecutor.submit(task);
                     }
                 }
-
+                else
+                {
+                    logger.debug("Node {} has nothing to stream", fetchNode);
+                }
             }
             return Futures.allAsList(syncTasks);
         };
+    }
+
+    private String getDC(InetAddress address)
+    {
+        return DatabaseDescriptor.getEndpointSnitch().getDatacenter(address);
     }
 
     /**
