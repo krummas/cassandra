@@ -206,7 +206,8 @@ public class IncomingRepairStreamTracker
      * The ranges wont match perfectly since we don't iterate over leaves so we always split based on the
      * smallest range (either the new difference or the existing one)
      */
-    public static IncomingRepairStreamTracker[] reduceDifferences(List<Range<Token>>[][] differences)
+    @VisibleForTesting
+    static IncomingRepairStreamTracker[] reduceDifferences(List<Range<Token>>[][] differences)
     {
         IncomingRepairStreamTracker[] trackers = new IncomingRepairStreamTracker[differences.length];
         for (int i = 0; i < differences.length; i++)
@@ -252,29 +253,32 @@ public class IncomingRepairStreamTracker
             return reducedMap.get(node);
         }
 
-        private Map<Integer, Map<Integer, List<Range<Token>>>> reduce(IncomingRepairStreamTracker [] incomingTrackers, PreferedNodeFilter filter)
+        private static Map<Integer, Map<Integer, List<Range<Token>>>> reduce(IncomingRepairStreamTracker [] incomingTrackers, PreferedNodeFilter filter)
         {
             int [] outgoingStreamCounts = new int[incomingTrackers.length];
             Map<Integer, Map<Integer, List<Range<Token>>>> retMap = new HashMap<>();
             for (int i = 0; i < incomingTrackers.length; i++)
             {
-                Map<Integer, List<Range<Token>>> rangesToFetch = new HashMap<>();
-                for (Map.Entry<Range<Token>, Set<Set<Integer>>> entry : incomingTrackers[i].incoming.entrySet())
+                if (incomingTrackers[i] != null)
                 {
-                    Range<Token> rangeToFetch = entry.getKey();
-                    for (Integer remoteNode : pickLeastStreaming(i, entry.getValue(), outgoingStreamCounts, filter))
+                    Map<Integer, List<Range<Token>>> rangesToFetch = new HashMap<>();
+                    for (Map.Entry<Range<Token>, Set<Set<Integer>>> entry : incomingTrackers[i].incoming.entrySet())
                     {
-                        rangesToFetch.computeIfAbsent(remoteNode, k -> new ArrayList<>());
-                        rangesToFetch.get(remoteNode).add(rangeToFetch);
+                        Range<Token> rangeToFetch = entry.getKey();
+                        for (Integer remoteNode : pickLeastStreaming(i, entry.getValue(), outgoingStreamCounts, filter))
+                        {
+                            rangesToFetch.computeIfAbsent(remoteNode, k -> new ArrayList<>());
+                            rangesToFetch.get(remoteNode).add(rangeToFetch);
+                        }
                     }
+                    retMap.put(i, rangesToFetch);
                 }
-                retMap.put(i, rangesToFetch);
             }
             return retMap;
         }
 
         // greedily pick the nodes doing the least amount of streaming
-        private Collection<Integer> pickLeastStreaming(Integer streamingNode, Set<Set<Integer>> values, int[] outgoingStreamCounts, PreferedNodeFilter filter)
+        private static  Collection<Integer> pickLeastStreaming(Integer streamingNode, Set<Set<Integer>> values, int[] outgoingStreamCounts, PreferedNodeFilter filter)
         {
             Set<Integer> retSet = new HashSet<>();
             for (Set<Integer> toStream : values)
