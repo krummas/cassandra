@@ -33,6 +33,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.IncomingRepairStreamTracker;
+import org.apache.cassandra.utils.MerkleTree;
 import org.apache.cassandra.utils.MerkleTrees;
 import org.apache.cassandra.utils.Pair;
 
@@ -196,44 +197,47 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
 
             List<AsymmetricSyncTask> syncTasks = new ArrayList<>();
             // We need to difference all trees one against another
-            List<Range<Token>> [][] differences = new List[trees.size()][trees.size()];
+            Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences = new HashMap<>();
             for (int i = 0; i < trees.size() - 1; ++i)
             {
                 TreeResponse r1 = trees.get(i);
+                Map<InetAddress, List<Range<Token>>> diffMap = new HashMap<>();
                 for (int j = i + 1; j < trees.size(); ++j)
                 {
                     TreeResponse r2 = trees.get(j);
-                    differences[i][j] = MerkleTrees.difference(r1.trees, r2.trees);
+                    diffMap.put(r2.endpoint, MerkleTrees.difference(r1.trees, r2.trees));
                 }
+                differences.put(r1.endpoint, diffMap);
             }
-            IncomingRepairStreamTracker.PreferedNodeFilter preferSameDCFilter = (streaming, candidates) ->
-                                                                    candidates.stream()
-                                                                              .filter(node -> getDC(trees.get(streaming).endpoint)
-                                                                                              .equals(getDC(trees.get(node).endpoint)))
-                                                                              .collect(Collectors.toSet());
-            IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, preferSameDCFilter);
+            logger.debug("diffs = {}", differences);
+            IncomingRepairStreamTracker.PreferedNodeFilter<InetAddress> preferSameDCFilter = (streaming, candidates) ->
+                                                                                             candidates.stream()
+                                                                                                       .filter(node -> getDC(streaming)
+                                                                                                                       .equals(getDC(node)))
+                                                                                                       .collect(Collectors.toSet());
+            IncomingRepairStreamTracker.Reduced<InetAddress> reduced = IncomingRepairStreamTracker.reduce(differences, preferSameDCFilter);
 
             for (int i = 0; i < trees.size(); i++)
             {
-                InetAddress fetchNode = trees.get(i).endpoint;
-                Map<Integer, List<Range<Token>>> streamsFor = reduced.streamsFor(i);
+                InetAddress address = trees.get(i).endpoint;
+                Map<InetAddress, List<Range<Token>>> streamsFor = reduced.streamsFor(address);
                 if (streamsFor != null)
                 {
-                    assert !streamsFor.containsKey(i) : "We should not fetch ranges from ourselves";
-                    for (Map.Entry<Integer, List<Range<Token>>> entry : streamsFor.entrySet())
+                    assert !streamsFor.containsKey(address) : "We should not fetch ranges from ourselves";
+                    for (Map.Entry<InetAddress, List<Range<Token>>> entry : streamsFor.entrySet())
                     {
-                        InetAddress fetchFrom = trees.get(entry.getKey()).endpoint;
-                        logger.debug("{} is about to fetch {} from {}", fetchNode, entry.getValue(), fetchFrom);
+                        InetAddress fetchFrom = entry.getKey();
+                        logger.debug("{} is about to fetch {} from {}", address, entry.getValue(), fetchFrom);
                         AsymmetricSyncTask task;
-                        if (fetchNode.equals(local))
+                        if (address.equals(local))
                         {
                             // todo: handle pullrepair
                             task = new AsymmetricLocalSyncTask(desc, fetchFrom, entry.getValue(), isConsistent ? desc.parentSessionId : null, previewKind);
                         }
                         else
                         {
-                            task = new AsymmetricRemoteSyncTask(desc, fetchNode, fetchFrom, entry.getValue(), previewKind);
-                            session.waitForSync(Pair.create(desc, new NodePair(fetchNode, fetchFrom)),(AsymmetricRemoteSyncTask)task);
+                            task = new AsymmetricRemoteSyncTask(desc, address, fetchFrom, entry.getValue(), previewKind);
+                            session.waitForSync(Pair.create(desc, new NodePair(address, fetchFrom)),(AsymmetricRemoteSyncTask)task);
                         }
                         syncTasks.add(task);
                         taskExecutor.submit(task);
@@ -241,7 +245,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                 }
                 else
                 {
-                    logger.debug("Node {} has nothing to stream", fetchNode);
+                    logger.debug("Node {} has nothing to stream", address);
                 }
             }
             return Futures.allAsList(syncTasks);
