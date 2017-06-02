@@ -32,7 +32,9 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 
 /**
  * <p>
@@ -51,7 +53,10 @@ import com.google.common.collect.Multimap;
  */
 public class NetworkTopologyStrategy extends AbstractReplicationStrategy
 {
+    private static final String READONLY_DCS = "readonly_dcs";
+
     private final Map<String, Integer> datacenters;
+    private final Set<String> readonlyDCs;
     private static final Logger logger = LoggerFactory.getLogger(NetworkTopologyStrategy.class);
 
     public NetworkTopologyStrategy(String keyspaceName, TokenMetadata tokenMetadata, IEndpointSnitch snitch, Map<String, String> configOptions) throws ConfigurationException
@@ -61,15 +66,26 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
         Map<String, Integer> newDatacenters = new HashMap<String, Integer>();
         if (configOptions != null)
         {
+            ImmutableSet.Builder<String> readonlyBuilder = ImmutableSet.builder();
+            String readonlyDCstr = configOptions.getOrDefault(READONLY_DCS,"");
+            StringTokenizer st = new StringTokenizer(readonlyDCstr, ",");
+            while (st.hasMoreTokens())
+                readonlyBuilder.add(st.nextToken().trim());
+            readonlyDCs = readonlyBuilder.build();
+
             for (Entry<String, String> entry : configOptions.entrySet())
             {
                 String dc = entry.getKey();
+                if (dc.equalsIgnoreCase(READONLY_DCS))
+                    continue;
                 if (dc.equalsIgnoreCase("replication_factor"))
                     throw new ConfigurationException("replication_factor is an option for SimpleStrategy, not NetworkTopologyStrategy");
                 Integer replicas = Integer.valueOf(entry.getValue());
                 newDatacenters.put(dc, replicas);
             }
         }
+        else
+            readonlyDCs = Collections.emptySet();
 
         datacenters = Collections.unmodifiableMap(newDatacenters);
         logger.trace("Configured datacenter replicas are {}", FBUtilities.toString(datacenters));
@@ -139,7 +155,11 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
             return rfLeft == 0;
         }
     }
-
+    @Override
+    public Set<String> getReadonlyDCs()
+    {
+        return readonlyDCs;
+    }
     /**
      * calculate endpoints in one pass through the tokens by tracking our progress in each DC.
      */
@@ -240,7 +260,9 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
     public Collection<String> recognizedOptions()
     {
         // only valid options are valid DC names.
-        return buildValidDataCentersSet();
+        Set<String> rec = Sets.newHashSet(buildValidDataCentersSet());
+        rec.add(READONLY_DCS);
+        return rec;
     }
 
     protected void validateExpectedOptions() throws ConfigurationException
@@ -261,13 +283,14 @@ public class NetworkTopologyStrategy extends AbstractReplicationStrategy
         {
             if (e.getKey().equalsIgnoreCase("replication_factor"))
                 throw new ConfigurationException("replication_factor is an option for SimpleStrategy, not NetworkTopologyStrategy");
-            validateReplicationFactor(e.getValue());
+            if (!e.getKey().equalsIgnoreCase(READONLY_DCS))
+                validateReplicationFactor(e.getValue());
         }
     }
 
     @Override
     public boolean hasSameSettings(AbstractReplicationStrategy other)
     {
-        return super.hasSameSettings(other) && ((NetworkTopologyStrategy) other).datacenters.equals(datacenters);
+        return super.hasSameSettings(other) && ((NetworkTopologyStrategy) other).datacenters.equals(datacenters) && readonlyDCs.equals(((NetworkTopologyStrategy) other).readonlyDCs);
     }
 }

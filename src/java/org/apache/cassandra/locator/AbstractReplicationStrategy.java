@@ -348,6 +348,11 @@ public abstract class AbstractReplicationStrategy
         return getClass().equals(other.getClass()) && getReplicationFactor() == other.getReplicationFactor();
     }
 
+    public Set<String> getReadonlyDCs()
+    {
+        return Collections.emptySet();
+    }
+
     protected void validateReplicationFactor(String rf) throws ConfigurationException
     {
         try

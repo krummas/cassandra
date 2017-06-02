@@ -20,8 +20,11 @@ package org.apache.cassandra.streaming;
 import java.net.InetAddress;
 import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
 
 import static org.apache.cassandra.service.ActiveRepairService.NO_PENDING_REPAIR;
@@ -210,5 +213,18 @@ public class StreamPlan
     public boolean getFlushBeforeTransfer()
     {
         return flushBeforeTransfer;
+    }
+
+    @VisibleForTesting
+    public Pair<Collection<StreamRequest>, Collection<StreamTransferTask>> getRequestsAndTransfers()
+    {
+        Collection<StreamRequest> requests = new HashSet<>();
+        Collection<StreamTransferTask> transfers = new HashSet<>();
+        for (StreamSession s : coordinator.getAllStreamSessions())
+        {
+            requests.addAll(s.requests);
+            transfers.addAll(s.transfers.values());
+        }
+        return Pair.create(requests, transfers);
     }
 }

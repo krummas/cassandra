@@ -19,12 +19,14 @@ package org.apache.cassandra.repair;
 
 import java.net.InetAddress;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -53,23 +55,30 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
 
     private final UUID pendingRepair;
     private final boolean pullRepair;
+    private final Set<String> readonlyDcs;
 
-    public LocalSyncTask(RepairJobDesc desc, TreeResponse r1, TreeResponse r2, UUID pendingRepair, boolean pullRepair, PreviewKind previewKind)
+    public LocalSyncTask(RepairJobDesc desc, TreeResponse r1, TreeResponse r2, UUID pendingRepair, boolean pullRepair, PreviewKind previewKind, Set<String> readonlyDcs)
     {
         super(desc, r1, r2, previewKind);
         this.pendingRepair = pendingRepair;
         this.pullRepair = pullRepair;
+        this.readonlyDcs = readonlyDcs;
     }
 
 
     @VisibleForTesting
-    StreamPlan createStreamPlan(InetAddress dst, InetAddress preferred, List<Range<Token>> differences)
+    StreamPlan createStreamPlan(InetAddress sourceAddress, InetAddress dst, InetAddress preferred, List<Range<Token>> differences)
     {
         StreamPlan plan = new StreamPlan(StreamOperation.REPAIR, 1, false, false, pendingRepair, previewKind)
                           .listeners(this)
-                          .flushBeforeTransfer(pendingRepair == null)
-                          .requestRanges(dst, preferred, desc.keyspace, differences, desc.columnFamily);  // request ranges from the remote node
-        if (!pullRepair)
+                          .flushBeforeTransfer(pendingRepair == null);
+
+        // only request ranges from non-readonly-datacenters:
+        if (!readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(dst)))
+            plan.requestRanges(dst, preferred, desc.keyspace, differences, desc.columnFamily);  // request ranges from the remote node
+
+        // only send ranges to remote node if we are not doing pull repair or we are a non-readonly dc:
+        if (!(pullRepair || readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(sourceAddress))))
         {
             // send ranges to the remote node if we are not performing a pull repair
             plan.transferRanges(dst, preferred, desc.keyspace, differences, desc.columnFamily);
@@ -94,7 +103,7 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
         logger.info("{} {}", previewKind.logPrefix(desc.sessionId), message);
         Tracing.traceRepair(message);
 
-        createStreamPlan(dst, preferred, differences).execute();
+        createStreamPlan(FBUtilities.getBroadcastAddress(), dst, preferred, differences).execute();
     }
 
     public void handleStreamEvent(StreamEvent event)

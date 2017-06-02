@@ -18,6 +18,7 @@
 package org.apache.cassandra.repair;
 
 import java.net.InetAddress;
+import java.util.Set;
 import java.util.UUID;
 import java.util.Collections;
 
@@ -25,6 +26,8 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.repair.messages.SyncComplete;
@@ -35,6 +38,7 @@ import org.apache.cassandra.streaming.StreamEventHandler;
 import org.apache.cassandra.streaming.StreamPlan;
 import org.apache.cassandra.streaming.StreamState;
 import org.apache.cassandra.streaming.StreamOperation;
+import org.apache.cassandra.utils.FBUtilities;
 
 /**
  * StreamingRepairTask performs data streaming between two remote replica which neither is not repair coordinator.
@@ -62,17 +66,23 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
         InetAddress dest = request.dst;
         InetAddress preferred = SystemKeyspace.getPreferredIP(dest);
         logger.info("[streaming task #{}] Performing streaming repair of {} ranges with {}", desc.sessionId, request.ranges.size(), request.dst);
-        createStreamPlan(dest, preferred).execute();
+        createStreamPlan(FBUtilities.getBroadcastAddress(), dest, preferred).execute();
     }
 
     @VisibleForTesting
-    StreamPlan createStreamPlan(InetAddress dest, InetAddress preferred)
+    StreamPlan createStreamPlan(InetAddress source, InetAddress dest, InetAddress preferred)
     {
-        return new StreamPlan(StreamOperation.REPAIR, 1, false, false, pendingRepair, previewKind)
-               .listeners(this)
-               .flushBeforeTransfer(pendingRepair == null) // sstables are isolated at the beginning of an incremental repair session, so flushing isn't neccessary
-               .requestRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily) // request ranges from the remote node
-               .transferRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily); // send ranges to the remote node
+        StreamPlan sp = new StreamPlan(StreamOperation.REPAIR, 1, false, false, pendingRepair, previewKind)
+                        .listeners(this)
+                        .flushBeforeTransfer(pendingRepair == null); // sstables are isolated at the beginning of an incremental repair session, so flushing isn't neccessary
+        Set<String> readonlyDcs = Keyspace.open(desc.keyspace).getReplicationStrategy().getReadonlyDCs();
+        // never request ranges from a read only dc:
+        if (!readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(dest)))
+            sp.requestRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily); // request ranges from the remote node
+        // never transfer ranges out of a read only dc:
+        if (!readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(source)))
+            sp.transferRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily); // send ranges to the remote node
+        return sp;
     }
 
     public void handleStreamEvent(StreamEvent event)

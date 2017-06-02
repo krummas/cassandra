@@ -39,6 +39,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.dht.Murmur3Partitioner;
+import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
@@ -203,8 +205,20 @@ public class Util
         for (int i=0; i<howMany; i++)
         {
             if(!endpointTokenPrefilled)
-                endpointTokens.add(new BigIntegerToken(String.valueOf(10 * i)));
-            keyTokens.add(new BigIntegerToken(String.valueOf(10 * i + 5)));
+            {
+                if (partitioner instanceof RandomPartitioner)
+                    endpointTokens.add(new BigIntegerToken(String.valueOf(10 * i)));
+                else if (partitioner instanceof Murmur3Partitioner)
+                    endpointTokens.add(new Murmur3Partitioner.LongToken(10 * i));
+                else
+                    throw new UnsupportedOperationException("only RandomPartitioner and Murmur3Partitioner supported");
+            }
+            if (partitioner instanceof RandomPartitioner)
+                keyTokens.add(new BigIntegerToken(String.valueOf(10 * i + 5)));
+            else if (partitioner instanceof Murmur3Partitioner)
+                keyTokens.add(new Murmur3Partitioner.LongToken(10 * i + 5));
+            else
+                throw new UnsupportedOperationException("only RandomPartitioner and Murmur3Partitioner supported");
             hostIds.add(hostIdPool.get(i));
         }
 

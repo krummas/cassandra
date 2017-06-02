@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.repair;
 
+import java.util.Collections;
 import java.util.UUID;
 
 import org.junit.Assert;
@@ -35,6 +36,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.streaming.StreamPlan;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 
 public class StreamingRepairTaskTest extends AbstractRepairTest
@@ -68,7 +70,7 @@ public class StreamingRepairTaskTest extends AbstractRepairTest
         SyncRequest request = new SyncRequest(desc, PARTICIPANT1, PARTICIPANT2, PARTICIPANT3, prs.getRanges(), PreviewKind.NONE);
         StreamingRepairTask task = new StreamingRepairTask(desc, request, desc.sessionId, PreviewKind.NONE);
 
-        StreamPlan plan = task.createStreamPlan(request.src, request.dst);
+        StreamPlan plan = task.createStreamPlan(FBUtilities.getBroadcastAddress(), request.src, request.dst);
         Assert.assertFalse(plan.getFlushBeforeTransfer());
     }
 
@@ -81,7 +83,7 @@ public class StreamingRepairTaskTest extends AbstractRepairTest
         SyncRequest request = new SyncRequest(desc, PARTICIPANT1, PARTICIPANT2, PARTICIPANT3, prs.getRanges(), PreviewKind.NONE);
         StreamingRepairTask task = new StreamingRepairTask(desc, request, null, PreviewKind.NONE);
 
-        StreamPlan plan = task.createStreamPlan(request.src, request.dst);
+        StreamPlan plan = task.createStreamPlan(FBUtilities.getBroadcastAddress(), request.src, request.dst);
         Assert.assertTrue(plan.getFlushBeforeTransfer());
     }
 }

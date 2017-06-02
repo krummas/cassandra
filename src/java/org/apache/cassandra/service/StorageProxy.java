@@ -236,6 +236,9 @@ public class StorageProxy implements StorageProxyMBean
             consistencyForPaxos.validateForCas();
             consistencyForCommit.validateForCasCommit(keyspaceName);
 
+            if (Keyspace.open(keyspaceName).getReplicationStrategy().getReadonlyDCs().contains(DatabaseDescriptor.getLocalDataCenter()))
+                throw new InvalidRequestException("Attempting to send a mutation to a read only datacenter");
+
             TableMetadata metadata = Schema.instance.getTableMetadata(keyspaceName, cfName);
 
             long timeout = TimeUnit.MILLISECONDS.toNanos(DatabaseDescriptor.getCasContentionTimeout());
@@ -864,10 +867,11 @@ public class StorageProxy implements StorageProxyMBean
     throws WriteTimeoutException, WriteFailureException, UnavailableException, OverloadedException, InvalidRequestException
     {
         Collection<Mutation> augmented = TriggerExecutor.instance.execute(mutations);
+        Keyspace ks = Keyspace.open(mutations.iterator().next().getKeyspaceName());
+        boolean updatesView = ks.viewManager.updatesAffectView(mutations, true);
 
-        boolean updatesView = Keyspace.open(mutations.iterator().next().getKeyspaceName())
-                              .viewManager
-                              .updatesAffectView(mutations, true);
+        if (ks.getReplicationStrategy().getReadonlyDCs().contains(DatabaseDescriptor.getLocalDataCenter()))
+            throw new InvalidRequestException("Attempting to send a mutation to a read only datacenter");
 
         long size = IMutation.dataSize(mutations);
         writeMetrics.mutationSize.update(size);

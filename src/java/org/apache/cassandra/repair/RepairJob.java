@@ -118,6 +118,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
         {
             public ListenableFuture<List<SyncStat>> apply(List<TreeResponse> trees)
             {
+                Set<String> readonlyDcs = Keyspace.open(desc.keyspace).getReplicationStrategy().getReadonlyDCs();
                 InetAddress local = FBUtilities.getLocalAddress();
 
                 List<SyncTask> syncTasks = new ArrayList<>();
@@ -128,10 +129,15 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                     for (int j = i + 1; j < trees.size(); ++j)
                     {
                         TreeResponse r2 = trees.get(j);
+                        // if both endpoints are in a read only DC, we should not do any streaming between them
+                        if (readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(r1.endpoint)) &&
+                            readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(r2.endpoint)))
+                            continue;
+
                         SyncTask task;
                         if (r1.endpoint.equals(local) || r2.endpoint.equals(local))
                         {
-                            task = new LocalSyncTask(desc, r1, r2, isConsistent ? desc.parentSessionId : null, session.pullRepair, session.previewKind);
+                            task = new LocalSyncTask(desc, r1, r2, isConsistent ? desc.parentSessionId : null, session.pullRepair, session.previewKind, readonlyDcs);
                         }
                         else
                         {
