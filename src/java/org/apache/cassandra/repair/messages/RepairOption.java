@@ -49,6 +49,7 @@ public class RepairOption
     public static final String SUB_RANGE_REPAIR_KEY = "sub_range_repair";
     public static final String PULL_REPAIR_KEY = "pullRepair";
     public static final String PREVIEW = "previewKind";
+    public static final String IGNORE_READONLY_DCS = "ignoreReadonlyDCs";
 
     // we don't want to push nodes too much for repair
     public static final int MAX_JOB_THREADS = 4;
@@ -125,6 +126,11 @@ public class RepairOption
      *             This is only allowed if exactly 2 hosts are specified along with a token range that they share.</td>
      *             <td>false</td>
      *         </tr>
+     *         <tr>
+     *             <td>ignoreReadonlyDCs</td>
+     *             <td>"true" if we should ignore that some dcs might be read only.</td>
+     *             <td>false</td>
+     *         </tr>
      *     </tbody>
      * </table>
      *
@@ -141,6 +147,7 @@ public class RepairOption
         PreviewKind previewKind = PreviewKind.valueOf(options.getOrDefault(PREVIEW, PreviewKind.NONE.toString()));
         boolean trace = Boolean.parseBoolean(options.get(TRACE_KEY));
         boolean pullRepair = Boolean.parseBoolean(options.get(PULL_REPAIR_KEY));
+        boolean ignoreReadonlyDCs = Boolean.parseBoolean(options.get(IGNORE_READONLY_DCS));
 
         int jobThreads = 1;
         if (options.containsKey(JOB_THREADS_KEY))
@@ -178,7 +185,7 @@ public class RepairOption
             }
         }
 
-        RepairOption option = new RepairOption(parallelism, primaryRange, incremental, trace, jobThreads, ranges, !ranges.isEmpty(), pullRepair, previewKind);
+        RepairOption option = new RepairOption(parallelism, primaryRange, incremental, trace, jobThreads, ranges, !ranges.isEmpty(), pullRepair, previewKind, ignoreReadonlyDCs);
 
         // data centers
         String dataCentersStr = options.get(DATACENTERS_KEY);
@@ -260,13 +267,23 @@ public class RepairOption
     private final boolean isSubrangeRepair;
     private final boolean pullRepair;
     private final PreviewKind previewKind;
+    private final boolean ignoreReadonlyDCs;
 
     private final Collection<String> columnFamilies = new HashSet<>();
     private final Collection<String> dataCenters = new HashSet<>();
     private final Collection<String> hosts = new HashSet<>();
     private final Collection<Range<Token>> ranges = new HashSet<>();
 
-    public RepairOption(RepairParallelism parallelism, boolean primaryRange, boolean incremental, boolean trace, int jobThreads, Collection<Range<Token>> ranges, boolean isSubrangeRepair, boolean pullRepair, PreviewKind previewKind)
+    public RepairOption(RepairParallelism parallelism,
+                        boolean primaryRange,
+                        boolean incremental,
+                        boolean trace,
+                        int jobThreads,
+                        Collection<Range<Token>> ranges,
+                        boolean isSubrangeRepair,
+                        boolean pullRepair,
+                        PreviewKind previewKind,
+                        boolean ignoreReadonlyDCs)
     {
         if (FBUtilities.isWindows &&
             (DatabaseDescriptor.getDiskAccessMode() != Config.DiskAccessMode.standard || DatabaseDescriptor.getIndexAccessMode() != Config.DiskAccessMode.standard) &&
@@ -286,6 +303,7 @@ public class RepairOption
         this.isSubrangeRepair = isSubrangeRepair;
         this.pullRepair = pullRepair;
         this.previewKind = previewKind;
+        this.ignoreReadonlyDCs = ignoreReadonlyDCs;
     }
 
     public RepairParallelism getParallelism()
@@ -362,6 +380,12 @@ public class RepairOption
         return dataCenters.size() == 1 && dataCenters.contains(DatabaseDescriptor.getLocalDataCenter());
     }
 
+    public boolean ignoreReadonlyDCs()
+    {
+        return ignoreReadonlyDCs;
+    }
+
+
     @Override
     public String toString()
     {
@@ -394,6 +418,8 @@ public class RepairOption
         options.put(RANGES_KEY, Joiner.on(",").join(ranges));
         options.put(PULL_REPAIR_KEY, Boolean.toString(pullRepair));
         options.put(PREVIEW, previewKind.toString());
+        options.put(IGNORE_READONLY_DCS, Boolean.toString(ignoreReadonlyDCs));
         return options;
     }
+
 }

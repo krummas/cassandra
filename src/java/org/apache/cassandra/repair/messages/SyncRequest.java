@@ -50,8 +50,9 @@ public class SyncRequest extends RepairMessage
     public final InetAddress dst;
     public final Collection<Range<Token>> ranges;
     public final PreviewKind previewKind;
+    public final boolean ignoreReadonlyDCs ;
 
-    public SyncRequest(RepairJobDesc desc, InetAddress initiator, InetAddress src, InetAddress dst, Collection<Range<Token>> ranges, PreviewKind previewKind)
+    public SyncRequest(RepairJobDesc desc, InetAddress initiator, InetAddress src, InetAddress dst, Collection<Range<Token>> ranges, PreviewKind previewKind, boolean ignoreReadonlyDCs)
     {
         super(Type.SYNC_REQUEST, desc);
         this.initiator = initiator;
@@ -59,6 +60,7 @@ public class SyncRequest extends RepairMessage
         this.dst = dst;
         this.ranges = ranges;
         this.previewKind = previewKind;
+        this.ignoreReadonlyDCs = ignoreReadonlyDCs;
     }
 
     @Override
@@ -73,13 +75,14 @@ public class SyncRequest extends RepairMessage
                src.equals(req.src) &&
                dst.equals(req.dst) &&
                ranges.equals(req.ranges) &&
-               previewKind == req.previewKind;
+               previewKind == req.previewKind &&
+               ignoreReadonlyDCs == req.ignoreReadonlyDCs;
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(messageType, desc, initiator, src, dst, ranges, previewKind);
+        return Objects.hash(messageType, desc, initiator, src, dst, ranges, previewKind, ignoreReadonlyDCs);
     }
 
     public static class SyncRequestSerializer implements MessageSerializer<SyncRequest>
@@ -97,6 +100,7 @@ public class SyncRequest extends RepairMessage
                 AbstractBounds.tokenSerializer.serialize(range, out, version);
             }
             out.writeInt(message.previewKind.getSerializationVal());
+            out.writeBoolean(message.ignoreReadonlyDCs);
         }
 
         public SyncRequest deserialize(DataInputPlus in, int version) throws IOException
@@ -110,7 +114,8 @@ public class SyncRequest extends RepairMessage
             for (int i = 0; i < rangesCount; ++i)
                 ranges.add((Range<Token>) AbstractBounds.tokenSerializer.deserialize(in, MessagingService.globalPartitioner(), version));
             PreviewKind previewKind = PreviewKind.deserialize(in.readInt());
-            return new SyncRequest(desc, owner, src, dst, ranges, previewKind);
+            boolean ignoreReadonlyDCs = in.readBoolean();
+            return new SyncRequest(desc, owner, src, dst, ranges, previewKind, ignoreReadonlyDCs);
         }
 
         public long serializedSize(SyncRequest message, int version)
@@ -121,6 +126,7 @@ public class SyncRequest extends RepairMessage
             for (Range<Token> range : message.ranges)
                 size += AbstractBounds.tokenSerializer.serializedSize(range, version);
             size += TypeSizes.sizeof(message.previewKind.getSerializationVal());
+            size += TypeSizes.sizeof(message.ignoreReadonlyDCs);
             return size;
         }
     }
@@ -134,6 +140,7 @@ public class SyncRequest extends RepairMessage
                 ", dst=" + dst +
                 ", ranges=" + ranges +
                 ", previewKind=" + previewKind +
+                ", ignoreReadonlyDCs=" + ignoreReadonlyDCs +
                 "} " + super.toString();
     }
 }

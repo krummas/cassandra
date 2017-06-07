@@ -91,6 +91,9 @@ public class Repair extends NodeToolCmd
     @Option(title = "pull_repair", name = {"-pl", "--pull"}, description = "Use --pull to perform a one way repair where data is only streamed from a remote node to this node.")
     private boolean pullRepair = false;
 
+    @Option(title = "ignore_readonly_dcs", name = {"-irodc", "--ignore_readonly_dcs"}, description = "Use --ignore_readonly_dcs to do a full sync on repair - even stream out data from read only dcs.")
+    private boolean ignoreReadonlyDCs = false;
+
     private PreviewKind getPreviewKind()
     {
         if (validate)
@@ -140,6 +143,7 @@ public class Repair extends NodeToolCmd
             options.put(RepairOption.COLUMNFAMILIES_KEY, StringUtils.join(cfnames, ","));
             options.put(RepairOption.PULL_REPAIR_KEY, Boolean.toString(pullRepair));
             options.put(RepairOption.PREVIEW, getPreviewKind().toString());
+            options.put(RepairOption.IGNORE_READONLY_DCS, Boolean.toString(ignoreReadonlyDCs));
 
             if (!startToken.isEmpty() || !endToken.isEmpty())
             {

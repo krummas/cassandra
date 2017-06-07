@@ -76,11 +76,14 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
                         .listeners(this)
                         .flushBeforeTransfer(pendingRepair == null); // sstables are isolated at the beginning of an incremental repair session, so flushing isn't neccessary
         Set<String> readonlyDcs = Keyspace.open(desc.keyspace).getReplicationStrategy().getReadonlyDCs();
+        boolean destinationWriteable = request.ignoreReadonlyDCs || !readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(dest));
+        boolean sourceWriteable = request.ignoreReadonlyDCs || !readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(source));
+
         // never request ranges from a read only dc:
-        if (!readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(dest)))
+        if (destinationWriteable)
             sp.requestRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily); // request ranges from the remote node
         // never transfer ranges out of a read only dc:
-        if (!readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(source)))
+        if (sourceWriteable)
             sp.transferRanges(dest, preferred, desc.keyspace, request.ranges, desc.columnFamily); // send ranges to the remote node
         return sp;
     }

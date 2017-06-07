@@ -43,16 +43,18 @@ public abstract class SyncTask extends AbstractFuture<SyncStat> implements Runna
     protected final TreeResponse r1;
     protected final TreeResponse r2;
     protected final PreviewKind previewKind;
+    protected final boolean ignoreReadonlyDCs;
 
     protected volatile SyncStat stat;
     protected long startTime = Long.MIN_VALUE;
 
-    public SyncTask(RepairJobDesc desc, TreeResponse r1, TreeResponse r2, PreviewKind previewKind)
+    public SyncTask(RepairJobDesc desc, TreeResponse r1, TreeResponse r2, PreviewKind previewKind, boolean ignoreReadonlyDCs)
     {
         this.desc = desc;
         this.r1 = r1;
         this.r2 = r2;
         this.previewKind = previewKind;
+        this.ignoreReadonlyDCs = ignoreReadonlyDCs;
     }
 
     /**

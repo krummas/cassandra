@@ -130,18 +130,19 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                     {
                         TreeResponse r2 = trees.get(j);
                         // if both endpoints are in a read only DC, we should not do any streaming between them
-                        if (readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(r1.endpoint)) &&
+                        if (!session.ignoreReadonlyDCs &&
+                            readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(r1.endpoint)) &&
                             readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(r2.endpoint)))
                             continue;
 
                         SyncTask task;
                         if (r1.endpoint.equals(local) || r2.endpoint.equals(local))
                         {
-                            task = new LocalSyncTask(desc, r1, r2, isConsistent ? desc.parentSessionId : null, session.pullRepair, session.previewKind, readonlyDcs);
+                            task = new LocalSyncTask(desc, r1, r2, isConsistent ? desc.parentSessionId : null, session.pullRepair, session.previewKind, readonlyDcs, session.ignoreReadonlyDCs);
                         }
                         else
                         {
-                            task = new RemoteSyncTask(desc, r1, r2, session.previewKind);
+                            task = new RemoteSyncTask(desc, r1, r2, session.previewKind, session.ignoreReadonlyDCs);
                             // RemoteSyncTask expects SyncComplete message sent back.
                             // Register task to RepairSession to receive response.
                             session.waitForSync(Pair.create(desc, new NodePair(r1.endpoint, r2.endpoint)), (RemoteSyncTask) task);

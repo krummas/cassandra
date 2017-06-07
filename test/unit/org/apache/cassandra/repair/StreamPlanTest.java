@@ -49,6 +49,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class StreamPlanTest extends CQLTester
 {
@@ -88,6 +89,7 @@ public class StreamPlanTest extends CQLTester
             execute("insert into %s (id, val) values ("+i+", 'uhuhu')");
         getCurrentColumnFamilyStore().forceBlockingFlush();
     }
+
     @Test
     public void localSyncTaskTestReadableDCs() throws Throwable
     {
@@ -109,7 +111,7 @@ public class StreamPlanTest extends CQLTester
     {
         TreeResponse r1 = new TreeResponse(InetAddress.getByName(source), null);
         TreeResponse r2 = new TreeResponse(InetAddress.getByName(dest), null);
-        LocalSyncTask task = new LocalSyncTask(desc, r1, r2, ActiveRepairService.NO_PENDING_REPAIR, false, PreviewKind.NONE, Sets.newHashSet("dc2", "dc3"));
+        LocalSyncTask task = new LocalSyncTask(desc, r1, r2, ActiveRepairService.NO_PENDING_REPAIR, false, PreviewKind.NONE, Sets.newHashSet("dc2", "dc3"), false);
         StreamPlan sp = task.createStreamPlan(InetAddress.getByName(source), r2.endpoint, r2.endpoint, Collections.singletonList(range));
         Pair<Collection<StreamRequest>, Collection<StreamTransferTask>> streams = sp.getRequestsAndTransfers();
         assertEquals(incomingStreams, streams.left.size() > 0);
@@ -151,13 +153,29 @@ public class StreamPlanTest extends CQLTester
                                          src,
                                          dst,
                                          Collections.singletonList(range),
-                                         PreviewKind.NONE);
+                                         PreviewKind.NONE,
+                                         false);
         StreamingRepairTask task = new StreamingRepairTask(desc, sr, null, PreviewKind.NONE);
         StreamPlan sp = task.createStreamPlan(src, dst, dst);
         Pair<Collection<StreamRequest>, Collection<StreamTransferTask>> streams = sp.getRequestsAndTransfers();
 
         assertEquals(streamToSrc, streams.left.size() > 0);
         assertEquals(streamToDst, streams.right.size() > 0);
+
+        // when ignoring RO dcs, we should stream everything:
+        SyncRequest srIgnoreRO = new SyncRequest(desc,
+                                                 FBUtilities.getBroadcastAddress(),
+                                                 src,
+                                                 dst,
+                                                 Collections.singletonList(range),
+                                                 PreviewKind.NONE,
+                                                 true);
+        StreamingRepairTask taskIgnore = new StreamingRepairTask(desc, srIgnoreRO, null, PreviewKind.NONE);
+        StreamPlan spIgnore = taskIgnore.createStreamPlan(src, dst, dst);
+        Pair<Collection<StreamRequest>, Collection<StreamTransferTask>> streamsIgnore = spIgnore.getRequestsAndTransfers();
+
+        assertTrue(streamsIgnore.left.size() > 0);
+        assertTrue(streamsIgnore.right.size() > 0);
     }
 
 }

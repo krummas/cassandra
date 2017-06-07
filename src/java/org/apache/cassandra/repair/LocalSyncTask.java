@@ -57,9 +57,9 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
     private final boolean pullRepair;
     private final Set<String> readonlyDcs;
 
-    public LocalSyncTask(RepairJobDesc desc, TreeResponse r1, TreeResponse r2, UUID pendingRepair, boolean pullRepair, PreviewKind previewKind, Set<String> readonlyDcs)
+    public LocalSyncTask(RepairJobDesc desc, TreeResponse r1, TreeResponse r2, UUID pendingRepair, boolean pullRepair, PreviewKind previewKind, Set<String> readonlyDcs, boolean ignoreReadonlyDCs)
     {
-        super(desc, r1, r2, previewKind);
+        super(desc, r1, r2, previewKind, ignoreReadonlyDCs);
         this.pendingRepair = pendingRepair;
         this.pullRepair = pullRepair;
         this.readonlyDcs = readonlyDcs;
@@ -73,12 +73,15 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
                           .listeners(this)
                           .flushBeforeTransfer(pendingRepair == null);
 
+        boolean destinationWriteable = ignoreReadonlyDCs || !readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(dst));
+        boolean sourceWriteable = ignoreReadonlyDCs || !readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(sourceAddress));
+
         // only request ranges from non-readonly-datacenters:
-        if (!readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(dst)))
+        if (destinationWriteable)
             plan.requestRanges(dst, preferred, desc.keyspace, differences, desc.columnFamily);  // request ranges from the remote node
 
         // only send ranges to remote node if we are not doing pull repair or we are a non-readonly dc:
-        if (!(pullRepair || readonlyDcs.contains(DatabaseDescriptor.getEndpointSnitch().getDatacenter(sourceAddress))))
+        if (!(pullRepair || !sourceWriteable))
         {
             // send ranges to the remote node if we are not performing a pull repair
             plan.transferRanges(dst, preferred, desc.keyspace, differences, desc.columnFamily);

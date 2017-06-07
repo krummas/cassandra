@@ -94,6 +94,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
     public final Set<InetAddress> endpoints;
     public final boolean isConsistent;
     public final PreviewKind previewKind;
+    public final boolean ignoreReadonlyDCs;
 
     private final AtomicBoolean isFailed = new AtomicBoolean(false);
 
@@ -128,6 +129,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
                          boolean isConsistent,
                          boolean pullRepair,
                          PreviewKind previewKind,
+                         boolean ignoreReadonlyDCs,
                          String... cfnames)
     {
         assert cfnames.length > 0 : "Repairing no column families seems pointless, doesn't it";
@@ -142,6 +144,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
         this.isConsistent = isConsistent;
         this.previewKind = previewKind;
         this.pullRepair = pullRepair;
+        this.ignoreReadonlyDCs = ignoreReadonlyDCs;
     }
 
     public UUID getId()
