@@ -120,8 +120,6 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     private final JMXProgressSupport progressSupport = new JMXProgressSupport(this);
 
-    private static final AtomicInteger threadCounter = new AtomicInteger(1);
-
     private static int getRingDelay()
     {
         String newdelay = System.getProperty("cassandra.ring_delay_ms");
@@ -3304,7 +3302,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             return 0;
 
         int cmd = nextRepairCommand.incrementAndGet();
-        NamedThreadFactory.createThread(createRepairTask(cmd, keyspace, option), "Repair-Task-" + threadCounter.incrementAndGet()).start();
+        ActiveRepairService.repairCommandExecutor.submit(createRepairTask(cmd, keyspace, option));
         return cmd;
     }
 
