@@ -20,6 +20,7 @@ package org.apache.cassandra.config;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -386,6 +387,10 @@ public class Config
     public volatile AuditLogOptions audit_logging_options = new AuditLogOptions();
 
     public CorruptedTombstoneStrategy corrupted_tombstone_strategy = CorruptedTombstoneStrategy.disabled;
+
+    public String default_bootstrap_consistency_level = "ANY";
+    public Map<String, String> bootstrap_consistency_level = Collections.emptyMap();
+
     /**
      * @deprecated migrate to {@link DatabaseDescriptor#isClientInitialized()}
      */

@@ -1286,7 +1286,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 streamer.addRanges(keyspace, ranges);
             }
 
-            StreamResultFuture resultFuture = streamer.fetchAsync();
+            ListenableFuture<?> resultFuture = streamer.fetchAsync(null);
             // wait for result
             resultFuture.get();
         }
@@ -1541,11 +1541,11 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         setMode(Mode.JOINING, "Starting to bootstrap...", true);
         BootStrapper bootstrapper = new BootStrapper(FBUtilities.getBroadcastAddressAndPort(), tokens, tokenMetadata);
         bootstrapper.addProgressListener(progressSupport);
-        ListenableFuture<StreamState> bootstrapStream = bootstrapper.bootstrap(streamStateStore, useStrictConsistency && !replacing); // handles token update
-        Futures.addCallback(bootstrapStream, new FutureCallback<StreamState>()
+        ListenableFuture<Set<StreamState>> bootstrapStream = bootstrapper.bootstrap(streamStateStore, useStrictConsistency && !replacing); // handles token update
+        Futures.addCallback(bootstrapStream, new FutureCallback<Set<StreamState>>()
         {
             @Override
-            public void onSuccess(StreamState streamState)
+            public void onSuccess(Set<StreamState> streamState)
             {
                 bootstrapFinished();
                 logger.info("Bootstrap completed! for the tokens {}", tokens);
@@ -1613,11 +1613,11 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
             // already bootstrapped ranges are filtered during bootstrap
             BootStrapper bootstrapper = new BootStrapper(FBUtilities.getBroadcastAddressAndPort(), tokens, tokenMetadata);
             bootstrapper.addProgressListener(progressSupport);
-            ListenableFuture<StreamState> bootstrapStream = bootstrapper.bootstrap(streamStateStore, useStrictConsistency && !replacing); // handles token update
-            Futures.addCallback(bootstrapStream, new FutureCallback<StreamState>()
+            ListenableFuture<Set<StreamState>> bootstrapStream = bootstrapper.bootstrap(streamStateStore, useStrictConsistency && !replacing); // handles token update
+            Futures.addCallback(bootstrapStream, new FutureCallback<Set<StreamState>>()
             {
                 @Override
-                public void onSuccess(StreamState streamState)
+                public void onSuccess(Set<StreamState> streamStates)
                 {
                     bootstrapFinished();
                     // start participating in the ring.

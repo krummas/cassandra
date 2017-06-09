@@ -96,8 +96,11 @@ public class CassandraStreamManager implements TableStreamManager
     }
 
     @Override
-    public Collection<OutgoingStream> createOutgoingStreams(StreamSession session, Collection<Range<Token>> ranges, UUID pendingRepair, PreviewKind previewKind)
+    public Collection<OutgoingStream> createOutgoingStreams(StreamSession session, Collection<Range<Token>> ranges, UUID pendingRepair, PreviewKind previewKind, boolean onlyUnrepaired)
     {
+        assert !onlyUnrepaired || previewKind == PreviewKind.NONE;
+        assert !onlyUnrepaired || pendingRepair == ActiveRepairService.NO_PENDING_REPAIR;
+
         Refs<SSTableReader> refs = new Refs<>();
         try
         {
@@ -114,7 +117,7 @@ public class CassandraStreamManager implements TableStreamManager
                 }
                 else if (pendingRepair == ActiveRepairService.NO_PENDING_REPAIR)
                 {
-                    predicate = Predicates.alwaysTrue();
+                    predicate = s -> !onlyUnrepaired || !s.isRepaired();
                 }
                 else
                 {
@@ -131,6 +134,7 @@ public class CassandraStreamManager implements TableStreamManager
                     // still actually selecting what we wanted.
                     for (SSTableReader sstable : Iterables.filter(View.sstablesInBounds(keyRange.left, keyRange.right, intervalTree), predicate))
                     {
+                        logger.debug("Adding sstable {} for transfer (keyrange = {}) (repaired = {})", sstable, keyRange, sstable.isRepaired());
                         sstables.add(sstable);
                     }
                 }

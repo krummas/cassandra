@@ -19,6 +19,8 @@ package org.apache.cassandra.streaming;
 
 import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -259,9 +261,11 @@ public class StreamCoordinator
         logger.info("[Stream #{}, ID#{}] Beginning stream session with {}", session.planId(), session.sessionIndex(), session.peer);
     }
 
-    private class HostStreamingData
+    @VisibleForTesting
+    public class HostStreamingData
     {
-        private final Map<Integer, StreamSession> streamSessions = new HashMap<>();
+        @VisibleForTesting
+        public final Map<Integer, StreamSession> streamSessions = new HashMap<>();
         private final Map<Integer, SessionInfo> sessionInfos = new HashMap<>();
 
         private int lastReturned = -1;
@@ -340,5 +344,21 @@ public class StreamCoordinator
         {
             return sessionInfos.values();
         }
+
+        @Override
+        public String toString()
+        {
+            return "HostStreamingData{" +
+                   "streamSessions=" + streamSessions +
+                   ", sessionInfos=" + sessionInfos +
+                   ", lastReturned=" + lastReturned +
+                   '}';
+        }
+    }
+
+    @VisibleForTesting
+    public Map<InetAddressAndPort, HostStreamingData> getPeerSessions()
+    {
+        return ImmutableMap.copyOf(peerSessions);
     }
 }

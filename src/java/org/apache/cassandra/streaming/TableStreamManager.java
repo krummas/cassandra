@@ -53,5 +53,6 @@ public interface TableStreamManager
     Collection<OutgoingStream> createOutgoingStreams(StreamSession session,
                                                      Collection<Range<Token>> ranges,
                                                      UUID pendingRepair,
-                                                     PreviewKind previewKind);
+                                                     PreviewKind previewKind,
+                                                     boolean onlyUnrepaired);
 }

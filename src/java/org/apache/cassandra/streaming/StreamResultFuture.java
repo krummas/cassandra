@@ -55,7 +55,7 @@ public final class StreamResultFuture extends AbstractFuture<StreamState>
     /**
      * Create new StreamResult of given {@code planId} and streamOperation.
      *
-     * Constructor is package private. You need to use {@link StreamPlan#execute()} to get the instance.
+     * Constructor is private. You need to use {@link StreamPlan#execute()} to get the instance.
      *
      * @param planId Stream plan ID
      * @param streamOperation Stream streamOperation
@@ -71,32 +71,30 @@ public final class StreamResultFuture extends AbstractFuture<StreamState>
             set(getCurrentState());
     }
 
-    private StreamResultFuture(UUID planId, StreamOperation streamOperation, UUID pendingRepair, PreviewKind previewKind)
-    {
-        this(planId, streamOperation, new StreamCoordinator(streamOperation, 0, new DefaultConnectionFactory(), false, pendingRepair, previewKind));
-    }
-
     public static StreamResultFuture init(UUID planId, StreamOperation streamOperation, Collection<StreamEventHandler> listeners,
-                                   StreamCoordinator coordinator)
+                                          StreamCoordinator coordinator)
     {
-        StreamResultFuture future = createAndRegister(planId, streamOperation, coordinator);
+        StreamResultFuture future = new StreamResultFuture(planId, streamOperation, coordinator);
+        StreamManager.instance.register(future);
         if (listeners != null)
         {
             for (StreamEventHandler listener : listeners)
                 future.addEventListener(listener);
         }
 
-        logger.info("[Stream #{}] Executing streaming plan for {}", planId,  streamOperation.getDescription());
-
-        // Initialize and start all sessions
-        for (final StreamSession session : coordinator.getAllStreamSessions())
-        {
-            session.init(future);
-        }
-
-        coordinator.connect(future);
-
+        future.start();
         return future;
+    }
+
+    private void start()
+    {
+        // Initialize and start all sessions
+        logger.info("[Stream #{}] Executing streaming plan for {}", planId, streamOperation.getDescription());
+        for (StreamSession session : coordinator.getAllStreamSessions())
+        {
+            session.init(this);
+        }
+        coordinator.connect(this);
     }
 
     public static synchronized StreamResultFuture initReceivingSide(int sessionIndex,
@@ -115,19 +113,16 @@ public final class StreamResultFuture extends AbstractFuture<StreamState>
                         from, channel.remoteAddress(), channel.localAddress(), channel.id());
 
             // The main reason we create a StreamResultFuture on the receiving side is for JMX exposure.
-            future = new StreamResultFuture(planId, streamOperation, pendingRepair, previewKind);
+            future = new StreamResultFuture(planId, streamOperation,
+                                            new StreamCoordinator(streamOperation,
+                                                                  0,
+                                                                  new DefaultConnectionFactory(),
+                                                                  false, pendingRepair, previewKind));
             StreamManager.instance.registerReceiving(future);
         }
         future.attachConnection(from, sessionIndex, channel);
         logger.info("[Stream #{}, ID#{}] Received streaming plan for {} from {} channel.remote {} channel.local {} channel.id {}",
                     planId, sessionIndex, streamOperation.getDescription(), from, channel.remoteAddress(), channel.localAddress(), channel.id());
-        return future;
-    }
-
-    private static StreamResultFuture createAndRegister(UUID planId, StreamOperation streamOperation, StreamCoordinator coordinator)
-    {
-        StreamResultFuture future = new StreamResultFuture(planId, streamOperation, coordinator);
-        StreamManager.instance.register(future);
         return future;
     }
 
@@ -196,13 +191,13 @@ public final class StreamResultFuture extends AbstractFuture<StreamState>
         maybeComplete();
     }
 
-    public void handleProgress(ProgressInfo progress)
+    void handleProgress(ProgressInfo progress)
     {
         coordinator.updateProgress(progress);
         fireStreamEvent(new StreamEvent.ProgressEvent(planId, progress));
     }
 
-    synchronized void fireStreamEvent(StreamEvent event)
+    private synchronized void fireStreamEvent(StreamEvent event)
     {
         // delegate to listener
         for (StreamEventHandler listener : eventListeners)

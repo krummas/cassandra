@@ -18,17 +18,25 @@
 package org.apache.cassandra.dht;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.net.UnknownHostException;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.SetMultimap;
 
 import org.apache.commons.math3.stat.descriptive.SummaryStatistics;
 
@@ -40,6 +48,8 @@ import org.junit.runner.RunWith;
 import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.db.Keyspace;
@@ -52,7 +62,10 @@ import org.apache.cassandra.locator.RackInferringSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.streaming.StreamCoordinator;
 import org.apache.cassandra.streaming.StreamOperation;
+import org.apache.cassandra.streaming.StreamPlan;
+import org.apache.cassandra.streaming.StreamSession;
 import org.apache.cassandra.utils.FBUtilities;
 
 @RunWith(OrderedJUnit4ClassRunner.class)
@@ -275,5 +288,109 @@ public class BootStrapperTest
         SummaryStatistics ns2 = TokenAllocation.replicatedOwnershipStats(tm, Keyspace.open(ks2).getReplicationStrategy(), dcaddr);
         verifyImprovement(os3, ns3);
         verifyImprovement(os2, ns2);
+    }
+
+    @Test
+    public void testConsistentBootstrap1() throws UnknownHostException
+    {
+        String keyspace = "BootStrapperTestKeyspace4";
+        TokenMetadata tmd = StorageService.instance.getTokenMetadata();
+        AbstractReplicationStrategy strategy = Keyspace.open(keyspace).getReplicationStrategy();
+        RangeStreamer rs = setupRangeStreamer(keyspace, tmd);
+        rs.addRanges(keyspace, strategy.getPendingAddressRanges(tmd, t(Long.MAX_VALUE / 3), InetAddressAndPort.getByName("127.0.0.4")));
+        Map<InetAddressAndPort, Collection<Range<Token>>> expectedUnrepairedRanges = verifyFetchMap(rs.toFetch().get(keyspace));
+        StreamPlan sp = rs.createStreamPlan(true);
+        Map<InetAddressAndPort, StreamCoordinator.HostStreamingData> peerSessions = sp.getCoordinator().getPeerSessions();
+        assertEquals(peerSessions.size(), expectedUnrepairedRanges.size());
+        for (Map.Entry<InetAddressAndPort, StreamCoordinator.HostStreamingData> peerSession : peerSessions.entrySet())
+        {
+            StreamCoordinator.HostStreamingData hsd = peerSession.getValue();
+            Set<Range<Token>> peerSessionRanges = new HashSet<>();
+            for (StreamSession ss : hsd.streamSessions.values())
+            {
+                peerSessionRanges.addAll(ss.getStreamRequests().stream().flatMap(sr -> sr.ranges.stream()).collect(Collectors.toList()));
+            }
+            assertEquals(expectedUnrepairedRanges.get(peerSession.getKey()), peerSessionRanges);
+        }
+    }
+
+    @Test
+    public void testConsistentReplace() throws UnknownHostException
+    {
+        String keyspace = "BootStrapperTestKeyspace4";
+        TokenMetadata tmd = StorageService.instance.getTokenMetadata();
+        AbstractReplicationStrategy strategy = Keyspace.open(keyspace).getReplicationStrategy();
+        RangeStreamer rs = setupRangeStreamer(keyspace, tmd);
+        InetAddressAndPort downNode = InetAddressAndPort.getByName("127.0.0.3");
+        rs.addSourceFilter(endpoint -> !endpoint.equals(downNode));
+        rs.addRanges(keyspace, strategy.getPendingAddressRanges(tmd, t(Long.MAX_VALUE / 2), InetAddressAndPort.getByName("127.0.0.4")));
+
+        // don't stream from the down node:
+        assertFalse(rs.toFetch().get(keyspace).stream().anyMatch(x -> x.getKey().equals(downNode)));
+
+        Map<Range<Token>, Boolean> foundUnrep = new HashMap<>();
+        Set<Range<Token>> allRanges = new HashSet<>();
+
+        for (Map.Entry<InetAddressAndPort, Collection<Range<Token>>> toFetch : rs.toFetch().get(keyspace))
+        {
+            for (Range<Token> t : toFetch.getValue())
+            {
+                allRanges.add(t);
+                if (t instanceof RangeStreamer.UnrepairedRange)
+                    foundUnrep.put(t, true);
+            }
+        }
+        for (Range<Token> allR : allRanges)
+            assertTrue(foundUnrep.get(allR));
+        assertEquals(3, allRanges.size());
+    }
+
+    private RangeStreamer setupRangeStreamer(String keyspace, TokenMetadata tmd) throws UnknownHostException
+    {
+        tmd.clearUnsafe();
+        tmd.updateNormalToken(t(0), InetAddressAndPort.getByName("127.0.0.1"));
+        tmd.updateNormalToken(t(Long.MIN_VALUE / 2), InetAddressAndPort.getByName("127.0.0.2"));
+        tmd.updateNormalToken(t(Long.MAX_VALUE / 2), InetAddressAndPort.getByName("127.0.0.3"));
+
+        DatabaseDescriptor.setBootstrapConsistencyLevel(keyspace, ConsistencyLevel.QUORUM);
+        return new RangeStreamer(tmd,
+                                 null,
+                                 InetAddressAndPort.getByName("127.0.0.4"),
+                                 StreamOperation.BOOTSTRAP,
+                                 false,
+                                 DatabaseDescriptor.getEndpointSnitch(),
+                                 new StreamStateStore(),
+                                 false,
+                                 1);
+    }
+
+    private Token t(long t)
+    {
+        return new Murmur3Partitioner.LongToken(t);
+    }
+
+    // make sure each range to fetch has a corresponding unrepaired range to fetch *from a separate node*
+    private Map<InetAddressAndPort, Collection<Range<Token>>> verifyFetchMap(Collection<Map.Entry<InetAddressAndPort, Collection<Range<Token>>>> oneKeyspaceMap)
+    {
+        Multimap<InetAddressAndPort, Range<Token>> unrepaired = HashMultimap.create();
+        Multimap<Range<Token>, InetAddressAndPort> rangesToFetch = HashMultimap.create();
+        for (Map.Entry<InetAddressAndPort, Collection<Range<Token>>> entry : oneKeyspaceMap)
+        {
+            for (Range<Token> r : entry.getValue())
+            {
+                // new range to avoid putting UnrepairedRange as key in the map
+                rangesToFetch.put(new Range<>(r.left, r.right), entry.getKey());
+                if (r instanceof RangeStreamer.UnrepairedRange)
+                    unrepaired.put(entry.getKey(), r);
+            }
+        }
+
+        assertTrue(rangesToFetch.size() > 0);
+        for (Range<Token> key : rangesToFetch.keySet())
+        {
+            assertEquals(2, rangesToFetch.get(key).size());
+        }
+
+        return unrepaired.asMap();
     }
 }

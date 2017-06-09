@@ -18,15 +18,28 @@
 package org.apache.cassandra.dht;
 
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.FluentFuture;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.locator.LocalStrategy;
 
 import org.apache.commons.lang3.StringUtils;
@@ -42,9 +55,11 @@ import org.apache.cassandra.locator.IEndpointSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.PreviewKind;
+import org.apache.cassandra.streaming.StreamEventHandler;
 import org.apache.cassandra.streaming.StreamPlan;
 import org.apache.cassandra.streaming.StreamResultFuture;
 import org.apache.cassandra.streaming.StreamOperation;
+import org.apache.cassandra.streaming.StreamState;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -64,10 +79,12 @@ public class RangeStreamer
     private final String description;
     private final Multimap<String, Map.Entry<InetAddressAndPort, Collection<Range<Token>>>> toFetch = HashMultimap.create();
     private final Set<ISourceFilter> sourceFilters = new HashSet<>();
-    private final StreamPlan streamPlan;
     private final boolean useStrictConsistency;
     private final IEndpointSnitch snitch;
     private final StreamStateStore stateStore;
+    private final StreamOperation streamOperation;
+    private final int connectionsPerHost;
+    private final boolean connectSequentially;
 
     /**
      * A filter applied to sources to stream from when constructing a fetch map.
@@ -160,11 +177,13 @@ public class RangeStreamer
         this.tokens = tokens;
         this.address = address;
         this.description = streamOperation.getDescription();
-        this.streamPlan = new StreamPlan(streamOperation, connectionsPerHost, connectSequentially, null, PreviewKind.NONE);
+        this.streamOperation = streamOperation;
+        this.connectionsPerHost = connectionsPerHost;
+        this.connectSequentially = connectSequentially;
         this.useStrictConsistency = useStrictConsistency;
         this.snitch = snitch;
         this.stateStore = stateStore;
-        streamPlan.listeners(this.stateStore);
+
     }
 
     public void addSourceFilter(ISourceFilter filter)
@@ -180,7 +199,8 @@ public class RangeStreamer
      */
     public void addRanges(String keyspaceName, Collection<Range<Token>> ranges)
     {
-        if(Keyspace.open(keyspaceName).getReplicationStrategy() instanceof LocalStrategy)
+        Keyspace ks = Keyspace.open(keyspaceName);
+        if (ks.getReplicationStrategy() instanceof LocalStrategy)
         {
             logger.info("Not adding ranges for Local Strategy keyspace={}", keyspaceName);
             return;
@@ -192,11 +212,18 @@ public class RangeStreamer
 
         for (Map.Entry<Range<Token>, InetAddressAndPort> entry : rangesForKeyspace.entries())
             logger.info("{}: range {} exists on {} for keyspace {}", description, entry.getKey(), entry.getValue(), keyspaceName);
-
         AbstractReplicationStrategy strat = Keyspace.open(keyspaceName).getReplicationStrategy();
         Multimap<InetAddressAndPort, Range<Token>> rangeFetchMap = useStrictSource || strat == null || strat.getReplicationFactor() == 1
                                                             ? getRangeFetchMap(rangesForKeyspace, sourceFilters, keyspaceName, useStrictConsistency)
                                                             : getOptimizedRangeFetchMap(rangesForKeyspace, sourceFilters, keyspaceName);
+
+        // only BOOTSTRAP and REBUILD uses this - if we want to support REBUILD, add parameter to nodetool rebuild?
+        if (!useStrictSource && streamOperation == StreamOperation.BOOTSTRAP)
+        {
+            ConsistencyLevel cl = DatabaseDescriptor.getBootstrapConsistencyLevel(keyspaceName);
+            if (cl != ConsistencyLevel.ANY)
+                rangeFetchMap.putAll(getEndpointsForConsistencyLevel(cl, ks, rangesForKeyspace, rangeFetchMap, description, sourceFilters));
+        }
 
         for (Map.Entry<InetAddressAndPort, Collection<Range<Token>>> entry : rangeFetchMap.asMap().entrySet())
         {
@@ -208,6 +235,93 @@ public class RangeStreamer
             toFetch.put(keyspaceName, entry);
         }
     }
+
+    @VisibleForTesting
+    static Multimap<InetAddressAndPort, Range<Token>> getEndpointsForConsistencyLevel(ConsistencyLevel cl,
+                                                                                      Keyspace ks,
+                                                                                      Multimap<Range<Token>, InetAddressAndPort> allRangesForKeyspace,
+                                                                                      Multimap<InetAddressAndPort, Range<Token>> rangeFetchMap,
+                                                                                      String description,
+                                                                                      Set<ISourceFilter> sourceFilters)
+    {
+        Multimap<InetAddressAndPort, Range<Token>> clRangeFetchMap = HashMultimap.create();
+        logger.info("{}: Streaming extra ranges for {} with consistency level {}", description, ks.getName(), cl);
+        int blockFor = cl.blockFor(ks);
+        for (Map.Entry<Range<Token>, Collection<InetAddressAndPort>> allEndpointEntry : allRangesForKeyspace.asMap().entrySet())
+        {
+            Range<Token> currentRange = allEndpointEntry.getKey();
+
+            List<InetAddressAndPort> potentialEndpoints = Lists.newArrayList(getPotentialCLEndpoints(allEndpointEntry.getValue(),
+                                                                                                     cl,
+                                                                                                     sourceFilters));
+            // todo: optimize where we stream from, currently just shuffles the
+            // todo: list of replicas to (hopefully) avoid streaming all unrepaired data from a single node
+            Collections.shuffle(potentialEndpoints);
+
+            logger.debug("{}: Potential bootstrap consistencylevel endpoints = {}", description, potentialEndpoints);
+            int addedCount = 0;
+            // first check if we are already fetching the range from a potential endpoint (if so, we only need to add blockFor - 1 other below)
+            // for example, RF=3, we bootstrap with QUORUM, we fetch everything from one node, and need to fetch the unrepaired data
+            // from *one* additional node
+            for (InetAddressAndPort candidate : potentialEndpoints)
+            {
+                if (rangeFetchMap.containsKey(candidate) && rangeFetchMap.get(candidate).contains(currentRange))
+                {
+                    logger.debug("{}: Already fetching {} from {} - counting toward consistencylevel {}", description, currentRange, candidate, cl);
+                    addedCount++;
+                    break;
+                }
+            }
+
+            for (InetAddressAndPort candidate : potentialEndpoints)
+            {
+                if (addedCount >= blockFor)
+                    break;
+                if (!rangeFetchMap.containsKey(candidate) || !rangeFetchMap.get(candidate).contains(currentRange))
+                {
+                    clRangeFetchMap.put(candidate, new UnrepairedRange(currentRange));
+                    addedCount++;
+                    logger.debug("{}: Fetching unrepaired range {} from {}", description, currentRange, candidate);
+                }
+            }
+            if (addedCount < blockFor)
+            {
+                String msg = String.format("Could not achieve %s from %s for %s in %s", cl, potentialEndpoints, currentRange, ks.getName());
+                logger.error("{}: {}", description, msg);
+                throw new IllegalStateException(msg);
+            }
+        }
+        return clRangeFetchMap;
+    }
+
+    /**
+     * get the potential endpoints to stream from based on the consistency level and the source filter
+     *
+     * Source filters are typically RangeStreamer.FailureDetectorSourceFilter and RangeStreamer.ExcludeLocalNodeFilter
+     * which remove down nodes and the local node respectively.
+     */
+    @VisibleForTesting
+    static List<InetAddressAndPort> getPotentialCLEndpoints(Collection<InetAddressAndPort> allEndpoints, ConsistencyLevel cl, Set<ISourceFilter> sourceFilters)
+    {
+        return allEndpoints.stream()
+                           .filter(address -> !cl.isDatacenterLocal() || cl.isLocal(address))
+                           .filter(address -> sourceFilters.stream().allMatch(f -> f.shouldInclude(address)))
+                           .collect(Collectors.toList());
+    }
+
+    static class UnrepairedRange extends Range<Token>
+    {
+        UnrepairedRange(Range<Token> r)
+        {
+            super(r.left, r.right);
+        }
+
+        public String toString()
+        {
+            return 'U' + super.toString();
+        }
+    }
+
 
     /**
      * @param keyspaceName keyspace name to check
@@ -414,34 +528,86 @@ public class RangeStreamer
         return getRangeFetchMap(rangesWithSourceTarget, Collections.<ISourceFilter>singleton(new FailureDetectorSourceFilter(fd)), keyspace, useStrictConsistency);
     }
 
-    // For testing purposes
     @VisibleForTesting
     Multimap<String, Map.Entry<InetAddressAndPort, Collection<Range<Token>>>> toFetch()
     {
         return toFetch;
     }
 
-    public StreamResultFuture fetchAsync()
+    @VisibleForTesting
+    StreamPlan createStreamPlan(boolean onlyUnrepaired)
     {
+        StreamPlan streamPlan = new StreamPlan(streamOperation, connectionsPerHost, connectSequentially, null, PreviewKind.NONE, onlyUnrepaired);
+        if (!onlyUnrepaired) // only resumable bootstrap for full streams
+            streamPlan.listeners(stateStore);
         for (Map.Entry<String, Map.Entry<InetAddressAndPort, Collection<Range<Token>>>> entry : toFetch.entries())
         {
             String keyspace = entry.getKey();
             InetAddressAndPort source = entry.getValue().getKey();
-            Collection<Range<Token>> ranges = entry.getValue().getValue();
+            List<Range<Token>> ranges = entry.getValue().getValue().stream().filter(r -> (r instanceof UnrepairedRange) == onlyUnrepaired).collect(Collectors.toList());
 
-            // filter out already streamed ranges
-            Set<Range<Token>> availableRanges = stateStore.getAvailableRanges(keyspace, StorageService.instance.getTokenMetadata().partitioner);
-            if (ranges.removeAll(availableRanges))
+            if (!onlyUnrepaired) // we currently only support resumable bootstrap for the full streams
             {
-                logger.info("Some ranges of {} are already available. Skipping streaming those ranges.", availableRanges);
+                // filter out already streamed ranges
+                Set<Range<Token>> availableRanges = stateStore.getAvailableRanges(keyspace, StorageService.instance.getTokenMetadata().partitioner);
+                if (ranges.removeAll(availableRanges))
+                {
+                    logger.info("Some ranges of {} are already available. Skipping streaming those ranges.", availableRanges);
+                }
             }
-
             if (logger.isTraceEnabled())
-                logger.trace("{}ing from {} ranges {}", description, source, StringUtils.join(ranges, ", "));
+                logger.trace("{}ing {} data from {} ranges {}", description, onlyUnrepaired ? "unrepaired" : "all", source, StringUtils.join(ranges, ", "));
             /* Send messages to respective folks to stream data over to me */
-            streamPlan.requestRanges(source, keyspace, ranges);
+            if (ranges.size() > 0)
+                streamPlan.requestRanges(source, keyspace, ranges);
         }
+        return streamPlan;
+    }
 
-        return streamPlan.execute();
+    private static ListenableFuture<StreamState> executeStreamPlan(StreamPlan streamPlan, StreamEventHandler handler)
+    {
+        if (streamPlan.isEmpty())
+            return Futures.immediateFuture(null);
+        if (logger.isDebugEnabled())
+            logger.debug("[Stream #{}] Starting stream plan {}", streamPlan.planId, streamPlan);
+        StreamResultFuture future = streamPlan.execute();
+        if (handler != null)
+            future.addEventListener(handler);
+        return future;
+    }
+
+    public ListenableFuture<Set<StreamState>> fetchAsync(StreamEventHandler handler)
+    {
+        // reason to first fetch the unrepaired data is to avoid a small race where a repair finishes
+        // and we miss a row that moved from unrepaired to repaired, for example:
+        // * We have nodes A, B, C: A does not have row x
+        // * A, B, C are repairing
+        // * D starts bootstrap and streams everything from A (this misses row x since A doesn't have it)
+        // * repair finishes, moves row x from unrepaired to repaired on A, B, C
+        // * D streams unrepaired from B, misses x
+        // by streaming the unrepaired first, we avoid this (if something jumps from unrepaired to repaired, we are
+        // bound to get it when we stream everything since that means the repair finished)
+        return FluentFuture.from(executeStreamPlan(createStreamPlan(true), handler))
+                           .transform((streamState) -> createStreamState(streamState,
+                                                                         executeStreamPlan(createStreamPlan(false), handler)),
+                                      MoreExecutors.directExecutor());
+    }
+
+    private static Set<StreamState> createStreamState(@Nullable StreamState previousStreamState, ListenableFuture<StreamState> future)
+    {
+        try
+        {
+            StreamState streamState = future.get();
+            if (previousStreamState != null && streamState != null)
+                return Sets.newHashSet(previousStreamState, streamState);
+            else if (previousStreamState != null)
+                return Sets.newHashSet(previousStreamState);
+            else
+                return Sets.newHashSet(streamState);
+        }
+        catch (InterruptedException | ExecutionException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 }

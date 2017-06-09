@@ -143,7 +143,8 @@ public class CassandraStreamManagerTest
         Collection<OutgoingStream> streams = cfs.getStreamManager().createOutgoingStreams(session(NO_PENDING_REPAIR),
                                                                                           Collections.singleton(range),
                                                                                           NO_PENDING_REPAIR,
-                                                                                          PreviewKind.NONE);
+                                                                                          PreviewKind.NONE,
+                                                                                          false);
         return sstablesFromStreams(streams);
     }
 
@@ -151,7 +152,7 @@ public class CassandraStreamManagerTest
     {
         IPartitioner partitioner = DatabaseDescriptor.getPartitioner();
         Collection<Range<Token>> ranges = Lists.newArrayList(new Range<Token>(partitioner.getMinimumToken(), partitioner.getMinimumToken()));
-        Collection<OutgoingStream> streams = cfs.getStreamManager().createOutgoingStreams(session(pendingRepair), ranges, pendingRepair, PreviewKind.NONE);
+        Collection<OutgoingStream> streams = cfs.getStreamManager().createOutgoingStreams(session(pendingRepair), ranges, pendingRepair, PreviewKind.NONE, false);
         return sstablesFromStreams(streams);
     }
 

@@ -1217,3 +1217,12 @@ audit_logging_options:
 # validate tombstones on reads and compaction
 # can be either "disabled", "warn" or "exception"
 # corrupted_tombstone_strategy: disabled
+
+# Set a consistency level for bootstrap
+# For example, if you have RF=3 and you bootstrap a node with QUORUM, the new node will stream the unrepaired
+# data from 2 nodes and the repaired data from one node. This makes sure that the data on the new node is consistent
+# assuming writes are performed with at least QUORUM. Supported consistency levels are: ANY, LOCAL_QUORUM, QUORUM, TWO.
+# default_bootstrap_consistency_level: ANY
+# bootstrap_consistency_level:
+#     keyspace1: QUORUM
+#     keyspace2: LOCAL_QUORUM

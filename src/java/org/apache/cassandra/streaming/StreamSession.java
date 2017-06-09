@@ -302,7 +302,19 @@ public class StreamSession implements IEndpointStateChangeSubscriber
      */
     public void addStreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies)
     {
-        requests.add(new StreamRequest(keyspace, ranges, columnFamilies));
+        addStreamRequest(keyspace, ranges, columnFamilies, false);
+    }
+
+    /**
+     * Request data fetch task to this session.
+     *
+     * @param keyspace Requesting keyspace
+     * @param ranges Ranges to retrieve data
+     * @param columnFamilies ColumnFamily names. Can be empty if requesting all CF under the keyspace.
+     */
+    public void addStreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, boolean onlyUnrepaired)
+    {
+        requests.add(new StreamRequest(keyspace, ranges, columnFamilies, onlyUnrepaired));
     }
 
     /**
@@ -313,7 +325,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
      * @param columnFamilies Transfer ColumnFamilies
      * @param flushTables flush tables?
      */
-    synchronized void addTransferRanges(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, boolean flushTables)
+    synchronized void addTransferRanges(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, boolean flushTables, boolean onlyUnrepaired)
     {
         failIfFinished();
         Collection<ColumnFamilyStore> stores = getColumnFamilyStores(keyspace, columnFamilies);
@@ -321,7 +333,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             flushSSTables(stores);
 
         List<Range<Token>> normalizedRanges = Range.normalize(ranges);
-        List<OutgoingStream> streams = getOutgoingStreamsForRanges(normalizedRanges, stores, pendingRepair, previewKind);
+        List<OutgoingStream> streams = getOutgoingStreamsForRanges(normalizedRanges, stores, pendingRepair, previewKind, onlyUnrepaired);
         addTransferStreams(streams);
         Set<Range<Token>> toBeUpdated = transferredRangesPerKeyspace.get(keyspace);
         if (toBeUpdated == null)
@@ -355,14 +367,14 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     }
 
     @VisibleForTesting
-    public List<OutgoingStream> getOutgoingStreamsForRanges(Collection<Range<Token>> ranges, Collection<ColumnFamilyStore> stores, UUID pendingRepair, PreviewKind previewKind)
+    public List<OutgoingStream> getOutgoingStreamsForRanges(Collection<Range<Token>> ranges, Collection<ColumnFamilyStore> stores, UUID pendingRepair, PreviewKind previewKind, boolean onlyUnrepaired)
     {
         List<OutgoingStream> streams = new ArrayList<>();
         try
         {
             for (ColumnFamilyStore cfs: stores)
             {
-                streams.addAll(cfs.getStreamManager().createOutgoingStreams(this, ranges, pendingRepair, previewKind));
+                streams.addAll(cfs.getStreamManager().createOutgoingStreams(this, ranges, pendingRepair, previewKind, onlyUnrepaired));
             }
         }
         catch (Throwable t)
@@ -561,7 +573,7 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     {
 
         for (StreamRequest request : requests)
-            addTransferRanges(request.keyspace, request.ranges, request.columnFamilies, true); // always flush on stream request
+            addTransferRanges(request.keyspace, request.ranges, request.columnFamilies, true, request.onlyUnrepaired); // always flush on stream request
         for (StreamSummary summary : summaries)
             prepareReceiving(summary);
 
@@ -811,5 +823,11 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             }
         }
         maybeCompleted();
+    }
+
+    @VisibleForTesting
+    public Set<StreamRequest> getStreamRequests()
+    {
+        return ImmutableSet.copyOf(requests);
     }
 }

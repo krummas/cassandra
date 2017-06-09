@@ -38,11 +38,14 @@ public class StreamRequest
     public final String keyspace;
     public final Collection<Range<Token>> ranges;
     public final Collection<String> columnFamilies = new HashSet<>();
-    public StreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies)
+    public final boolean onlyUnrepaired;
+
+    public StreamRequest(String keyspace, Collection<Range<Token>> ranges, Collection<String> columnFamilies, boolean onlyUnrepaired)
     {
         this.keyspace = keyspace;
         this.ranges = ranges;
         this.columnFamilies.addAll(columnFamilies);
+        this.onlyUnrepaired = onlyUnrepaired;
     }
 
     public static class StreamRequestSerializer implements IVersionedSerializer<StreamRequest>
@@ -60,6 +63,7 @@ public class StreamRequest
             out.writeInt(request.columnFamilies.size());
             for (String cf : request.columnFamilies)
                 out.writeUTF(cf);
+            out.writeBoolean(request.onlyUnrepaired);
         }
 
         public StreamRequest deserialize(DataInputPlus in, int version) throws IOException
@@ -77,7 +81,8 @@ public class StreamRequest
             List<String> columnFamilies = new ArrayList<>(cfCount);
             for (int i = 0; i < cfCount; i++)
                 columnFamilies.add(in.readUTF());
-            return new StreamRequest(keyspace, ranges, columnFamilies);
+            boolean onlyUnrepaired = in.readBoolean();
+            return new StreamRequest(keyspace, ranges, columnFamilies, onlyUnrepaired);
         }
 
         public long serializedSize(StreamRequest request, int version)
@@ -92,7 +97,18 @@ public class StreamRequest
             size += TypeSizes.sizeof(request.columnFamilies.size());
             for (String cf : request.columnFamilies)
                 size += TypeSizes.sizeof(cf);
+            size += TypeSizes.sizeof(request.onlyUnrepaired);
             return size;
         }
+    }
+
+    public String toString()
+    {
+        return "StreamRequest{" +
+               "keyspace='" + keyspace + '\'' +
+               ", ranges=" + ranges +
+               ", columnFamilies=" + columnFamilies +
+               ", onlyUnrepaired=" + onlyUnrepaired +
+               '}';
     }
 }

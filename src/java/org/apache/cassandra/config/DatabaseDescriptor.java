@@ -138,6 +138,9 @@ public class DatabaseDescriptor
     private static final boolean disableSTCSInL0 = Boolean.getBoolean(Config.PROPERTY_PREFIX + "disable_stcs_in_l0");
     private static final boolean unsafeSystem = Boolean.getBoolean(Config.PROPERTY_PREFIX + "unsafesystem");
 
+    private static final Map<String, ConsistencyLevel> bootstrapConsistencyLevel = new HashMap<>();
+    private static ConsistencyLevel defaultBootstrapConsistencyLevel;
+
     public static void daemonInitialization() throws ConfigurationException
     {
         if (toolInitialized)
@@ -767,6 +770,38 @@ public class DatabaseDescriptor
             throw new ConfigurationException("otc_coalescing_enough_coalesced_messages must be positive", false);
 
         validateMaxConcurrentAutoUpgradeTasksConf(conf.max_concurrent_automatic_sstable_upgrades);
+
+        ConsistencyLevel defaultCL = ConsistencyLevel.valueOf(conf.default_bootstrap_consistency_level);
+        if (validateBootstrapConsistencyLevel(defaultCL))
+            defaultBootstrapConsistencyLevel = defaultCL;
+        else
+            throw new ConfigurationException("We don't support bootstrapping with consistency level "+defaultCL);
+
+        for (Map.Entry<String, String> entry : conf.bootstrap_consistency_level.entrySet())
+        {
+            String keyspace = entry.getKey();
+            ConsistencyLevel cl = ConsistencyLevel.valueOf(entry.getValue());
+            if (validateBootstrapConsistencyLevel(cl))
+                bootstrapConsistencyLevel.put(keyspace, cl);
+            else
+                throw new ConfigurationException("We don't support bootstrapping with consistency level "+cl);
+        }
+    }
+    private static boolean validateBootstrapConsistencyLevel(ConsistencyLevel cl)
+    {
+        switch (cl)
+        {
+            case LOCAL_QUORUM:
+            case QUORUM:
+            case TWO:
+            case ANY:
+                return true;
+            case ALL:
+                logger.warn("Bootstrap consistency ALL makes it impossible to replace a dead node");
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static String storagedirFor(String type)
@@ -2633,5 +2668,20 @@ public class DatabaseDescriptor
     public static void setCorruptedTombstoneStrategy(Config.CorruptedTombstoneStrategy strategy)
     {
         conf.corrupted_tombstone_strategy = strategy;
+    }
+
+    public static ConsistencyLevel getDefaultBootstrapConsistencyLevel()
+    {
+        return defaultBootstrapConsistencyLevel;
+    }
+
+    public static ConsistencyLevel getBootstrapConsistencyLevel(String keyspacename)
+    {
+        return bootstrapConsistencyLevel.getOrDefault(keyspacename, defaultBootstrapConsistencyLevel);
+    }
+
+    public static void setBootstrapConsistencyLevel(String keyspacename, ConsistencyLevel cl)
+    {
+        bootstrapConsistencyLevel.put(keyspacename, cl);
     }
 }

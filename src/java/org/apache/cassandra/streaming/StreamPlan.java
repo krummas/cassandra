@@ -34,10 +34,11 @@ import static org.apache.cassandra.service.ActiveRepairService.NO_PENDING_REPAIR
 public class StreamPlan
 {
     private static final String[] EMPTY_COLUMN_FAMILIES = new String[0];
-    private final UUID planId = UUIDGen.getTimeUUID();
+    public final UUID planId = UUIDGen.getTimeUUID();
     private final StreamOperation streamOperation;
     private final List<StreamEventHandler> handlers = new ArrayList<>();
     private final StreamCoordinator coordinator;
+    private final boolean onlyUnrepaired;
 
     private boolean flushBeforeTransfer = true;
 
@@ -48,20 +49,27 @@ public class StreamPlan
      */
     public StreamPlan(StreamOperation streamOperation)
     {
-        this(streamOperation, 1, false, NO_PENDING_REPAIR, PreviewKind.NONE);
+        this(streamOperation, 1, false, NO_PENDING_REPAIR, PreviewKind.NONE, false);
     }
 
     public StreamPlan(StreamOperation streamOperation, boolean connectSequentially)
     {
-        this(streamOperation, 1, connectSequentially, NO_PENDING_REPAIR, PreviewKind.NONE);
+        this(streamOperation, 1, connectSequentially, NO_PENDING_REPAIR, PreviewKind.NONE, false);
     }
 
     public StreamPlan(StreamOperation streamOperation, int connectionsPerHost,
                       boolean connectSequentially, UUID pendingRepair, PreviewKind previewKind)
     {
+        this(streamOperation, connectionsPerHost, connectSequentially, pendingRepair, previewKind, false);
+    }
+
+    public StreamPlan(StreamOperation streamOperation, int connectionsPerHost,
+                      boolean connectSequentially, UUID pendingRepair, PreviewKind previewKind, boolean onlyUnrepaired)
+    {
         this.streamOperation = streamOperation;
         this.coordinator = new StreamCoordinator(streamOperation, connectionsPerHost, new DefaultConnectionFactory(),
                                                  connectSequentially, pendingRepair, previewKind);
+        this.onlyUnrepaired = onlyUnrepaired;
     }
 
     /**
@@ -89,7 +97,7 @@ public class StreamPlan
     public StreamPlan requestRanges(InetAddressAndPort from, String keyspace, Collection<Range<Token>> ranges, String... columnFamilies)
     {
         StreamSession session = coordinator.getOrCreateNextSession(from);
-        session.addStreamRequest(keyspace, ranges, Arrays.asList(columnFamilies));
+        session.addStreamRequest(keyspace, ranges, Arrays.asList(columnFamilies), onlyUnrepaired);
         return this;
     }
 
@@ -105,7 +113,7 @@ public class StreamPlan
     public StreamPlan transferRanges(InetAddressAndPort to, String keyspace, Collection<Range<Token>> ranges, String... columnFamilies)
     {
         StreamSession session = coordinator.getOrCreateNextSession(to);
-        session.addTransferRanges(keyspace, ranges, Arrays.asList(columnFamilies), flushBeforeTransfer);
+        session.addTransferRanges(keyspace, ranges, Arrays.asList(columnFamilies), flushBeforeTransfer, false);
         return this;
     }
 
@@ -181,5 +189,33 @@ public class StreamPlan
     public boolean getFlushBeforeTransfer()
     {
         return flushBeforeTransfer;
+    }
+
+    public StreamCoordinator getCoordinator()
+    {
+        return coordinator;
+    }
+
+    public String toString()
+    {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("planId=").append(planId).append(", ");
+        sb.append("streamOperation=").append(streamOperation).append(", ");
+        sb.append("onlyUnrepaired=").append(onlyUnrepaired).append(" - ");
+        for (Map.Entry<InetAddressAndPort, StreamCoordinator.HostStreamingData> peer : coordinator.getPeerSessions().entrySet())
+        {
+            sb.append(peer.getKey()).append(" : ");
+            StreamCoordinator.HostStreamingData hsd = peer.getValue();
+            for (StreamSession session : hsd.streamSessions.values())
+            {
+                for (StreamTransferTask transfer : session.transfers.values())
+                    sb.append(transfer.streams.values()).append(", ");
+                for (StreamRequest requests : session.requests)
+                    sb.append(requests).append(", ");
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 }
