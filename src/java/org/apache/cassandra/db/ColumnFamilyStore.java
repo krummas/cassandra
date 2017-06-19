@@ -63,6 +63,7 @@ import org.apache.cassandra.index.SecondaryIndexManager;
 import org.apache.cassandra.index.internal.CassandraIndex;
 import org.apache.cassandra.index.transactions.UpdateTransaction;
 import org.apache.cassandra.io.FSError;
+import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
@@ -794,12 +795,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             {
                 FileUtils.handleFSError(ex);
                 logger.error("Cannot read sstable {}; file system error, skipping table", entry, ex);
-                continue;
-            }
-            catch (IOException ex)
-            {
-                FileUtils.handleCorruptSSTable(new CorruptSSTableException(ex, entry.getKey().filenameFor(Component.DATA)));
-                logger.error("Cannot read sstable {}; other IO error, skipping table", entry, ex);
                 continue;
             }
             newSSTables.add(reader);
@@ -1928,7 +1923,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 }
             }
         }
-        catch (IOException | RuntimeException e)
+        catch (FSReadError | RuntimeException e)
         {
             // In case one of the snapshot sstables fails to open,
             // we must release the references to the ones we opened so far
