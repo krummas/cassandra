@@ -251,8 +251,7 @@ public class RangeFetchMapCalculator
                 sourceFound = addEndpoints(capacityGraph, rangeVertex, false);
             }
 
-            //We could not find any source for this range which passed the filters. Ignore if localhost is part of the endpoints for this range
-            if (!sourceFound && !rangesWithSources.get(range).contains(FBUtilities.getBroadcastAddress()))
+            if (!sourceFound)
                 throw new IllegalStateException("Unable to find sufficient sources for streaming range " + range + " in keyspace " + keyspace);
 
         }
@@ -275,6 +274,8 @@ public class RangeFetchMapCalculator
             if (passFilters(endpoint, localDCCheck))
             {
                 sourceFound = true;
+                if (endpoint.equals(FBUtilities.getBroadcastAddress()))
+                    continue; // don't add localhost to the graph to avoid streaming locally
                 final Vertex endpointVertex = new EndpointVertex(endpoint);
                 capacityGraph.insertVertex(rangeVertex);
                 capacityGraph.insertVertex(endpointVertex);
