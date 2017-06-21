@@ -274,8 +274,9 @@ public class RangeFetchMapCalculator
             if (passFilters(endpoint, localDCCheck))
             {
                 sourceFound = true;
+                // if we pass filters, it means that we don't filter away localhost and we can count it as a source:
                 if (endpoint.equals(FBUtilities.getBroadcastAddress()))
-                    continue; // don't add localhost to the graph to avoid streaming locally
+                    continue; // but don't add localhost to the graph to avoid streaming locally
                 final Vertex endpointVertex = new EndpointVertex(endpoint);
                 capacityGraph.insertVertex(rangeVertex);
                 capacityGraph.insertVertex(endpointVertex);
@@ -303,9 +304,6 @@ public class RangeFetchMapCalculator
             if (!filter.shouldInclude(endpoint))
                 return false;
         }
-
-        if(endpoint.equals(FBUtilities.getBroadcastAddress()))
-            return false;
 
         return !localDCCheck || isInLocalDC(endpoint);
     }
