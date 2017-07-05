@@ -104,9 +104,12 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
         if (System.currentTimeMillis() - lastExpiredCheck > options.expiredSSTableCheckFrequency)
         {
             logger.debug("TWCS expired check sufficiently far in the past, checking for fully expired SSTables");
-            expired = CompactionController.getFullyExpiredSSTables(cfs, uncompacting, options.ignoreOverlaps ?
-                                                                                      Collections.emptyList() :
-                                                                                      cfs.getOverlappingLiveSSTables(uncompacting), gcBefore);
+            expired = CompactionController.getFullyExpiredSSTables(cfs,
+                                                                   uncompacting,
+                                                                   options.ignoreOverlaps ? Collections.emptyList()
+                                                                                          : cfs.getOverlappingLiveSSTables(uncompacting),
+                                                                   gcBefore,
+                                                                   options.ignoreOverlaps);
             lastExpiredCheck = System.currentTimeMillis();
         }
         else

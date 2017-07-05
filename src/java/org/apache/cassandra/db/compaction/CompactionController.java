@@ -132,7 +132,7 @@ public class CompactionController implements AutoCloseable
 
     public Set<SSTableReader> getFullyExpiredSSTables()
     {
-        return getFullyExpiredSSTables(cfs, compacting, ignoreOverlaps() ? Collections.emptyList() : overlappingSSTables, gcBefore);
+        return getFullyExpiredSSTables(cfs, compacting, overlappingSSTables, gcBefore, ignoreOverlaps());
     }
 
     /**
@@ -153,6 +153,11 @@ public class CompactionController implements AutoCloseable
      */
     public static Set<SSTableReader> getFullyExpiredSSTables(ColumnFamilyStore cfStore, Iterable<SSTableReader> compacting, Iterable<SSTableReader> overlapping, int gcBefore)
     {
+        return getFullyExpiredSSTables(cfStore, compacting, overlapping, gcBefore, false);
+    }
+
+    public static Set<SSTableReader> getFullyExpiredSSTables(ColumnFamilyStore cfStore, Iterable<SSTableReader> compacting, Iterable<SSTableReader> overlapping, int gcBefore, boolean ignoreOverlaps)
+    {
         logger.trace("Checking droppable sstables in {}", cfStore);
 
         if (NEVER_PURGE_TOMBSTONES || compacting == null)
@@ -164,26 +169,27 @@ public class CompactionController implements AutoCloseable
         List<SSTableReader> candidates = new ArrayList<>();
 
         long minTimestamp = Long.MAX_VALUE;
-
-        for (SSTableReader sstable : overlapping)
+        if (!ignoreOverlaps)
         {
-            // Overlapping might include fully expired sstables. What we care about here is
-            // the min timestamp of the overlapping sstables that actually contain live data.
-            if (sstable.getSSTableMetadata().maxLocalDeletionTime >= gcBefore)
-                minTimestamp = Math.min(minTimestamp, sstable.getMinTimestamp());
+            for (SSTableReader sstable : overlapping)
+            {
+                // Overlapping might include fully expired sstables. What we care about here is
+                // the min timestamp of the overlapping sstables that actually contain live data.
+                if (sstable.getSSTableMetadata().maxLocalDeletionTime >= gcBefore)
+                    minTimestamp = Math.min(minTimestamp, sstable.getMinTimestamp());
+            }
+
+            for (SSTableReader candidate : compacting)
+            {
+                if (candidate.getSSTableMetadata().maxLocalDeletionTime < gcBefore)
+                    candidates.add(candidate);
+                else
+                    minTimestamp = Math.min(minTimestamp, candidate.getMinTimestamp());
+            }
+
+            for (Memtable memtable : cfStore.getTracker().getView().getAllMemtables())
+                minTimestamp = Math.min(minTimestamp, memtable.getMinTimestamp());
         }
-
-        for (SSTableReader candidate : compacting)
-        {
-            if (candidate.getSSTableMetadata().maxLocalDeletionTime < gcBefore)
-                candidates.add(candidate);
-            else
-                minTimestamp = Math.min(minTimestamp, candidate.getMinTimestamp());
-        }
-
-        for (Memtable memtable : cfStore.getTracker().getView().getAllMemtables())
-            minTimestamp = Math.min(minTimestamp, memtable.getMinTimestamp());
-
         // At this point, minTimestamp denotes the lowest timestamp of any relevant
         // SSTable or Memtable that contains a constructive value. candidates contains all the
         // candidates with no constructive values. The ones out of these that have
