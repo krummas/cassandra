@@ -102,6 +102,9 @@ public class CompactionController implements AutoCloseable
             return;
         }
 
+        if (ignoreOverlaps())
+            return;
+
         for (SSTableReader reader : overlappingSSTables)
         {
             if (reader.isMarkedCompacted())
@@ -114,7 +117,7 @@ public class CompactionController implements AutoCloseable
 
     private void refreshOverlaps()
     {
-        if (NEVER_PURGE_TOMBSTONES)
+        if (NEVER_PURGE_TOMBSTONES || ignoreOverlaps())
             return;
 
         if (this.overlappingSSTables != null)
@@ -129,7 +132,7 @@ public class CompactionController implements AutoCloseable
 
     public Set<SSTableReader> getFullyExpiredSSTables()
     {
-        return getFullyExpiredSSTables(cfs, compacting, overlappingSSTables, gcBefore);
+        return getFullyExpiredSSTables(cfs, compacting, ignoreOverlaps() ? Collections.emptyList() : overlappingSSTables, gcBefore);
     }
 
     /**
@@ -309,5 +312,10 @@ public class CompactionController implements AutoCloseable
     private FileDataInput openDataFile(SSTableReader reader)
     {
         return limiter != null ? reader.openDataReader(limiter) : reader.openDataReader();
+    }
+
+    protected boolean ignoreOverlaps()
+    {
+        return false;
     }
 }

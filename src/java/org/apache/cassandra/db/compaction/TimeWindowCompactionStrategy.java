@@ -82,7 +82,7 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
 
             LifecycleTransaction modifier = cfs.getTracker().tryModify(latestBucket, OperationType.COMPACTION);
             if (modifier != null)
-                return new CompactionTask(cfs, modifier, gcBefore);
+                return new TWCSCompactionTask(cfs, modifier, gcBefore, options.ignoreOverlaps);
         }
     }
 
@@ -104,7 +104,9 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
         if (System.currentTimeMillis() - lastExpiredCheck > options.expiredSSTableCheckFrequency)
         {
             logger.debug("TWCS expired check sufficiently far in the past, checking for fully expired SSTables");
-            expired = CompactionController.getFullyExpiredSSTables(cfs, uncompacting, cfs.getOverlappingLiveSSTables(uncompacting), gcBefore);
+            expired = CompactionController.getFullyExpiredSSTables(cfs, uncompacting, options.ignoreOverlaps ?
+                                                                                      Collections.emptyList() :
+                                                                                      cfs.getOverlappingLiveSSTables(uncompacting), gcBefore);
             lastExpiredCheck = System.currentTimeMillis();
         }
         else
@@ -336,7 +338,7 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
         LifecycleTransaction txn = cfs.getTracker().tryModify(filteredSSTables, OperationType.COMPACTION);
         if (txn == null)
             return null;
-        return Collections.singleton(new CompactionTask(cfs, txn, gcBefore));
+        return Collections.singleton(new TWCSCompactionTask(cfs, txn, gcBefore, options.ignoreOverlaps));
     }
 
     @Override
@@ -352,7 +354,7 @@ public class TimeWindowCompactionStrategy extends AbstractCompactionStrategy
             return null;
         }
 
-        return new CompactionTask(cfs, modifier, gcBefore).setUserDefined(true);
+        return new TWCSCompactionTask(cfs, modifier, gcBefore, options.ignoreOverlaps).setUserDefined(true);
     }
 
     public int getEstimatedRemainingTasks()
