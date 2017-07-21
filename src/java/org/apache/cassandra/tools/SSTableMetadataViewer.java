@@ -164,134 +164,143 @@ public class SSTableMetadataViewer
     {
         TableMetadata cfm = Util.metadataFromSSTable(descriptor);
         SSTableReader reader = SSTableReader.openNoValidation(descriptor, TableMetadataRef.forOfflineTools(cfm));
-        ISSTableScanner scanner = reader.getScanner();
-        long bytes = scanner.getLengthInBytes();
-        MinMaxPriorityQueue<ValuedByteBuffer> widestPartitions = MinMaxPriorityQueue
-                .orderedBy(VCOMP)
-                .maximumSize(5)
-                .create();
-        MinMaxPriorityQueue<ValuedByteBuffer> largestPartitions = MinMaxPriorityQueue
-                .orderedBy(VCOMP)
-                .maximumSize(5)
-                .create();
-        MinMaxPriorityQueue<ValuedByteBuffer> mostTombstones = MinMaxPriorityQueue
-                .orderedBy(VCOMP)
-                .maximumSize(5)
-                .create();
-        long partitionCount = 0;
-        long rowCount = 0;
-        long tombstoneCount = 0;
-        long cellCount = 0;
-        double totalCells = stats.totalColumnsSet;
-        int lastPercent = 0;
-        long lastPercentTime = 0;
-        while (scanner.hasNext())
+        try (ISSTableScanner scanner = reader.getScanner())
         {
-            UnfilteredRowIterator partition = scanner.next();
-
-            long psize = 0;
-            long pcount = 0;
-            int ptombcount = 0;
-            partitionCount++;
-            if (!partition.staticRow().isEmpty())
+            long bytes = scanner.getLengthInBytes();
+            MinMaxPriorityQueue<ValuedByteBuffer> widestPartitions = MinMaxPriorityQueue
+                                                                     .orderedBy(VCOMP)
+                                                                     .maximumSize(5)
+                                                                     .create();
+            MinMaxPriorityQueue<ValuedByteBuffer> largestPartitions = MinMaxPriorityQueue
+                                                                      .orderedBy(VCOMP)
+                                                                      .maximumSize(5)
+                                                                      .create();
+            MinMaxPriorityQueue<ValuedByteBuffer> mostTombstones = MinMaxPriorityQueue
+                                                                   .orderedBy(VCOMP)
+                                                                   .maximumSize(5)
+                                                                   .create();
+            long partitionCount = 0;
+            long rowCount = 0;
+            long tombstoneCount = 0;
+            long cellCount = 0;
+            double totalCells = stats.totalColumnsSet;
+            int lastPercent = 0;
+            long lastPercentTime = 0;
+            while (scanner.hasNext())
             {
-                rowCount++;
-                pcount++;
-                psize += partition.staticRow().dataSize();
-            }
-            if (!partition.partitionLevelDeletion().isLive())
-            {
-                tombstoneCount++;
-                ptombcount++;
-            }
-            while (partition.hasNext())
-            {
-                Unfiltered unfiltered = partition.next();
-                switch (unfiltered.kind())
+                try (UnfilteredRowIterator partition = scanner.next())
                 {
-                case ROW:
-                    rowCount++;
-                    Row row = (Row) unfiltered;
-                    psize += row.dataSize();
-                    pcount++;
-                    for (org.apache.cassandra.db.rows.Cell cell : row.cells())
+
+                    long psize = 0;
+                    long pcount = 0;
+                    int ptombcount = 0;
+                    partitionCount++;
+                    if (!partition.staticRow().isEmpty())
                     {
-                        cellCount++;
-                        double percentComplete = Math.min(1.0, cellCount / totalCells);
-                        if (lastPercent != (int) (percentComplete * 100) &&
-                                (System.currentTimeMillis() - lastPercentTime) > 1000)
+                        rowCount++;
+                        pcount++;
+                        psize += partition.staticRow().dataSize();
+                    }
+                    if (!partition.partitionLevelDeletion().isLive())
+                    {
+                        tombstoneCount++;
+                        ptombcount++;
+                    }
+                    while (partition.hasNext())
+                    {
+                        Unfiltered unfiltered = partition.next();
+                        switch (unfiltered.kind())
                         {
-                            lastPercentTime = System.currentTimeMillis();
-                            lastPercent = (int) (percentComplete * 100);
-                            if(color)
-                                out.printf("\r%sAnalyzing SSTable...  %s%s %s(%%%s)", BLUE, CYAN,
-                                    Util.progress(percentComplete, 30, unicode),
-                                    RESET,
-                                    (int) (percentComplete * 100));
-                            else
-                                out.printf("\rAnalyzing SSTable...  %s (%%%s)",
-                                        Util.progress(percentComplete, 30, unicode),
-                                        (int) (percentComplete * 100));
-                            out.flush();
-                        }
-                        if (cell.isTombstone())
-                        {
-                            tombstoneCount++;
-                            ptombcount++;
+                            case ROW:
+                                rowCount++;
+                                Row row = (Row) unfiltered;
+                                psize += row.dataSize();
+                                pcount++;
+                                for (org.apache.cassandra.db.rows.Cell cell : row.cells())
+                                {
+                                    cellCount++;
+                                    double percentComplete = Math.min(1.0, cellCount / totalCells);
+                                    if (lastPercent != (int) (percentComplete * 100) &&
+                                        (System.currentTimeMillis() - lastPercentTime) > 1000)
+                                    {
+                                        lastPercentTime = System.currentTimeMillis();
+                                        lastPercent = (int) (percentComplete * 100);
+                                        if (color)
+                                            out.printf("\r%sAnalyzing SSTable...  %s%s %s(%%%s)", BLUE, CYAN,
+                                                       Util.progress(percentComplete, 30, unicode),
+                                                       RESET,
+                                                       (int) (percentComplete * 100));
+                                        else
+                                            out.printf("\rAnalyzing SSTable...  %s (%%%s)",
+                                                       Util.progress(percentComplete, 30, unicode),
+                                                       (int) (percentComplete * 100));
+                                        out.flush();
+                                    }
+                                    if (cell.isTombstone())
+                                    {
+                                        tombstoneCount++;
+                                        ptombcount++;
+                                    }
+                                }
+                                break;
+                            case RANGE_TOMBSTONE_MARKER:
+                                tombstoneCount++;
+                                ptombcount++;
+                                break;
                         }
                     }
-                    break;
-                case RANGE_TOMBSTONE_MARKER:
-                    tombstoneCount++;
-                    ptombcount++;
-                    break;
+
+                    widestPartitions.add(new ValuedByteBuffer(partition.partitionKey().getKey(), pcount));
+                    largestPartitions.add(new ValuedByteBuffer(partition.partitionKey().getKey(), psize));
+                    mostTombstones.add(new ValuedByteBuffer(partition.partitionKey().getKey(), ptombcount));
                 }
             }
-            widestPartitions.add(new ValuedByteBuffer(partition.partitionKey().getKey(), pcount));
-            largestPartitions.add(new ValuedByteBuffer(partition.partitionKey().getKey(), psize));
-            mostTombstones.add(new ValuedByteBuffer(partition.partitionKey().getKey(), ptombcount));
-        }
-        out.printf("\r%80s\r", " ");
-        field("Size", bytes);
-        field("Partitions", partitionCount);
-        field("Rows", rowCount);
-        field("Tombstones", tombstoneCount);
-        field("Cells", cellCount);
-        field("Widest Partitions", "");
-        Util.iterToStream(widestPartitions.iterator()).sorted(VCOMP).forEach(p -> {
-            out.println("  " + scannedOverviewOutput(cfm.partitionKeyType.getString(p.buffer), p.value));
-        });
-        field("Largest Partitions", "");
-        Util.iterToStream(largestPartitions.iterator()).sorted(VCOMP).forEach(p -> {
-            out.print("  ");
-            out.print(scannedOverviewOutput(cfm.partitionKeyType.getString(p.buffer), p.value));
-            if (color)
-                out.print(WHITE);
-            out.print(" (");
-            out.print(toByteString(p.value));
-            out.print(")");
-            if (color)
-                out.print(RESET);
-            out.println();
-        });
-        StringBuilder tleaders = new StringBuilder();
-        Util.iterToStream(mostTombstones.iterator()).sorted(VCOMP).forEach(p -> {
-            if (p.value > 0)
+
+            out.printf("\r%80s\r", " ");
+            field("Size", bytes);
+            field("Partitions", partitionCount);
+            field("Rows", rowCount);
+            field("Tombstones", tombstoneCount);
+            field("Cells", cellCount);
+            field("Widest Partitions", "");
+            Util.iterToStream(widestPartitions.iterator()).sorted(VCOMP).forEach(p ->
+                                                                                 {
+                                                                                     out.println("  " + scannedOverviewOutput(cfm.partitionKeyType.getString(p.buffer), p.value));
+                                                                                 });
+            field("Largest Partitions", "");
+            Util.iterToStream(largestPartitions.iterator()).sorted(VCOMP).forEach(p ->
+                                                                                  {
+                                                                                      out.print("  ");
+                                                                                      out.print(scannedOverviewOutput(cfm.partitionKeyType.getString(p.buffer), p.value));
+                                                                                      if (color)
+                                                                                          out.print(WHITE);
+                                                                                      out.print(" (");
+                                                                                      out.print(toByteString(p.value));
+                                                                                      out.print(")");
+                                                                                      if (color)
+                                                                                          out.print(RESET);
+                                                                                      out.println();
+                                                                                  });
+            StringBuilder tleaders = new StringBuilder();
+            Util.iterToStream(mostTombstones.iterator()).sorted(VCOMP).forEach(p ->
+                                                                               {
+                                                                                   if (p.value > 0)
+                                                                                   {
+                                                                                       tleaders.append("  ");
+                                                                                       tleaders.append(scannedOverviewOutput(cfm.partitionKeyType.getString(p.buffer), p.value));
+                                                                                       tleaders.append(System.lineSeparator());
+                                                                                   }
+                                                                               });
+            String tombstoneLeaders = tleaders.toString();
+            if (tombstoneLeaders.length() > 10)
             {
-                tleaders.append("  ");
-                tleaders.append(scannedOverviewOutput(cfm.partitionKeyType.getString(p.buffer), p.value));
-                tleaders.append(System.lineSeparator());
+                field("Tombstone Leaders", "");
+                out.print(tombstoneLeaders);
             }
-        });
-        String tombstoneLeaders = tleaders.toString();
-        if (tombstoneLeaders.length() > 10)
-        {
-            field("Tombstone Leaders", "");
-            out.print(tombstoneLeaders);
         }
     }
 
-    public void printSStableMetadata(String fname, boolean scan) throws IOException
+    private void printSStableMetadata(String fname, boolean scan) throws IOException
     {
         Descriptor descriptor = Descriptor.fromFilename(fname);
         Map<MetadataType, MetadataComponent> metadata = descriptor.getMetadataSerializer()

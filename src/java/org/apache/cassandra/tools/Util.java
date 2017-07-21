@@ -54,16 +54,16 @@ import com.google.common.collect.Lists;
 @SuppressWarnings("serial")
 public final class Util
 {
-    public static final String RESET = "\u001B[0m";
-    public static final String BLUE = "\u001B[34m";
-    public static final String CYAN = "\u001B[36m";
-    public static final String WHITE = "\u001B[37m";
+    static final String RESET = "\u001B[0m";
+    static final String BLUE = "\u001B[34m";
+    static final String CYAN = "\u001B[36m";
+    static final String WHITE = "\u001B[37m";
     private static final List<String> ANSI_COLORS = Lists.newArrayList(RESET, BLUE, CYAN, WHITE);
 
-    private static String FULL_BAR_UNICODE = Strings.repeat("\u2593", 30);
-    private static String EMPTY_BAR_UNICODE = Strings.repeat("\u2591", 30);
-    private static String FULL_BAR_ASCII = Strings.repeat("#", 30);
-    private static String EMPTY_BAR_ASCII = Strings.repeat("-", 30);
+    private static final String FULL_BAR_UNICODE = Strings.repeat("\u2593", 30);
+    private static final String EMPTY_BAR_UNICODE = Strings.repeat("\u2591", 30);
+    private static final String FULL_BAR_ASCII = Strings.repeat("#", 30);
+    private static final String EMPTY_BAR_ASCII = Strings.repeat("-", 30);
 
     private static final TreeMap<Double, String> BARS_UNICODE = new TreeMap<Double, String>()
     {{
@@ -92,8 +92,8 @@ public final class Util
     {
         assert percentComplete >= 0 && percentComplete <= 1;
         int cols = (int) (percentComplete * width);
-        return (unicode? FULL_BAR_UNICODE : FULL_BAR_ASCII).substring(width - cols) +
-               (unicode? EMPTY_BAR_UNICODE : EMPTY_BAR_ASCII ).substring(cols);
+        return (unicode ? FULL_BAR_UNICODE : FULL_BAR_ASCII).substring(width - cols) +
+               (unicode ? EMPTY_BAR_UNICODE : EMPTY_BAR_ASCII ).substring(cols);
     }
 
     public static String stripANSI(String string)
@@ -126,8 +126,8 @@ public final class Util
         public long max;
         public long min;
         public double sum;
-        public int maxCountLength = 5;
-        public int maxOffsetLength = 5;
+        int maxCountLength = 5;
+        int maxOffsetLength = 5;
         Map<? extends Number, Long> histogram;
         Function<Long, String> offsetName;
         Function<Long, String> countName;
@@ -199,43 +199,43 @@ public final class Util
             int intWidth = (int) (barVal * 1.0 / max * length);
             double remainderWidth = (barVal * 1.0 / max * length) - intWidth;
             sb.append(Strings.repeat(barmap(unicode).get(1.0), intWidth));
+
             if (barmap(unicode).floorKey(remainderWidth) != null)
-            {
                 sb.append(barmap(unicode).get(barmap(unicode).floorKey(remainderWidth)));
-            }
-            if(!Strings.isNullOrEmpty(color)) {
+
+            if(!Strings.isNullOrEmpty(color))
                 sb.append(RESET);
-            }
+
             return sb.toString();
         }
 
         public void printHistogram(PrintStream out, boolean color, boolean unicode)
         {
             // String.format includes ansi sequences in the count, so need to modify the lengths
-            int offsetTitleLength = color? maxOffsetLength + BLUE.length() : maxOffsetLength;
+            int offsetTitleLength = color ? maxOffsetLength + BLUE.length() : maxOffsetLength;
             out.printf("   %-" + offsetTitleLength + "s %s %-" + maxCountLength + "s  %s  %sHistogram%s %n",
-                       color? BLUE+title: title,
-                       color? CYAN+"|"+BLUE : "|",
+                       color ? BLUE + title : title,
+                       color ? CYAN + "|" + BLUE : "|",
                        "Count",
                        wrapQuiet("%", color),
-                       color? BLUE: "",
-                       color? RESET: "");
+                       color ? BLUE : "",
+                       color ? RESET : "");
             histogram.entrySet().stream().forEach(e ->
             {
                 String offset = offsetName.apply(e.getKey().longValue());
                 long count = e.getValue();
                 String histo = bar(count, 30, color? WHITE : null, unicode);
-                int mol = color? maxOffsetLength + countANSI(offset) : maxOffsetLength;
-                int mcl = color? maxCountLength + countANSI(countName.apply(count)) : maxCountLength;
+                int mol = color ? maxOffsetLength + countANSI(offset) : maxOffsetLength;
+                int mcl = color ? maxCountLength + countANSI(countName.apply(count)) : maxCountLength;
                 out.printf("   %-" + mol + "s %s %" + mcl + "s %s %s%n",
                            offset,
-                           color? CYAN+"|"+RESET : "|",
+                           color ? CYAN + "|" + RESET : "|",
                            countName.apply(count),
                            wrapQuiet(String.format("%3s", (int) (100 * ((double) count / sum))), color),
                            histo);
             });
             EstimatedHistogram eh = new EstimatedHistogram(165);
-            for(Entry<? extends Number, Long> e : histogram.entrySet())
+            for (Entry<? extends Number, Long> e : histogram.entrySet())
             {
                 eh.add(e.getKey().longValue(), e.getValue());
             }
@@ -250,14 +250,14 @@ public final class Util
                 eh.min(),
                 eh.max(),
             };
-            out.println((color? BLUE: "") + "   Percentiles" + (color? RESET: ""));
+            out.println((color ? BLUE : "") + "   Percentiles" + (color ? RESET : ""));
 
             for (int i = 0; i < percentiles.length; i++)
             {
                 out.println(format("   %s%-10s%s%s",
-                                   (color? BLUE: ""),
+                                   (color ? BLUE : ""),
                                    percentiles[i],
-                                   (color? RESET: ""),
+                                   (color ? RESET : ""),
                                    offsetName.apply(data[i])));
             }
         }
