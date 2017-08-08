@@ -1079,7 +1079,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             locations = cfs.getDirectories().getWriteableLocations();
             for (int i = 0; i < locations.length; i++)
             {
-                if (rangeAwareCompaction)
+                if (params.rangeAwareCompaction())
                 {
                     repaired.add(new RangeAwareCompactionStrategy(cfs, params));
                     unrepaired.add(new RangeAwareCompactionStrategy(cfs, params));
@@ -1094,7 +1094,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
         else
         {
-            if (rangeAwareCompaction)
+            if (params.rangeAwareCompaction())
             {
                 repaired.add(new RangeAwareCompactionStrategy(cfs, params));
                 unrepaired.add(new RangeAwareCompactionStrategy(cfs, params));
@@ -1107,6 +1107,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             pendingRepairs.add(new PendingRepairManager(cfs, params));
         }
         this.params = params;
+        this.rangeAwareCompaction = params.rangeAwareCompaction();
     }
 
     public CompactionParams getCompactionParams()
