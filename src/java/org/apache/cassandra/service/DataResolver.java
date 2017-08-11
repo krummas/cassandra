@@ -220,7 +220,7 @@ public class DataResolver extends ResponseResolver
                 waitTimeNanos = TimeUnit.MILLISECONDS.toNanos((long)(DatabaseDescriptor.getReadRpcTimeout() / 4.0));
             }
 
-            List<AsyncOneResponse> timeOuts = awaitRepairResponses(repairResponseRequestMap.keySet().stream().collect(Collectors.toList()), waitTimeNanos);
+            List<AsyncOneResponse> timeOuts = awaitRepairResponses(repairResponseRequestMap.keySet(), waitTimeNanos);
 
             int blockFor = consistency.blockFor(keyspace);
             long timeOutHostsCnt = distinctHostNum(timeOuts);
@@ -248,15 +248,17 @@ public class DataResolver extends ResponseResolver
                 }
 
                 List<AsyncOneResponse> retryTimeOut = awaitRepairResponses(repairRetryResponses, waitTimeNanos);
-                if (retryTimeOut.isEmpty()) return;
+                if (retryTimeOut.isEmpty())
+                    return;
 
                 //retry can not help, let's try previous repairResponse again to see whether there is one more done.
-                if (timeOutHostsCnt - distinctHostNum(awaitRepairResponses(repairResponseRequestMap.keySet().stream().collect(Collectors.toList()), waitTimeNanos)) >= 1)
-                {
+                if (timeOutHostsCnt - distinctHostNum(awaitRepairResponses(repairResponseRequestMap.keySet(), waitTimeNanos)) >= 1)
                     return;
-                }
+
                 throw new TimeoutException("one more read repair can not help and check previous repair response again can not help either");
-            } else {
+            }
+            else
+            {
                 throw new TimeoutException("read repair timeout and will not retry read repair, diff count = " + (responseCntSnapshot - timeOutHostsCnt));
             }
         }
@@ -286,18 +288,22 @@ public class DataResolver extends ResponseResolver
          * @param timeToWaitNanos
          * @return a list of response which have not responded in timeToWaitNanos window
          */
-        private List<AsyncOneResponse> awaitRepairResponses(final List<AsyncOneResponse> responses, final long timeToWaitNanos)
+        private List<AsyncOneResponse> awaitRepairResponses(final Collection<AsyncOneResponse> responses, final long timeToWaitNanos)
         {
+            if (responses.isEmpty())
+                return Collections.emptyList();
+
             List<AsyncOneResponse> ret = new ArrayList<>();
             long start = System.nanoTime();
-            for(final AsyncOneResponse repairResponse : responses)
+            for (final AsyncOneResponse repairResponse : responses)
             {
                 try
                 {
                     long alreadyPassedNanos = System.nanoTime() - start ;
                     repairResponse.get(timeToWaitNanos - alreadyPassedNanos > 0 ? timeToWaitNanos - alreadyPassedNanos : 0,
                                        TimeUnit.NANOSECONDS);
-                } catch (final TimeoutException e)
+                }
+                catch (final TimeoutException e)
                 {
                     ret.add(repairResponse);
                 }
@@ -533,7 +539,6 @@ public class DataResolver extends ResponseResolver
                 }
             }
         }
-
     }
 
     private class ShortReadProtection extends Transformation<UnfilteredRowIterator>

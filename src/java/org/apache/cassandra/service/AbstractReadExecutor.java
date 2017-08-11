@@ -18,7 +18,6 @@
 package org.apache.cassandra.service;
 
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -309,7 +308,6 @@ public abstract class AbstractReadExecutor
 
     public static class NeverSpeculatingReadExecutor extends AbstractReadExecutor
     {
-
         /**
          * If never speculating due to lack of replicas
          * log it is as a failure if it should have happened
