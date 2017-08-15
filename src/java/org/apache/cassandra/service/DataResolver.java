@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+import io.netty.util.concurrent.FastThreadLocal;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.schema.ColumnMetadata;
@@ -44,10 +45,10 @@ import org.apache.cassandra.utils.Pair;
 
 public class DataResolver extends ResponseResolver
 {
-    private final Map<AsyncOneResponse, Pair<MessageOut, InetAddress>> repairResponseRequestMap = new HashMap<>();
+    private final FastThreadLocal<Map<AsyncOneResponse, Pair<MessageOut, InetAddress>>> repairResponseRequestMap = new FastThreadLocal<>();
     private final long queryStartNanoTime;
     private Optional<InetAddress> spareReadRepairNode;
-    private int responseCntSnapshot;
+    private final FastThreadLocal<Integer> responseCntSnapshot = new FastThreadLocal<>();
 
     public DataResolver(Keyspace keyspace, ReadCommand command, ConsistencyLevel consistency, int maxResponseCount, long queryStartNanoTime)
     {
@@ -78,7 +79,7 @@ public class DataResolver extends ResponseResolver
         // reponse count and below "responseCntSnapshot" is used to calculate whether read repair is ok or not
         // since response list can get more response later, but we only iterator "responseCntSnapshot" for any future
         // operations including read repair retry. So we have to save this count in current state.
-        responseCntSnapshot = count;
+        responseCntSnapshot.set(count);
         List<UnfilteredPartitionIterator> iters = new ArrayList<>(count);
         InetAddress[] sources = new InetAddress[count];
         for (int i = 0; i < count; i++)
@@ -173,14 +174,18 @@ public class DataResolver extends ResponseResolver
             try
             {
                 waitRepairToFinishWithPossibleRetry();
+                repairResponseRequestMap.remove();
+                responseCntSnapshot.remove();
             }
             catch (TimeoutException ex)
             {
+                repairResponseRequestMap.remove();
+                responseCntSnapshot.remove();
                 // We got all responses, but timed out while repairing
                 int blockFor = consistency.blockFor(keyspace);
                 if (Tracing.isTracing())
                     Tracing.trace("Timed out while read-repairing after receiving all {} data and digest responses", blockFor);
-                logger.debug("Timeout while read-repairing after receiving all {} data and digest responses with exception {]", blockFor, ex);
+                logger.debug("Timeout while read-repairing after receiving all {} data and digest responses with exception {}", blockFor, ex);
                 throw new ReadTimeoutException(consistency, blockFor-1, blockFor, true);
             }
         }
@@ -201,7 +206,7 @@ public class DataResolver extends ResponseResolver
 
         private void waitRepairToFinishWithPossibleRetry() throws TimeoutException
         {
-            if (repairResponseRequestMap.isEmpty()) return;
+            if (!repairResponseRequestMap.isSet()) return;
 
             if (!consistency.satisfiesQuorumFor(keyspace))
             {
@@ -220,11 +225,11 @@ public class DataResolver extends ResponseResolver
                 waitTimeNanos = TimeUnit.MILLISECONDS.toNanos((long)(DatabaseDescriptor.getReadRpcTimeout() / 4.0));
             }
 
-            List<AsyncOneResponse> timeOuts = awaitRepairResponses(repairResponseRequestMap.keySet(), waitTimeNanos);
+            List<AsyncOneResponse> timeOuts = awaitRepairResponses(repairResponseRequestMap.get().keySet(), waitTimeNanos);
 
             int blockFor = consistency.blockFor(keyspace);
             long timeOutHostsCnt = distinctHostNum(timeOuts);
-            if (responseCntSnapshot - timeOutHostsCnt >= blockFor)
+            if (responseCntSnapshot.get() - timeOutHostsCnt >= blockFor)
             {
                 //it's guaranteed to have at least blockFor replicas succeeded, then we don't need to worry about whether
                 //read repair is done or not. "monotonic read" is already guaranteed
@@ -237,13 +242,13 @@ public class DataResolver extends ResponseResolver
             }
 
             // we only do extra read repair if we only need to do one more read repair to satisfy blockFor
-            if (responseCntSnapshot - timeOutHostsCnt == blockFor - 1)
+            if (responseCntSnapshot.get() - timeOutHostsCnt == blockFor - 1)
             {
                 List<AsyncOneResponse> repairRetryResponses = new ArrayList<>();
                 for(AsyncOneResponse response : timeOuts)
                 {
                     Tracing.trace("retry read-repair-mutation to {}", spareReadRepairNode.get());
-                    repairRetryResponses.add(MessagingService.instance().sendRR(repairResponseRequestMap.get(response).left,
+                    repairRetryResponses.add(MessagingService.instance().sendRR(repairResponseRequestMap.get().get(response).left,
                                                                                 spareReadRepairNode.get()));
                 }
 
@@ -252,14 +257,14 @@ public class DataResolver extends ResponseResolver
                     return;
 
                 //retry can not help, let's try previous repairResponse again to see whether there is one more done.
-                if (timeOutHostsCnt - distinctHostNum(awaitRepairResponses(repairResponseRequestMap.keySet(), waitTimeNanos)) >= 1)
+                if (timeOutHostsCnt - distinctHostNum(awaitRepairResponses(repairResponseRequestMap.get().keySet(), waitTimeNanos)) >= 1)
                     return;
 
                 throw new TimeoutException("one more read repair can not help and check previous repair response again can not help either");
             }
             else
             {
-                throw new TimeoutException("read repair timeout and will not retry read repair, diff count = " + (responseCntSnapshot - timeOutHostsCnt));
+                throw new TimeoutException("read repair timeout and will not retry read repair, diff count = " + (responseCntSnapshot.get() - timeOutHostsCnt));
             }
         }
 
@@ -279,7 +284,7 @@ public class DataResolver extends ResponseResolver
          */
         private long distinctHostNum(final List<AsyncOneResponse> responses)
         {
-            return responses.stream().map(response -> repairResponseRequestMap.get(response).right).distinct().count();
+            return responses.stream().map(response -> repairResponseRequestMap.get().get(response).right).distinct().count();
         }
 
         /**
@@ -535,7 +540,15 @@ public class DataResolver extends ResponseResolver
                     // on-timeout behavior that a "real" mutation gets
                     Tracing.trace("Sending read-repair-mutation to {}", sources[i]);
                     MessageOut<Mutation> msg = new Mutation(repairs[i]).createMessage(MessagingService.Verb.READ_REPAIR);
-                    repairResponseRequestMap.put(MessagingService.instance().sendRR(msg, sources[i]), Pair.create(msg, sources[i]));
+                    if (!repairResponseRequestMap.isSet()) {
+                        Map<AsyncOneResponse, Pair<MessageOut, InetAddress>> map = new HashMap<>();
+                        map.put(MessagingService.instance().sendRR(msg, sources[i]), Pair.create(msg, sources[i]));
+                        repairResponseRequestMap.set(map);
+                    }
+                    else
+                    {
+                        repairResponseRequestMap.get().put(MessagingService.instance().sendRR(msg, sources[i]), Pair.create(msg, sources[i]));
+                    }
                 }
             }
         }
@@ -688,6 +701,6 @@ public class DataResolver extends ResponseResolver
 
     public Map<AsyncOneResponse, Pair<MessageOut, InetAddress>> getRepairResponseRequestMap()
     {
-        return new HashMap<>(repairResponseRequestMap);
+        return new HashMap<>(repairResponseRequestMap.get());
     }
 }
