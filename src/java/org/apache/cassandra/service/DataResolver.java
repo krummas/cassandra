@@ -174,19 +174,20 @@ public class DataResolver extends ResponseResolver
             try
             {
                 waitRepairToFinishWithPossibleRetry();
-                repairResponseRequestMap.remove();
-                responseCntSnapshot.remove();
             }
             catch (TimeoutException ex)
             {
-                repairResponseRequestMap.remove();
-                responseCntSnapshot.remove();
                 // We got all responses, but timed out while repairing
                 int blockFor = consistency.blockFor(keyspace);
                 if (Tracing.isTracing())
                     Tracing.trace("Timed out while read-repairing after receiving all {} data and digest responses", blockFor);
                 logger.debug("Timeout while read-repairing after receiving all {} data and digest responses with exception {}", blockFor, ex);
                 throw new ReadTimeoutException(consistency, blockFor-1, blockFor, true);
+            }
+            finally
+            {
+                repairResponseRequestMap.remove();
+                responseCntSnapshot.remove();
             }
         }
 
@@ -215,17 +216,9 @@ public class DataResolver extends ResponseResolver
                 return;
             }
 
-            ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(command.metadata().id);
-            long waitTimeNanos = cfs.sampleLatencyNanos;
+            long waitTimeMs = DatabaseDescriptor.getWriteRpcTimeout();
 
-            // no latency information, or we're overloaded
-            if (waitTimeNanos > TimeUnit.MILLISECONDS.toNanos(command.getTimeout()) || waitTimeNanos == 0)
-            {
-                // try to choose a default value
-                waitTimeNanos = TimeUnit.MILLISECONDS.toNanos((long)(DatabaseDescriptor.getReadRpcTimeout() / 4.0));
-            }
-
-            List<AsyncOneResponse> timeOuts = awaitRepairResponses(repairResponseRequestMap.get().keySet(), waitTimeNanos);
+            List<AsyncOneResponse> timeOuts = awaitRepairResponses(repairResponseRequestMap.get().keySet(), waitTimeMs);
 
             int blockFor = consistency.blockFor(keyspace);
             long timeOutHostsCnt = distinctHostNum(timeOuts);
@@ -252,12 +245,12 @@ public class DataResolver extends ResponseResolver
                                                                                 spareReadRepairNode.get()));
                 }
 
-                List<AsyncOneResponse> retryTimeOut = awaitRepairResponses(repairRetryResponses, waitTimeNanos);
+                List<AsyncOneResponse> retryTimeOut = awaitRepairResponses(repairRetryResponses, waitTimeMs);
                 if (retryTimeOut.isEmpty())
                     return;
 
                 //retry can not help, let's try previous repairResponse again to see whether there is one more done.
-                if (timeOutHostsCnt - distinctHostNum(awaitRepairResponses(repairResponseRequestMap.get().keySet(), waitTimeNanos)) >= 1)
+                if (timeOutHostsCnt - distinctHostNum(awaitRepairResponses(repairResponseRequestMap.get().keySet(), waitTimeMs)) >= 1)
                     return;
 
                 throw new TimeoutException("one more read repair can not help and check previous repair response again can not help either");
@@ -290,23 +283,20 @@ public class DataResolver extends ResponseResolver
         /**
          *
          * @param responses
-         * @param timeToWaitNanos
+         * @param timeToWaitMs
          * @return a list of response which have not responded in timeToWaitNanos window
          */
-        private List<AsyncOneResponse> awaitRepairResponses(final Collection<AsyncOneResponse> responses, final long timeToWaitNanos)
+        private List<AsyncOneResponse> awaitRepairResponses(final Collection<AsyncOneResponse> responses, final long timeToWaitMs)
         {
             if (responses.isEmpty())
                 return Collections.emptyList();
 
             List<AsyncOneResponse> ret = new ArrayList<>();
-            long start = System.nanoTime();
             for (final AsyncOneResponse repairResponse : responses)
             {
                 try
                 {
-                    long alreadyPassedNanos = System.nanoTime() - start ;
-                    repairResponse.get(timeToWaitNanos - alreadyPassedNanos > 0 ? timeToWaitNanos - alreadyPassedNanos : 0,
-                                       TimeUnit.NANOSECONDS);
+                    repairResponse.get(timeToWaitMs, TimeUnit.MILLISECONDS);
                 }
                 catch (final TimeoutException e)
                 {
