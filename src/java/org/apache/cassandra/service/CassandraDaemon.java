@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.ScheduledExecutors;
+import org.apache.cassandra.metrics.TombstoneMetrics;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.Schema;
@@ -183,6 +184,8 @@ public class CassandraDaemon
         maybeInitJmx();
 
         Mx4jTool.maybeLoad();
+
+        TombstoneMetrics.init();
 
         ThreadAwareSecurityManager.install();
 

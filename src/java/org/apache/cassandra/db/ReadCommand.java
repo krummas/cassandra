@@ -38,6 +38,7 @@ import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.metrics.TableMetrics;
+import org.apache.cassandra.metrics.TombstoneMetrics;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.schema.Schema;
@@ -448,6 +449,7 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
                 {
                     String query = ReadCommand.this.toCQLString();
                     Tracing.trace("Scanned over {} tombstones for query {}; query aborted (see tombstone_failure_threshold)", failureThreshold, query);
+                    TombstoneMetrics.instance.markFailure();
                     throw new TombstoneOverwhelmingException(tombstones, query, ReadCommand.this.metadata(), currentKey, clustering);
                 }
             }
@@ -465,6 +467,7 @@ public abstract class ReadCommand extends MonitorableImpl implements ReadQuery
                 {
                     String msg = String.format("Read %d live rows and %d tombstone cells for query %1.512s (see tombstone_warn_threshold)", liveRows, tombstones, ReadCommand.this.toCQLString());
                     ClientWarn.instance.warn(msg);
+                    TombstoneMetrics.instance.markWarning();
                     logger.warn(msg);
                 }
 
