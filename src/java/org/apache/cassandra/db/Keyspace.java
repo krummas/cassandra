@@ -344,6 +344,9 @@ public class Keyspace
                                                                                     StorageService.instance.getTokenMetadata(),
                                                                                     DatabaseDescriptor.getEndpointSnitch(),
                                                                                     ksm.params.replication.options);
+
+        logger.debug("New replication strategy instance - invalidating disk boundary cache");
+        StorageService.instance.getDiskBoundaryManager().invalidateCache();
     }
 
     // best invoked on the compaction mananger.

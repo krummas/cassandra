@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
+import org.apache.cassandra.db.DiskBoundaryManager;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.compaction.CompactionTask;
@@ -88,8 +89,9 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         maxAge = CompactionTask.getMaxDataAge(nonExpiredSSTables);
         sstableWriter = SSTableRewriter.construct(cfs, txn, keepOriginals, maxAge);
         minRepairedAt = CompactionTask.getMinRepairedAt(nonExpiredSSTables);
-        locations = cfs.getDirectories().getWriteableLocations();
-        diskBoundaries = StorageService.getDiskBoundaries(cfs);
+        DiskBoundaryManager.DiskBoundaryValue dbv = StorageService.instance.getDiskBoundaryManager().getDiskBoundaries(cfs, cfs.getDirectories());
+        diskBoundaries = dbv.getPositions();
+        locations = dbv.getDirectories();
         locationIndex = -1;
     }
 

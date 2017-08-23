@@ -31,6 +31,7 @@ import javax.management.ObjectName;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
@@ -90,6 +91,7 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
         if (instance.unreadableDirectories.add(directory))
         {
             logger.warn("Blacklisting {} for reads", directory);
+            StorageService.instance.getDiskBoundaryManager().invalidateCache();
             return directory;
         }
         return null;
@@ -107,6 +109,7 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
         if (instance.unwritableDirectories.add(directory))
         {
             logger.warn("Blacklisting {} for writes", directory);
+            StorageService.instance.getDiskBoundaryManager().invalidateCache();
             return directory;
         }
         return null;
