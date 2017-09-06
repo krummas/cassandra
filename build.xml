@@ -752,6 +752,7 @@
     <!-- error prone code analyzer targets -->
     <target depends="init,gen-cql3-grammar,generate-cql-html,generate-jflex-java"
             name="build-errorprone">
+        <echo message="Running Error Prone analyzer with ${java.vm.name} ${java.version}"/>
         <javac fork="true"
                debug="true" debuglevel="${debuglevel}" encoding="utf-8"
                destdir="${build.classes.main}" includeantruntime="false" source="${source.version}" target="${target.version}"
