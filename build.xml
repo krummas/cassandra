@@ -738,10 +738,6 @@
                memorymaximumsize="512M">
             <src path="${build.src.java}"/>
             <src path="${build.src.gen-java}"/>
-            <errorprone/>
-            <compilerarg value="-Xep:MissingOverride:OFF"/>
-            <compilerarg value="-Xep:ReferenceEquality:OFF"/>
-            <compilerarg value="-XepAllErrorsAsWarnings"/>
             <compilerarg value="-XDignore.symbol.file"/>
             <compilerarg value="-Xbootclasspath/p:${build.src.jdkoverride}"/>
             <classpath refid="cassandra.classpath"/>
@@ -752,6 +748,46 @@
         </copy>
 	<copy todir="${basedir}/conf" file="${build.classes.main}/META-INF/hotspot_compiler"/>
     </target>
+
+    <!-- error prone code analyzer targets -->
+    <target depends="init,gen-cql3-grammar,generate-cql-html,generate-jflex-java"
+            name="build-errorprone">
+        <javac fork="true"
+               debug="true" debuglevel="${debuglevel}" encoding="utf-8"
+               destdir="${build.classes.main}" includeantruntime="false" source="${source.version}" target="${target.version}"
+               memorymaximumsize="512M">
+            <src path="${build.src.java}"/>
+            <src path="${build.src.gen-java}"/>
+            <compilerarg value="-Xep:MissingOverride:OFF"/>
+            <compilerarg value="-Xep:ReferenceEquality:OFF"/>
+            <compilerarg value="-XepAllErrorsAsWarnings"/>
+            <compilerarg value="-XDignore.symbol.file"/>
+            <compilerarg value="-Xbootclasspath/p:${build.src.jdkoverride}"/>
+            <classpath refid="cassandra.classpath"/>
+            <errorprone/>
+        </javac>
+    </target>
+
+    <target depends="build-errorprone"
+            name="build-errorprone-test">
+        <javac fork="true" compiler="modern"
+               debug="true" debuglevel="${debuglevel}" encoding="utf-8"
+               destdir="${test.classes}" includeantruntime="true" source="${source.version}" target="${target.version}">
+          <src path="${test.unit.src}"/>
+          <src path="${test.long.src}"/>
+          <src path="${test.burn.src}"/>
+          <src path="${test.microbench.src}"/>
+          <compilerarg value="-Xep:MissingOverride:OFF"/>
+          <compilerarg value="-Xep:ReferenceEquality:OFF"/>
+          <compilerarg value="-XepAllErrorsAsWarnings"/>
+          <compilerarg value="-XDignore.symbol.file"/>
+          <classpath refid="cassandra.classpath"/>
+          <errorprone/>
+        </javac>
+    </target>
+
+    <target name="errorprone"
+        depends="maven-ant-tasks-retrieve-build,build-errorprone-test" description="Analyze Cassandra classes using Error Prone"/>
 
     <!-- Stress build file -->
     <property name="stress.build.src" value="${basedir}/tools/stress/src" />
@@ -1058,7 +1094,6 @@
   <target name="build-test" depends="build" description="Compile test classes">
     <javac
      compiler="modern"
-     fork="yes"
      debug="true"
      debuglevel="${debuglevel}"
      destdir="${test.classes}"
@@ -1069,10 +1104,6 @@
      <classpath>
         <path refid="cassandra.classpath"/>
      </classpath>
-     <errorprone/>
-     <compilerarg value="-Xep:MissingOverride:OFF"/>
-     <compilerarg value="-Xep:ReferenceEquality:OFF"/>
-     <compilerarg value="-XepAllErrorsAsWarnings"/>
      <compilerarg value="-XDignore.symbol.file"/>
      <src path="${test.unit.src}"/>
      <src path="${test.long.src}"/>
