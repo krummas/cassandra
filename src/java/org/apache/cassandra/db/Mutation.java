@@ -34,6 +34,7 @@ import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.rows.SerializationHelper;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
@@ -282,8 +283,10 @@ public class Mutation implements IMutation
 
     public static class MutationSerializer implements IVersionedSerializer<Mutation>
     {
-        public void serialize(Mutation mutation, DataOutputPlus out, int version) throws IOException
+        public void serialize(Mutation mutation, DataOutputPlus x, int version) throws IOException
         {
+            int serializedSize = (int)serializedSize(mutation, version);
+            DataOutputBuffer out = new DataOutputBuffer(serializedSize);
             if (version < MessagingService.VERSION_20)
                 out.writeUTF(mutation.getKeyspaceName());
 
@@ -303,6 +306,8 @@ public class Mutation implements IMutation
             assert size > 0;
             for (Map.Entry<UUID, PartitionUpdate> entry : mutation.modifications.entrySet())
                 PartitionUpdate.serializer.serialize(entry.getValue(), out, version);
+            assert out.getLength() == serializedSize;
+            x.write(out.buffer());
         }
 
         public Mutation deserialize(DataInputPlus in, int version, SerializationHelper.Flag flag) throws IOException
