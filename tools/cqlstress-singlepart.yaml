@@ -1,0 +1,29 @@
+keyspace: stresscql
+keyspace_definition: |
+  CREATE KEYSPACE stresscql WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 2};
+table: typestest
+table_definition: |
+  CREATE TABLE typestest (
+        name text,
+        id text,
+        choice boolean,
+        value blob,
+        PRIMARY KEY (name, id)
+  )
+
+columnspec:
+  - name: name
+    size: fixed(10)
+    population: fixed(1)
+  - name: id
+    cluster: uniform(20..500)
+
+insert:
+  partitions: FIXED(1)
+  select: FIXED(1)/500
+  batchtype: UNLOGGED
+
+queries:
+  events:
+      cql: something
+      fields: samerow
