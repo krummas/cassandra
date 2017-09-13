@@ -199,7 +199,7 @@ public class SecondaryIndexTest
         assertIndexedOne(cfs, col, 1L);
 
         // delete the column directly
-        RowUpdateBuilder.deleteRow(cfs.metadata, 1, "k1", "c").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 1, "k1", "c").build().applyUnsafe();
         assertIndexedNone(cfs, col, 1L);
 
         // verify that it's not being indexed under any other value either
@@ -211,7 +211,7 @@ public class SecondaryIndexTest
         assertIndexedOne(cfs, col, 1L);
 
         // verify that row and delete w/ older timestamp does nothing
-        RowUpdateBuilder.deleteRow(cfs.metadata, 1, "k1", "c").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 1, "k1", "c").build().applyUnsafe();
         assertIndexedOne(cfs, col, 1L);
 
         // similarly, column delete w/ older timestamp should do nothing
@@ -220,7 +220,7 @@ public class SecondaryIndexTest
 
         // delete the entire row (w/ newer timestamp this time)
         // todo - checking the # of index searchers for the command is probably not the best thing to test here
-        RowUpdateBuilder.deleteRow(cfs.metadata, 3, "k1", "c").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 3, "k1", "c").build().applyUnsafe();
         rc = Util.cmd(cfs).build();
         assertNull(rc.getIndex(cfs));
 
@@ -375,7 +375,7 @@ public class SecondaryIndexTest
         new RowUpdateBuilder(cfs.metadata, 1, "k1").clustering("c").add("birthdate", 10l).build().applyUnsafe();
 
         // Now delete the value
-        RowUpdateBuilder.deleteRow(cfs.metadata, 2, "k1", "c").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 2, "k1", "c").build().applyUnsafe();
 
         // We want the data to be gcable, but even if gcGrace == 0, we still need to wait 1 second
         // since we won't gc on a tie.
@@ -398,7 +398,7 @@ public class SecondaryIndexTest
         new RowUpdateBuilder(cfs.metadata, 1, "k1").add("birthdate", 10l).build().applyUnsafe();
 
         // Now delete the value
-        RowUpdateBuilder.deleteRow(cfs.metadata, 2, "k1").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 2, "k1").build().applyUnsafe();
 
         // We want the data to be gcable, but even if gcGrace == 0, we still need to wait 1 second
         // since we won't gc on a tie.

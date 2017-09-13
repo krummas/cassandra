@@ -176,7 +176,7 @@ public class SSTableMetadataTest
             assertEquals(ttltimestamp + 1000, firstMaxDelTime, 10);
         }
 
-        RowUpdateBuilder.deleteRow(store.metadata, timestamp + 1, "deletetest", "todelete").applyUnsafe();
+        RowUpdateBuilder.deleteRow(store.metadata, timestamp + 1, "deletetest", "todelete").build().applyUnsafe();
 
         store.forceBlockingFlush();
         assertEquals(2,store.getLiveSSTables().size());

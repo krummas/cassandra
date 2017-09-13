@@ -103,7 +103,7 @@ abstract class AbstractSSTableSimpleWriter implements Closeable
         return maxGen;
     }
 
-    PartitionUpdate getUpdateFor(ByteBuffer key) throws IOException
+    PartitionUpdate.Builder getUpdateFor(ByteBuffer key) throws IOException
     {
         return getUpdateFor(metadata.decorateKey(key));
     }
@@ -114,6 +114,6 @@ abstract class AbstractSSTableSimpleWriter implements Closeable
      * @param key they partition key for which the returned update will be.
      * @return an update on partition {@code key} that is tied to this writer.
      */
-    abstract PartitionUpdate getUpdateFor(DecoratedKey key) throws IOException;
+    abstract PartitionUpdate.Builder getUpdateFor(DecoratedKey key) throws IOException;
 }
 

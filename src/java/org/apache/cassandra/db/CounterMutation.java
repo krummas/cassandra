@@ -24,6 +24,7 @@ import java.util.concurrent.locks.Lock;
 
 import com.google.common.base.Function;
 import com.google.common.base.Objects;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
@@ -112,7 +113,7 @@ public class CounterMutation implements IMutation
      */
     public Mutation apply() throws WriteTimeoutException
     {
-        Mutation result = new Mutation(getKeyspaceName(), key());
+        Mutation.Builder resultBuilder = new Mutation.Builder(getKeyspaceName(), key());
         Keyspace keyspace = Keyspace.open(getKeyspaceName());
 
         List<Lock> locks = new ArrayList<>();
@@ -121,7 +122,8 @@ public class CounterMutation implements IMutation
         {
             grabCounterLocks(keyspace, locks);
             for (PartitionUpdate upd : getPartitionUpdates())
-                result.add(processModifications(upd));
+                resultBuilder.add(processModifications(upd));
+            Mutation result = resultBuilder.build();
             result.apply();
             return result;
         }
@@ -335,6 +337,33 @@ public class CounterMutation implements IMutation
         {
             return Mutation.serializer.serializedSize(cm.mutation, version)
                  + TypeSizes.sizeof(cm.consistency.name());
+        }
+    }
+
+    public static class Builder implements IMutationBuilder
+    {
+        private final Mutation.Builder mutationBuilder;
+        private final ConsistencyLevel cl;
+
+        public Builder(Mutation.Builder mutationBuilder, ConsistencyLevel cl)
+        {
+            this.mutationBuilder = mutationBuilder;
+            this.cl = cl;
+        }
+
+        public IMutationBuilder add(PartitionUpdate.Builder builder)
+        {
+            return mutationBuilder.add(builder);
+        }
+
+        public IMutation build()
+        {
+            return new CounterMutation(mutationBuilder.build(), cl);
+        }
+
+        public PartitionUpdate.Builder get(UUID cfId)
+        {
+            return mutationBuilder.get(cfId);
         }
     }
 }

@@ -31,6 +31,7 @@ import java.util.zip.CRC32;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Ordering;
@@ -680,7 +681,7 @@ public class CommitLogReplayer
                 //    b) have already been flushed,
                 // or c) are part of a cf that was dropped.
                 // Keep in mind that the cf.name() is suspect. do every thing based on the cfid instead.
-                Mutation newMutation = null;
+                Mutation.Builder newMutationBuilder = null;
                 for (PartitionUpdate update : replayFilter.filter(mutation))
                 {
                     if (Schema.instance.getCF(update.metadata().cfId) == null)
@@ -690,17 +691,17 @@ public class CommitLogReplayer
                     // if it is the last known segment, if we are after the replay position
                     if (shouldReplay(update.metadata().cfId, new ReplayPosition(desc.id, entryLocation)))
                     {
-                        if (newMutation == null)
-                            newMutation = new Mutation(mutation.getKeyspaceName(), mutation.key());
-                        newMutation.add(update);
+                        if (newMutationBuilder == null)
+                            newMutationBuilder = new Mutation.Builder(mutation.getKeyspaceName(), mutation.key());
+                        newMutationBuilder.add(update);
                         replayedCount.incrementAndGet();
                     }
                 }
-                if (newMutation != null)
+                if (newMutationBuilder != null)
                 {
-                    assert !newMutation.isEmpty();
+                    assert !newMutationBuilder.isEmpty();
 
-                    Keyspace.open(newMutation.getKeyspaceName()).apply(newMutation, false, true, false);
+                    Keyspace.open(newMutationBuilder.getKeyspaceName()).apply(newMutationBuilder.build(), false, true, false);
                     keyspacesRecovered.add(keyspace);
                 }
             }

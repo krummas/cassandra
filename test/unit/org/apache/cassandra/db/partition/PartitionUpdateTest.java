@@ -17,10 +17,14 @@
  */
 package org.apache.cassandra.db.partition;
 
+import java.util.Iterator;
+
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
+import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.utils.FBUtilities;
 import org.junit.Test;
 
@@ -45,10 +49,15 @@ public class PartitionUpdateTest extends CQLTester
         Assert.assertEquals(1, update.operationCount());
 
         update = new RowUpdateBuilder(cfm, timestamp, "key0").add("s", 1).buildUpdate();
-        update = new RowUpdateBuilder(update, timestamp, cfm.params.defaultTimeToLive).clustering(1)
-                                                                                      .add("a", 1)
-                                                                                      .buildUpdate();
-        Assert.assertEquals(2, update.operationCount());
+
+
+        PartitionUpdate newUpdate = new RowUpdateBuilder(new PartitionUpdate.Builder(update, 0), timestamp, cfm.params.defaultTimeToLive).clustering(1)
+                                                                                                                     .add("a", 1)
+                                                                                                                     .buildUpdate();
+        // update is immutable:
+        Assert.assertEquals(1, update.operationCount());
+        // new update should have old mutations + the new one:
+        Assert.assertEquals(2, newUpdate.operationCount());
     }
 
     @Test
@@ -56,12 +65,26 @@ public class PartitionUpdateTest extends CQLTester
     {
         createTable("CREATE TABLE %s (key text PRIMARY KEY, a int) WITH COMPACT STORAGE");
         CFMetaData cfm = currentTableMetadata();
-
         PartitionUpdate update = new RowUpdateBuilder(cfm, FBUtilities.timestampMicros(), "key0").add("a", 1)
                                                                                                  .buildUpdate();
         Assert.assertEquals(1, update.operationCount());
 
         update = new RowUpdateBuilder(cfm, FBUtilities.timestampMicros(), "key0").buildUpdate();
         Assert.assertEquals(0, update.operationCount());
+    }
+
+    @Test
+    public void testUpdateAllTimestamp()
+    {
+        createTable("CREATE TABLE %s (key text, clustering int, a int, b int, c int, s int static, PRIMARY KEY(key, clustering))");
+        CFMetaData cfm = currentTableMetadata();
+
+        long timestamp = FBUtilities.timestampMicros();
+        RowUpdateBuilder rub = new RowUpdateBuilder(cfm, timestamp, "key0").clustering(1).add("a", 1);
+        PartitionUpdate pu = rub.buildUpdate();
+        PartitionUpdate pu2 = new PartitionUpdate.Builder(pu, 0).updateAllTimestamp(0).build();
+
+        Assert.assertTrue(pu.maxTimestamp() > 0);
+        Assert.assertTrue(pu2.maxTimestamp() == 0);
     }
 }

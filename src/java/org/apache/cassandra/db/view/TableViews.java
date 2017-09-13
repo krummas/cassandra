@@ -21,6 +21,7 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
@@ -506,23 +507,23 @@ public class TableViews extends AbstractCollection<View>
             return mutations;
         }
 
-        Map<DecoratedKey, Mutation> mutations = new HashMap<>();
+        Map<DecoratedKey, Mutation.Builder> mutations = new HashMap<>();
         for (ViewUpdateGenerator generator : generators)
         {
             for (PartitionUpdate update : generator.generateViewUpdates())
             {
                 DecoratedKey key = update.partitionKey();
-                Mutation mutation = mutations.get(key);
-                if (mutation == null)
+                Mutation.Builder mutationBuilder = mutations.get(key);
+                if (mutationBuilder == null)
                 {
-                    mutation = new Mutation(baseTableMetadata.ksName, key);
-                    mutations.put(key, mutation);
+                    mutationBuilder = new Mutation.Builder(baseTableMetadata.ksName, key);
+                    mutations.put(key, mutationBuilder);
                 }
-                mutation.add(update);
+                mutationBuilder.add(update);
             }
             generator.clear();
         }
-        return mutations.values();
+        return mutations.values().stream().map(Mutation.Builder::build).collect(Collectors.toList());
     }
 
     /**

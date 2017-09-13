@@ -40,7 +40,7 @@ import org.apache.cassandra.dht.IPartitioner;
 class SSTableSimpleWriter extends AbstractSSTableSimpleWriter
 {
     protected DecoratedKey currentKey;
-    protected PartitionUpdate update;
+    protected PartitionUpdate.Builder update;
 
     private SSTableTxnWriter writer;
 
@@ -57,7 +57,7 @@ class SSTableSimpleWriter extends AbstractSSTableSimpleWriter
         return writer;
     }
 
-    PartitionUpdate getUpdateFor(DecoratedKey key) throws IOException
+    PartitionUpdate.Builder getUpdateFor(DecoratedKey key) throws IOException
     {
         assert key != null;
 
@@ -66,9 +66,9 @@ class SSTableSimpleWriter extends AbstractSSTableSimpleWriter
         if (!key.equals(currentKey))
         {
             if (update != null)
-                writePartition(update);
+                writePartition(update.build());
             currentKey = key;
-            update = new PartitionUpdate(metadata, currentKey, columns, 4);
+            update = new PartitionUpdate.Builder(metadata, currentKey, columns, 4);
         }
 
         assert update != null;
@@ -80,7 +80,7 @@ class SSTableSimpleWriter extends AbstractSSTableSimpleWriter
         try
         {
             if (update != null)
-                writePartition(update);
+                writePartition(update.build());
             if (writer != null)
                 writer.finish(false);
         }

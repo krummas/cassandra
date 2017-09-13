@@ -23,7 +23,6 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.service.StorageService;
 
 
 /**
@@ -34,13 +33,13 @@ import org.apache.cassandra.service.StorageService;
  */
 public class UpdateBuilder
 {
-    private final PartitionUpdate update;
+    private final PartitionUpdate.Builder update;
     private RowUpdateBuilder currentRow;
     private long timestamp = FBUtilities.timestampMicros();
 
     private UpdateBuilder(CFMetaData metadata, DecoratedKey partitionKey)
     {
-        this.update = new PartitionUpdate(metadata, partitionKey, metadata.partitionColumns(), 4);
+        this.update = new PartitionUpdate.Builder(metadata, partitionKey, metadata.partitionColumns(), 4, true);
     }
 
     public static UpdateBuilder create(CFMetaData metadata, Object... partitionKey)
@@ -73,7 +72,7 @@ public class UpdateBuilder
     public PartitionUpdate build()
     {
         maybeBuildCurrentRow();
-        return update;
+        return update.build();
     }
 
     public IMutation makeMutation()
@@ -103,7 +102,7 @@ public class UpdateBuilder
     {
         if (currentRow != null)
         {
-            currentRow.build();
+            currentRow.populateMutationBuilder();
             currentRow = null;
         }
     }

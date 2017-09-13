@@ -141,7 +141,7 @@ public class ColumnFamilyStoreTest
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         final ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CF_STANDARD2);
 
-        RowUpdateBuilder.deleteRow(cfs.metadata, FBUtilities.timestampMicros(), "key1", "Column1").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, FBUtilities.timestampMicros(), "key1", "Column1").build().applyUnsafe();
 
         Runnable r = new WrappedRunnable()
         {
@@ -270,8 +270,8 @@ public class ColumnFamilyStoreTest
         assertRangeCount(cfs, col, val, 4);
 
         // delete (from sstable and memtable)
-        RowUpdateBuilder.deleteRow(cfs.metadata, 5, "key1", "Column1").applyUnsafe();
-        RowUpdateBuilder.deleteRow(cfs.metadata, 5, "key3", "Column1").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 5, "key1", "Column1").build().applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 5, "key3", "Column1").build().applyUnsafe();
 
         // verify delete
         assertRangeCount(cfs, col, val, 2);

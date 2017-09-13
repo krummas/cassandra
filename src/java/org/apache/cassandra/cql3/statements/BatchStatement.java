@@ -243,9 +243,10 @@ public class BatchStatement implements CQLStatement
             ClientWarn.instance.warn(MessageFormatter.arrayFormat(LOGGED_BATCH_LOW_GCGS_WARNING, new Object[] { suffix, tablesWithZeroGcGs })
                                                      .getMessage());
         }
-
-        collector.validateIndexedColumns();
-        return collector.toMutations();
+        // finalize collector and validate the indexed columns
+        Collection<? extends IMutation> mutations = collector.toMutations();
+        UpdatesCollector.validateIndexedColumns(mutations);
+        return mutations;
     }
 
     private int updatedRows()

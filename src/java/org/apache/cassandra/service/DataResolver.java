@@ -204,7 +204,7 @@ public class DataResolver extends ResponseResolver
             private final DecoratedKey partitionKey;
             private final PartitionColumns columns;
             private final boolean isReversed;
-            private final PartitionUpdate[] repairs = new PartitionUpdate[sources.length];
+            private final PartitionUpdate.Builder[] repairs = new PartitionUpdate.Builder[sources.length];
 
             private final Row.Builder[] currentRows = new Row.Builder[sources.length];
             private final RowDiffListener diffListener;
@@ -253,10 +253,10 @@ public class DataResolver extends ResponseResolver
                 };
             }
 
-            private PartitionUpdate update(int i)
+            private PartitionUpdate.Builder update(int i)
             {
                 if (repairs[i] == null)
-                    repairs[i] = new PartitionUpdate(command.metadata(), partitionKey, columns, 1);
+                    repairs[i] = new PartitionUpdate.Builder(command.metadata(), partitionKey, columns, 1);
                 return repairs[i];
             }
 
@@ -459,7 +459,7 @@ public class DataResolver extends ResponseResolver
                     // use a separate verb here because we don't want these to be get the white glove hint-
                     // on-timeout behavior that a "real" mutation gets
                     Tracing.trace("Sending read-repair-mutation to {}", sources[i]);
-                    MessageOut<Mutation> msg = new Mutation(repairs[i]).createMessage(MessagingService.Verb.READ_REPAIR);
+                    MessageOut<Mutation> msg = new Mutation(repairs[i].build()).createMessage(MessagingService.Verb.READ_REPAIR);
                     repairResults.add(MessagingService.instance().sendRR(msg, sources[i]));
                 }
             }

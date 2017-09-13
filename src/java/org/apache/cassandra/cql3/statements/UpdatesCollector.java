@@ -19,6 +19,7 @@ package org.apache.cassandra.cql3.statements;
 
 import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.*;
@@ -46,7 +47,7 @@ final class UpdatesCollector
     /**
      * The mutations per keyspace.
      */
-    private final Map<String, Map<ByteBuffer, IMutation>> mutations = new HashMap<>();
+    private final Map<String, Map<ByteBuffer, IMutationBuilder>> mutationBuilders = new HashMap<>();
 
     public UpdatesCollector(Map<UUID, PartitionColumns> updatedColumns, int updatedRows)
     {
@@ -56,52 +57,39 @@ final class UpdatesCollector
     }
 
     /**
-     * Gets the <code>PartitionUpdate</code> for the specified column family and key. If the update does not
+     * Gets the <code>PartitionUpdate.Builder</code> for the specified column family and key. If the builder does not
      * exist it will be created.
      *
      * @param cfm the column family meta data
      * @param dk the partition key
      * @param consistency the consistency level
-     * @return the <code>PartitionUpdate</code> for the specified column family and key
+     * @return the <code>PartitionUpdate.Builder</code> for the specified column family and key
      */
-    public PartitionUpdate getPartitionUpdate(CFMetaData cfm, DecoratedKey dk, ConsistencyLevel consistency)
+    public PartitionUpdate.Builder getPartitionUpdateBuilder(CFMetaData cfm, DecoratedKey dk, ConsistencyLevel consistency)
     {
-        Mutation mut = getMutation(cfm, dk, consistency);
-        PartitionUpdate upd = mut.get(cfm);
+        IMutationBuilder mut = getMutationBuilder(cfm, dk, consistency);
+        PartitionUpdate.Builder upd = mut.get(cfm.cfId);
         if (upd == null)
         {
             PartitionColumns columns = updatedColumns.get(cfm.cfId);
             assert columns != null;
-            upd = new PartitionUpdate(cfm, dk, columns, updatedRows);
+            upd = new PartitionUpdate.Builder(cfm, dk, columns, updatedRows);
             mut.add(upd);
         }
         return upd;
     }
 
-    /**
-     * Check all partition updates contain only valid values for any
-     * indexed columns.
-     */
-    public void validateIndexedColumns()
-    {
-        for (Map<ByteBuffer, IMutation> perKsMutations : mutations.values())
-            for (IMutation mutation : perKsMutations.values())
-                for (PartitionUpdate update : mutation.getPartitionUpdates())
-                    Keyspace.openAndGetStore(update.metadata()).indexManager.validate(update);
-    }
-
-    private Mutation getMutation(CFMetaData cfm, DecoratedKey dk, ConsistencyLevel consistency)
+    private IMutationBuilder getMutationBuilder(CFMetaData cfm, DecoratedKey dk, ConsistencyLevel consistency)
     {
         String ksName = cfm.ksName;
-        IMutation mutation = keyspaceMap(ksName).get(dk.getKey());
-        if (mutation == null)
+        IMutationBuilder mutationBuilder = keyspaceMap(ksName).get(dk.getKey());
+        if (mutationBuilder == null)
         {
-            Mutation mut = new Mutation(ksName, dk);
-            mutation = cfm.isCounter() ? new CounterMutation(mut, consistency) : mut;
-            keyspaceMap(ksName).put(dk.getKey(), mutation);
-            return mut;
+            Mutation.Builder builder = new Mutation.Builder(ksName, dk);
+            mutationBuilder = cfm.isCounter() ? new CounterMutation.Builder(builder, consistency) : builder;
+            keyspaceMap(ksName).put(dk.getKey(), mutationBuilder);
         }
-        return cfm.isCounter() ? ((CounterMutation) mutation).getMutation() : (Mutation) mutation;
+        return mutationBuilder;
     }
 
     /**
@@ -110,14 +98,10 @@ final class UpdatesCollector
      */
     public Collection<IMutation> toMutations()
     {
-        // The case where all statement where on the same keyspace is pretty common
-        if (mutations.size() == 1)
-            return mutations.values().iterator().next().values();
-
+        //TODO: The case where all statement where on the same keyspace is pretty common, optimize for that?
         List<IMutation> ms = new ArrayList<>();
-        for (Map<ByteBuffer, IMutation> ksMap : mutations.values())
-            ms.addAll(ksMap.values());
-
+        for (Map<ByteBuffer, IMutationBuilder> ksMap : mutationBuilders.values())
+            ms.addAll(ksMap.values().stream().map(IMutationBuilder::build).collect(Collectors.toList()));
         return ms;
     }
 
@@ -127,14 +111,13 @@ final class UpdatesCollector
      * @param ksName the keyspace name
      * @return the key-mutation mappings for the specified keyspace.
      */
-    private Map<ByteBuffer, IMutation> keyspaceMap(String ksName)
+    private Map<ByteBuffer, IMutationBuilder> keyspaceMap(String ksName)
     {
-        Map<ByteBuffer, IMutation> ksMap = mutations.get(ksName);
-        if (ksMap == null)
-        {
-            ksMap = new HashMap<>();
-            mutations.put(ksName, ksMap);
-        }
-        return ksMap;
+        return mutationBuilders.computeIfAbsent(ksName, k -> new HashMap<>());
+    }
+
+    public static void validateIndexedColumns(Collection<? extends IMutation> mutations)
+    {
+        mutations.forEach(mutation -> mutation.getPartitionUpdates().forEach(update -> Keyspace.openAndGetStore(update.metadata()).indexManager.validate(update)));
     }
 }

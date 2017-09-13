@@ -315,9 +315,9 @@ public class BatchlogManagerTest
 
 
             Mutation batchMutation = LegacyBatchlogMigrator.getStoreMutation(Batch.createLocal(UUIDGen.getTimeUUID(timestamp, i),
-                                                                                               TimeUnit.MILLISECONDS.toMicros(timestamp),
-                                                                                               Collections.singleton(mutation)),
-                                                                             MessagingService.VERSION_20);
+                                                                                                      TimeUnit.MILLISECONDS.toMicros(timestamp),
+                                                                                                      Collections.singleton(mutation)),
+                                                                                    MessagingService.VERSION_20);
             assertTrue(LegacyBatchlogMigrator.isLegacyBatchlogMutation(batchMutation));
             LegacyBatchlogMigrator.handleLegacyMutation(batchMutation);
         }

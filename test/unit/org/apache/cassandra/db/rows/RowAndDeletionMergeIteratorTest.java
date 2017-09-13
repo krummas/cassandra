@@ -369,11 +369,11 @@ public class RowAndDeletionMergeIteratorTest
 
     private Iterator<Row> createRowIterator()
     {
-        PartitionUpdate update = new PartitionUpdate(cfm, dk, cfm.partitionColumns(), 1);
+        PartitionUpdate.Builder update = new PartitionUpdate.Builder(cfm, dk, cfm.partitionColumns(), 1);
         for (int i = 0; i < 5; i++)
             addRow(update, i, i);
 
-        return update.iterator();
+        return update.build().iterator();
     }
 
     private UnfilteredRowIterator createMergeIterator(Iterator<Row> rows, Iterator<RangeTombstone> tombstones, boolean reversed)
@@ -398,7 +398,7 @@ public class RowAndDeletionMergeIteratorTest
                                                true);
     }
 
-    private void addRow(PartitionUpdate update, int col1, int a)
+    private void addRow(PartitionUpdate.Builder update, int col1, int a)
     {
         update.add(BTreeRow.singleCellRow(update.metadata().comparator.make(col1), makeCell(cfm, defA, a, 0)));
     }

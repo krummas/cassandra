@@ -118,20 +118,20 @@ public class CounterMutationTest
         cfsTwo.truncateBlocking();
 
         // Do the update (+1, -1), (+2, -2)
-        Mutation batch = new Mutation(KEYSPACE1, Util.dk("key1"));
+        Mutation.Builder batch = new Mutation.Builder(KEYSPACE1, Util.dk("key1"));
         batch.add(new RowUpdateBuilder(cfsOne.metadata, 5, "key1")
             .clustering("cc")
             .add("val", 1L)
             .add("val2", -1L)
-            .build().get(cfsOne.metadata));
+            .build().getPartitionUpdate(cfsOne.metadata.cfId));
 
         batch.add(new RowUpdateBuilder(cfsTwo.metadata, 5, "key1")
             .clustering("cc")
             .add("val", 2L)
             .add("val2", -2L)
-            .build().get(cfsTwo.metadata));
+            .build().getPartitionUpdate(cfsTwo.metadata.cfId));
 
-        new CounterMutation(batch, ConsistencyLevel.ONE).apply();
+        new CounterMutation(batch.build(), ConsistencyLevel.ONE).apply();
 
         ColumnDefinition c1cfs1 = cfsOne.metadata.getColumnDefinition(ByteBufferUtil.bytes("val"));
         ColumnDefinition c2cfs1 = cfsOne.metadata.getColumnDefinition(ByteBufferUtil.bytes("val2"));
@@ -202,7 +202,7 @@ public class CounterMutationTest
         assertEquals(null, row.getCell(cOne));
 
         // Get rid of the complete partition
-        RowUpdateBuilder.deleteRow(cfs.metadata, 6, "key1", "cc").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 6, "key1", "cc").build().applyUnsafe();
         Util.assertEmpty(Util.cmd(cfs).includeRow("cc").columns("val", "val2").build());
 
         // Increment both counters, ensure that both stay dead

@@ -67,16 +67,16 @@ class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
         diskWriter.start();
     }
 
-    PartitionUpdate getUpdateFor(DecoratedKey key)
+    PartitionUpdate.Builder getUpdateFor(DecoratedKey key)
     {
         assert key != null;
-
-        PartitionUpdate previous = buffer.get(key);
+        PartitionUpdate.Builder previous = buffer.get(key);
         if (previous == null)
         {
-            previous = createPartitionUpdate(key);
-            currentSize += PartitionUpdate.serializer.serializedSize(previous, formatType.info.getLatestVersion().correspondingMessagingVersion());
-            previous.allowNewUpdates();
+            // todo: inefficient - we create and serialize a PU just to get its size, then recreate it
+            // todo: either allow PartitionUpdateBuilder to have .build() called several times or pre-calculate the size
+            currentSize += PartitionUpdate.serializer.serializedSize(createPartitionUpdateBuilder(key).build(), formatType.info.getLatestVersion().correspondingMessagingVersion());
+            previous = createPartitionUpdateBuilder(key);
             buffer.put(key, previous);
         }
         return previous;
@@ -107,9 +107,9 @@ class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
         }
     }
 
-    private PartitionUpdate createPartitionUpdate(DecoratedKey key)
+    private PartitionUpdate.Builder createPartitionUpdateBuilder(DecoratedKey key)
     {
-        return new PartitionUpdate(metadata, key, columns, 4)
+        return new PartitionUpdate.Builder(metadata, key, columns, 4)
         {
             @Override
             public void add(Row row)
@@ -187,7 +187,7 @@ class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
     }
 
     //// typedef
-    static class Buffer extends TreeMap<DecoratedKey, PartitionUpdate> {}
+    static class Buffer extends TreeMap<DecoratedKey, PartitionUpdate.Builder> {}
 
     private class DiskWriter extends Thread
     {
@@ -205,8 +205,8 @@ class SSTableSimpleUnsortedWriter extends AbstractSSTableSimpleWriter
 
                         try (SSTableTxnWriter writer = createWriter())
                     {
-                        for (Map.Entry<DecoratedKey, PartitionUpdate> entry : b.entrySet())
-                            writer.append(entry.getValue().unfilteredIterator());
+                        for (Map.Entry<DecoratedKey, PartitionUpdate.Builder> entry : b.entrySet())
+                            writer.append(entry.getValue().build().unfilteredIterator());
                         writer.finish(false);
                     }
                 }

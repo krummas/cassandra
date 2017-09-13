@@ -159,9 +159,9 @@ public abstract class ModificationStatement implements CQLStatement
         conditions.addFunctionsTo(functions);
     }
 
-    public abstract void addUpdateForKey(PartitionUpdate update, Clustering clustering, UpdateParameters params);
+    public abstract void addUpdateForKey(PartitionUpdate.Builder updateBuilder, Clustering clustering, UpdateParameters params);
 
-    public abstract void addUpdateForKey(PartitionUpdate update, Slice slice, UpdateParameters params);
+    public abstract void addUpdateForKey(PartitionUpdate.Builder updateBuilder, Slice slice, UpdateParameters params);
 
     public int getBoundTerms()
     {
@@ -630,9 +630,9 @@ public abstract class ModificationStatement implements CQLStatement
     {
         UpdatesCollector collector = new UpdatesCollector(Collections.singletonMap(cfm.cfId, updatedColumns), 1);
         addUpdates(collector, options, local, now);
-        collector.validateIndexedColumns();
-
-        return collector.toMutations();
+        Collection<IMutation> mutations = collector.toMutations();
+        UpdatesCollector.validateIndexedColumns(mutations);
+        return mutations;
     }
 
     final void addUpdates(UpdatesCollector collector,
@@ -661,10 +661,10 @@ public abstract class ModificationStatement implements CQLStatement
                 ThriftValidation.validateKey(cfm, key);
                 DecoratedKey dk = cfm.decorateKey(key);
 
-                PartitionUpdate upd = collector.getPartitionUpdate(cfm, dk, options.getConsistency());
+                PartitionUpdate.Builder updateBuilder = collector.getPartitionUpdateBuilder(cfm, dk, options.getConsistency());
 
                 for (Slice slice : slices)
-                    addUpdateForKey(upd, slice, params);
+                    addUpdateForKey(updateBuilder, slice, params);
             }
         }
         else
@@ -682,25 +682,24 @@ public abstract class ModificationStatement implements CQLStatement
                 ThriftValidation.validateKey(cfm, key);
                 DecoratedKey dk = cfm.decorateKey(key);
 
-                PartitionUpdate upd = collector.getPartitionUpdate(cfm, dk, options.getConsistency());
+                PartitionUpdate.Builder updateBuilder = collector.getPartitionUpdateBuilder(cfm, dk, options.getConsistency());
 
                 if (!restrictions.hasClusteringColumnsRestriction())
                 {
-                    addUpdateForKey(upd, Clustering.EMPTY, params);
+                    addUpdateForKey(updateBuilder, Clustering.EMPTY, params);
                 }
                 else
                 {
                     for (Clustering clustering : clusterings)
                     {
-                       for (ByteBuffer c : clustering.getRawValues())
-                       {
-                           if (c != null && c.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
-                               throw new InvalidRequestException(String.format("Key length of %d is longer than maximum of %d",
-                                                                               clustering.dataSize(),
-                                                                               FBUtilities.MAX_UNSIGNED_SHORT));
-                       }
-
-                        addUpdateForKey(upd, clustering, params);
+                        for (ByteBuffer c : clustering.getRawValues())
+                        {
+                            if (c != null && c.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
+                                throw new InvalidRequestException(String.format("Key length of %d is longer than maximum of %d",
+                                                                                clustering.dataSize(),
+                                                                                FBUtilities.MAX_UNSIGNED_SHORT));
+                        }
+                        addUpdateForKey(updateBuilder, clustering, params);
                     }
                 }
             }

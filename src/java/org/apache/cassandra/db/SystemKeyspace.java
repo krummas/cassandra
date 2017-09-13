@@ -40,8 +40,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.util.concurrent.Futures;
 
-import org.apache.cassandra.concurrent.Stage;
-import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
@@ -1097,7 +1095,7 @@ public final class SystemKeyspace
             return new PaxosState(key, metadata);
         UntypedResultSet.Row row = results.one();
         Commit promised = row.has("in_progress_ballot")
-                        ? new Commit(row.getUUID("in_progress_ballot"), new PartitionUpdate(metadata, key, metadata.partitionColumns(), 1))
+                        ? new Commit(row.getUUID("in_progress_ballot"), new PartitionUpdate.Builder(metadata, key, metadata.partitionColumns(), 1).build())
                         : Commit.emptyCommit(key, metadata);
         // either we have both a recently accepted ballot and update or we have neither
         int proposalVersion = row.has("proposal_version") ? row.getInt("proposal_version") : MessagingService.VERSION_21;
@@ -1207,8 +1205,8 @@ public final class SystemKeyspace
     public static void updateSizeEstimates(String keyspace, String table, Map<Range<Token>, Pair<Long, Long>> estimates)
     {
         long timestamp = FBUtilities.timestampMicros();
-        PartitionUpdate update = new PartitionUpdate(SizeEstimates, UTF8Type.instance.decompose(keyspace), SizeEstimates.partitionColumns(), estimates.size());
-        Mutation mutation = new Mutation(update);
+        PartitionUpdate.Builder update = new PartitionUpdate.Builder(SizeEstimates, SizeEstimates.decorateKey(UTF8Type.instance.decompose(keyspace)), SizeEstimates.partitionColumns(), estimates.size());
+        Mutation.Builder mutationBuilder = new Mutation.Builder(SizeEstimates.ksName, update.partitionKey()).add(update);
 
         // delete all previous values with a single range tombstone.
         int nowInSec = FBUtilities.nowInSeconds();
@@ -1219,14 +1217,14 @@ public final class SystemKeyspace
         {
             Range<Token> range = entry.getKey();
             Pair<Long, Long> values = entry.getValue();
-            new RowUpdateBuilder(SizeEstimates, timestamp, mutation)
+            new RowUpdateBuilder(SizeEstimates, timestamp, mutationBuilder)
                 .clustering(table, range.left.toString(), range.right.toString())
                 .add("partitions_count", values.left)
                 .add("mean_partition_size", values.right)
-                .build();
+                .populateMutationBuilder();
         }
 
-        mutation.apply();
+        mutationBuilder.build().apply();
     }
 
     /**

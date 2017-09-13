@@ -563,11 +563,11 @@ public class LegacySchemaMigratorTest
 
     private static void legacySerializeKeyspace(KeyspaceMetadata keyspace)
     {
-        makeLegacyCreateKeyspaceMutation(keyspace, TIMESTAMP).apply();
+        makeLegacyCreateKeyspaceMutationBuilder(keyspace, TIMESTAMP).build().apply();
         setLegacyIndexStatus(keyspace);
     }
 
-    private static Mutation makeLegacyCreateKeyspaceMutation(KeyspaceMetadata keyspace, long timestamp)
+    private static Mutation.Builder makeLegacyCreateKeyspaceMutationBuilder(KeyspaceMetadata keyspace, long timestamp)
     {
         // Note that because Keyspaces is a COMPACT TABLE, we're really only setting static columns internally and shouldn't set any clustering.
         RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyKeyspaces, timestamp, keyspace.name);
@@ -576,25 +576,25 @@ public class LegacySchemaMigratorTest
              .add("strategy_class", keyspace.params.replication.klass.getName())
              .add("strategy_options", json(keyspace.params.replication.options));
 
-        Mutation mutation = adder.build();
+        Mutation.Builder mutationBuilder = adder.populateMutationBuilder();
 
-        keyspace.tables.forEach(table -> addTableToSchemaMutation(table, timestamp, true, mutation));
-        keyspace.types.forEach(type -> addTypeToSchemaMutation(type, timestamp, mutation));
-        keyspace.functions.udfs().forEach(udf -> addFunctionToSchemaMutation(udf, timestamp, mutation));
-        keyspace.functions.udas().forEach(uda -> addAggregateToSchemaMutation(uda, timestamp, mutation));
+        keyspace.tables.forEach(table -> addTableToSchemaMutationBuilder(table, timestamp, true, mutationBuilder));
+        keyspace.types.forEach(type -> addTypeToSchemaMutationBuilder(type, timestamp, mutationBuilder));
+        keyspace.functions.udfs().forEach(udf -> addFunctionToSchemaMutationBuilder(udf, timestamp, mutationBuilder));
+        keyspace.functions.udas().forEach(uda -> addAggregateToSchemaMutationBuilder(uda, timestamp, mutationBuilder));
 
-        return mutation;
+        return mutationBuilder;
     }
 
     /*
      * Serializing tables
      */
 
-    private static void addTableToSchemaMutation(CFMetaData table, long timestamp, boolean withColumnsAndTriggers, Mutation mutation)
+    private static void addTableToSchemaMutationBuilder(CFMetaData table, long timestamp, boolean withColumnsAndTriggers, Mutation.Builder mutationBuilder)
     {
         // For property that can be null (and can be changed), we insert tombstones, to make sure
         // we don't keep a property the user has removed
-        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyColumnfamilies, timestamp, mutation)
+        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyColumnfamilies, timestamp, mutationBuilder)
                                  .clustering(table.cfName);
 
         adder.add("cf_id", table.cfId)
@@ -642,13 +642,13 @@ public class LegacySchemaMigratorTest
         if (withColumnsAndTriggers)
         {
             for (ColumnDefinition column : table.allColumns())
-                addColumnToSchemaMutation(table, column, timestamp, mutation);
+                addColumnToSchemaMutationBuilder(table, column, timestamp, mutationBuilder);
 
             for (TriggerMetadata trigger : table.getTriggers())
-                addTriggerToSchemaMutation(table, trigger, timestamp, mutation);
+                addTriggerToSchemaMutationBuilder(table, trigger, timestamp, mutationBuilder);
         }
 
-        adder.build();
+        adder.populateMutationBuilder();
     }
 
     private static String cachingToString(CachingParams caching)
@@ -658,14 +658,14 @@ public class LegacySchemaMigratorTest
                       caching.rowsPerPartitionAsString());
     }
 
-    private static void addColumnToSchemaMutation(CFMetaData table, ColumnDefinition column, long timestamp, Mutation mutation)
+    private static void addColumnToSchemaMutationBuilder(CFMetaData table, ColumnDefinition column, long timestamp, Mutation.Builder mutationBuilder)
     {
         // We need to special case pk-only dense tables. See CASSANDRA-9874.
         String name = table.isDense() && column.kind == ColumnDefinition.Kind.REGULAR && column.type instanceof EmptyType
                     ? ""
                     : column.name.toString();
 
-        final RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyColumns, timestamp, mutation).clustering(table.cfName, name);
+        final RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyColumns, timestamp, mutationBuilder).clustering(table.cfName, name);
 
         adder.add("validator", column.type.toString())
              .add("type", serializeKind(column.kind, table.isDense()))
@@ -686,7 +686,7 @@ public class LegacySchemaMigratorTest
             adder.add("index_options", null);
         }
 
-        adder.build();
+        adder.populateMutationBuilder();
     }
 
     private static Optional<IndexMetadata> findIndexForColumn(Indexes indexes,
@@ -715,21 +715,21 @@ public class LegacySchemaMigratorTest
         return kind.toString().toLowerCase();
     }
 
-    private static void addTriggerToSchemaMutation(CFMetaData table, TriggerMetadata trigger, long timestamp, Mutation mutation)
+    private static void addTriggerToSchemaMutationBuilder(CFMetaData table, TriggerMetadata trigger, long timestamp, Mutation.Builder mutationBuilder)
     {
-        new RowUpdateBuilder(SystemKeyspace.LegacyTriggers, timestamp, mutation)
+        new RowUpdateBuilder(SystemKeyspace.LegacyTriggers, timestamp, mutationBuilder)
             .clustering(table.cfName, trigger.name)
             .addMapEntry("trigger_options", "class", trigger.classOption)
-            .build();
+            .populateMutationBuilder();
     }
 
     /*
      * Serializing types
      */
 
-    private static void addTypeToSchemaMutation(UserType type, long timestamp, Mutation mutation)
+    private static void addTypeToSchemaMutationBuilder(UserType type, long timestamp, Mutation.Builder mutationBuilder)
     {
-        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyUsertypes, timestamp, mutation)
+        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyUsertypes, timestamp, mutationBuilder)
                                  .clustering(type.getNameAsString());
 
         adder.resetCollection("field_names")
@@ -741,16 +741,16 @@ public class LegacySchemaMigratorTest
                  .addListEntry("field_types", type.fieldType(i).toString());
         }
 
-        adder.build();
+        adder.populateMutationBuilder();
     }
 
     /*
      * Serializing functions
      */
 
-    private static void addFunctionToSchemaMutation(UDFunction function, long timestamp, Mutation mutation)
+    private static void addFunctionToSchemaMutationBuilder(UDFunction function, long timestamp, Mutation.Builder mutationBuilder)
     {
-        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyFunctions, timestamp, mutation)
+        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyFunctions, timestamp, mutationBuilder)
                                  .clustering(function.name().name, functionSignatureWithTypes(function));
 
         adder.add("body", function.body())
@@ -767,16 +767,16 @@ public class LegacySchemaMigratorTest
                  .addListEntry("argument_types", function.argTypes().get(i).toString());
         }
 
-        adder.build();
+        adder.populateMutationBuilder();
     }
 
     /*
      * Serializing aggregates
      */
 
-    private static void addAggregateToSchemaMutation(UDAggregate aggregate, long timestamp, Mutation mutation)
+    private static void addAggregateToSchemaMutationBuilder(UDAggregate aggregate, long timestamp, Mutation.Builder mutationBuilder)
     {
-        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyAggregates, timestamp, mutation)
+        RowUpdateBuilder adder = new RowUpdateBuilder(SystemKeyspace.LegacyAggregates, timestamp, mutationBuilder)
                                  .clustering(aggregate.name().name, functionSignatureWithTypes(aggregate));
 
         adder.resetCollection("argument_types");
@@ -794,7 +794,7 @@ public class LegacySchemaMigratorTest
         for (AbstractType<?> argType : aggregate.argTypes())
             adder.addListEntry("argument_types", argType.toString());
 
-        adder.build();
+        adder.populateMutationBuilder();
     }
 
     // We allow method overloads, so a function is not uniquely identified by its name only, but

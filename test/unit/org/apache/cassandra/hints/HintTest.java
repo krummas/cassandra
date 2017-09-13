@@ -296,24 +296,24 @@ public class HintTest
 
     private static Mutation createMutation(String key, long now)
     {
-        Mutation mutation = new Mutation(KEYSPACE, dk(key));
+        Mutation.Builder mutationBuilder = new Mutation.Builder(KEYSPACE, dk(key));
 
-        new RowUpdateBuilder(Schema.instance.getCFMetaData(KEYSPACE, TABLE0), now, mutation)
+        new RowUpdateBuilder(Schema.instance.getCFMetaData(KEYSPACE, TABLE0), now, mutationBuilder)
             .clustering("column0")
             .add("val", "value0")
-            .build();
+            .populateMutationBuilder();
 
-        new RowUpdateBuilder(Schema.instance.getCFMetaData(KEYSPACE, TABLE1), now + 1, mutation)
+        new RowUpdateBuilder(Schema.instance.getCFMetaData(KEYSPACE, TABLE1), now + 1, mutationBuilder)
             .clustering("column1")
             .add("val", "value1")
-            .build();
+            .populateMutationBuilder();
 
-        new RowUpdateBuilder(Schema.instance.getCFMetaData(KEYSPACE, TABLE2), now + 2, mutation)
+        new RowUpdateBuilder(Schema.instance.getCFMetaData(KEYSPACE, TABLE2), now + 2, mutationBuilder)
             .clustering("column2")
             .add("val", "value2")
-            .build();
+            .populateMutationBuilder();
 
-        return mutation;
+        return mutationBuilder.build();
     }
 
     private static SinglePartitionReadCommand cmd(String key, String table)

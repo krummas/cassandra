@@ -18,7 +18,6 @@
 package org.apache.cassandra.db;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,7 +26,6 @@ import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.marshal.SetType;
-import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.partitions.*;
@@ -43,7 +41,7 @@ import org.apache.cassandra.utils.*;
  */
 public class RowUpdateBuilder
 {
-    private final PartitionUpdate update;
+    private final PartitionUpdate.Builder partitionUpdateBuilder;
 
     private final long timestamp;
     private final int ttl;
@@ -51,16 +49,16 @@ public class RowUpdateBuilder
 
     private final DeletionTime deletionTime;
 
-    private final Mutation mutation;
+    private final Mutation.Builder mutationBuilder;
 
     private Row.Builder regularBuilder;
     private Row.Builder staticBuilder;
 
     private boolean useRowMarker = true;
 
-    private RowUpdateBuilder(PartitionUpdate update, long timestamp, int ttl, int localDeletionTime, Mutation mutation)
+    private RowUpdateBuilder(PartitionUpdate.Builder partitionUpdateBuilder, long timestamp, int ttl, int localDeletionTime, Mutation.Builder mutationBuilder)
     {
-        this.update = update;
+        this.partitionUpdateBuilder = partitionUpdateBuilder;
 
         this.timestamp = timestamp;
         this.ttl = ttl;
@@ -69,12 +67,12 @@ public class RowUpdateBuilder
 
         // note that the created mutation may get further update later on, so we don't use the ctor that create a singletonMap
         // underneath (this class if for convenience, not performance)
-        this.mutation = mutation == null ? new Mutation(update.metadata().ksName, update.partitionKey()).add(update) : mutation;
+        this.mutationBuilder = mutationBuilder == null ? new Mutation.Builder(partitionUpdateBuilder.metadata().ksName, partitionUpdateBuilder.partitionKey()).add(partitionUpdateBuilder) : mutationBuilder;
     }
 
-    private RowUpdateBuilder(PartitionUpdate update, long timestamp, int ttl, Mutation mutation)
+    private RowUpdateBuilder(PartitionUpdate.Builder partitionUpdateBuilder, long timestamp, int ttl, Mutation.Builder mutationBuilder)
     {
-        this(update, timestamp, ttl, FBUtilities.nowInSeconds(), mutation);
+        this(partitionUpdateBuilder, timestamp, ttl, FBUtilities.nowInSeconds(), mutationBuilder);
     }
 
     private void startRow(Clustering clustering)
@@ -86,8 +84,8 @@ public class RowUpdateBuilder
         regularBuilder.newRow(clustering);
 
         // If a CQL table, add the "row marker"
-        if (update.metadata().isCQLTable() && useRowMarker)
-            regularBuilder.addPrimaryKeyLivenessInfo(LivenessInfo.create(update.metadata(), timestamp, ttl, localDeletionTime));
+        if (partitionUpdateBuilder.metadata().isCQLTable() && useRowMarker)
+            regularBuilder.addPrimaryKeyLivenessInfo(LivenessInfo.create(partitionUpdateBuilder.metadata(), timestamp, ttl, localDeletionTime));
     }
 
     private Row.Builder builder()
@@ -96,7 +94,7 @@ public class RowUpdateBuilder
         if (regularBuilder == null)
         {
             // we don't force people to call clustering() if the table has no clustering, so call it ourselves
-            assert update.metadata().comparator.size() == 0 : "Missing call to clustering()";
+            assert partitionUpdateBuilder.metadata().comparator.size() == 0 : "Missing call to clustering()";
             startRow(Clustering.EMPTY);
         }
         return regularBuilder;
@@ -135,22 +133,22 @@ public class RowUpdateBuilder
 
     public RowUpdateBuilder(CFMetaData metadata, int localDeletionTime, long timestamp, int ttl, Object partitionKey)
     {
-        this(new PartitionUpdate(metadata, makeKey(metadata, partitionKey), metadata.partitionColumns(), 1), timestamp, ttl, localDeletionTime, null);
+        this(new PartitionUpdate.Builder(metadata, makeKey(metadata, partitionKey), metadata.partitionColumns(), 1), timestamp, ttl, localDeletionTime, null);
     }
 
-    public RowUpdateBuilder(CFMetaData metadata, long timestamp, Mutation mutation)
+    public RowUpdateBuilder(CFMetaData metadata, long timestamp, Mutation.Builder mutationBuilder)
     {
-        this(metadata, timestamp, LivenessInfo.NO_TTL, mutation);
+        this(metadata, timestamp, LivenessInfo.NO_TTL, mutationBuilder);
     }
 
-    public RowUpdateBuilder(CFMetaData metadata, long timestamp, int ttl, Mutation mutation)
+    public RowUpdateBuilder(CFMetaData metadata, long timestamp, int ttl, Mutation.Builder mutationBuilder)
     {
-        this(getOrAdd(metadata, mutation), timestamp, ttl, mutation);
+        this(getOrAdd(metadata, mutationBuilder), timestamp, ttl, mutationBuilder);
     }
 
-    public RowUpdateBuilder(PartitionUpdate update, long timestamp, int ttl)
+    public RowUpdateBuilder(PartitionUpdate.Builder partitionUpdateBuilder, long timestamp, int ttl)
     {
-        this(update, timestamp, ttl, null);
+        this(partitionUpdateBuilder, timestamp, ttl, null);
     }
 
     // This must be called before any addition or deletion if used.
@@ -162,28 +160,34 @@ public class RowUpdateBuilder
 
     public RowUpdateBuilder clustering(Object... clusteringValues)
     {
-        assert clusteringValues.length == update.metadata().comparator.size()
-             : "Invalid clustering values length. Expected: " + update.metadata().comparator.size() + " got: " + clusteringValues.length;
+        assert clusteringValues.length == partitionUpdateBuilder.metadata().comparator.size()
+             : "Invalid clustering values length. Expected: " + partitionUpdateBuilder.metadata().comparator.size() + " got: " + clusteringValues.length;
 
-        startRow(clusteringValues.length == 0 ? Clustering.EMPTY : update.metadata().comparator.make(clusteringValues));
+        startRow(clusteringValues.length == 0 ? Clustering.EMPTY : partitionUpdateBuilder.metadata().comparator.make(clusteringValues));
         return this;
+    }
+
+    public Mutation.Builder populateMutationBuilder()
+    {
+        Row.Builder builder = regularBuilder == null ? staticBuilder : regularBuilder;
+        if (builder != null)
+            partitionUpdateBuilder.add(builder.build());
+        return mutationBuilder;
     }
 
     public Mutation build()
     {
-        Row.Builder builder = regularBuilder == null ? staticBuilder : regularBuilder;
-        if (builder != null)
-            update.add(builder.build());
-        return mutation;
+        populateMutationBuilder();
+        return mutationBuilder.build();
     }
 
     public PartitionUpdate buildUpdate()
     {
-        build();
-        return update;
+        populateMutationBuilder();
+        return partitionUpdateBuilder.build();
     }
 
-    private static void deleteRow(PartitionUpdate update, long timestamp, int localDeletionTime, Object... clusteringValues)
+    private static void deleteRow(PartitionUpdate.Builder update, long timestamp, int localDeletionTime, Object... clusteringValues)
     {
         assert clusteringValues.length == update.metadata().comparator.size() || (clusteringValues.length == 0 && !update.columns().statics.isEmpty());
 
@@ -199,24 +203,24 @@ public class RowUpdateBuilder
         update.add(builder.build());
     }
 
-    public static Mutation deleteRow(CFMetaData metadata, long timestamp, Mutation mutation, Object... clusteringValues)
+    public static Mutation.Builder deleteRow(CFMetaData metadata, long timestamp, Mutation.Builder mutationBuilder, Object... clusteringValues)
     {
-        deleteRow(getOrAdd(metadata, mutation), timestamp, FBUtilities.nowInSeconds(), clusteringValues);
-        return mutation;
+        deleteRow(getOrAdd(metadata, mutationBuilder), timestamp, FBUtilities.nowInSeconds(), clusteringValues);
+        return mutationBuilder;
     }
 
-    public static Mutation deleteRow(CFMetaData metadata, long timestamp, Object key, Object... clusteringValues)
+    public static Mutation.Builder deleteRow(CFMetaData metadata, long timestamp, Object key, Object... clusteringValues)
     {
         return deleteRowAt(metadata, timestamp, FBUtilities.nowInSeconds(), key, clusteringValues);
     }
 
-    public static Mutation deleteRowAt(CFMetaData metadata, long timestamp, int localDeletionTime, Object key, Object... clusteringValues)
+    public static Mutation.Builder deleteRowAt(CFMetaData metadata, long timestamp, int localDeletionTime, Object key, Object... clusteringValues)
     {
-        PartitionUpdate update = new PartitionUpdate(metadata, makeKey(metadata, key), metadata.partitionColumns(), 0);
+        PartitionUpdate.Builder update = new PartitionUpdate.Builder(metadata, makeKey(metadata, key), metadata.partitionColumns(), 0);
         deleteRow(update, timestamp, localDeletionTime, clusteringValues);
         // note that the created mutation may get further update later on, so we don't use the ctor that create a singletonMap
         // underneath (this class if for convenience, not performance)
-        return new Mutation(update.metadata().ksName, update.partitionKey()).add(update);
+        return new Mutation.Builder(update.metadata().ksName, update.partitionKey()).add(update);
     }
 
     private static DecoratedKey makeKey(CFMetaData metadata, Object... partitionKey)
@@ -228,13 +232,13 @@ public class RowUpdateBuilder
         return metadata.decorateKey(key);
     }
 
-    private static PartitionUpdate getOrAdd(CFMetaData metadata, Mutation mutation)
+    private static PartitionUpdate.Builder getOrAdd(CFMetaData metadata, Mutation.Builder mutationBuilder)
     {
-        PartitionUpdate upd = mutation.get(metadata);
+        PartitionUpdate.Builder upd = mutationBuilder.get(metadata.cfId);
         if (upd == null)
         {
-            upd = new PartitionUpdate(metadata, mutation.key(), metadata.partitionColumns(), 1);
-            mutation.add(upd);
+            upd = new PartitionUpdate.Builder(metadata, mutationBuilder.key(), metadata.partitionColumns(), 1);
+            mutationBuilder.add(upd);
         }
         return upd;
     }
@@ -243,7 +247,7 @@ public class RowUpdateBuilder
     {
         ColumnDefinition c = getDefinition(columnName);
         assert c != null : "Cannot find column " + columnName;
-        assert c.isStatic() || update.metadata().comparator.size() == 0 || regularBuilder != null : "Cannot set non static column " + c + " since no clustering has been provided";
+        assert c.isStatic() || partitionUpdateBuilder.metadata().comparator.size() == 0 || regularBuilder != null : "Cannot set non static column " + c + " since no clustering has been provided";
         assert c.type.isCollection() && c.type.isMultiCell();
         builder(c).addComplexDeletion(c, new DeletionTime(timestamp - 1, localDeletionTime));
         return this;
@@ -251,7 +255,7 @@ public class RowUpdateBuilder
 
     public RowUpdateBuilder addRangeTombstone(RangeTombstone rt)
     {
-        update.add(rt);
+        partitionUpdateBuilder.add(rt);
         return this;
     }
 
@@ -262,7 +266,7 @@ public class RowUpdateBuilder
 
     public RowUpdateBuilder addRangeTombstone(Object start, Object end)
     {
-        ClusteringComparator cmp = update.metadata().comparator;
+        ClusteringComparator cmp = partitionUpdateBuilder.metadata().comparator;
         Slice slice = Slice.make(cmp.make(start), cmp.make(end));
         return addRangeTombstone(slice);
     }
@@ -278,12 +282,12 @@ public class RowUpdateBuilder
     {
         return value == null
              ? BufferCell.tombstone(c, timestamp, localDeletionTime)
-             : (ttl == LivenessInfo.NO_TTL ? BufferCell.live(update.metadata(), c, timestamp, value, path) : BufferCell.expiring(c, timestamp, ttl, localDeletionTime, value, path));
+             : (ttl == LivenessInfo.NO_TTL ? BufferCell.live(partitionUpdateBuilder.metadata(), c, timestamp, value, path) : BufferCell.expiring(c, timestamp, ttl, localDeletionTime, value, path));
     }
 
     public RowUpdateBuilder add(ColumnDefinition columnDefinition, Object value)
     {
-        assert columnDefinition.isStatic() || update.metadata().comparator.size() == 0 || regularBuilder != null : "Cannot set non static column " + columnDefinition + " since no clustering hasn't been provided";
+        assert columnDefinition.isStatic() || partitionUpdateBuilder.metadata().comparator.size() == 0 || regularBuilder != null : "Cannot set non static column " + columnDefinition + " since no clustering hasn't been provided";
         builder(columnDefinition).addCell(makeCell(columnDefinition, bb(value, columnDefinition.type), null));
         return this;
     }
@@ -363,7 +367,7 @@ public class RowUpdateBuilder
     public RowUpdateBuilder addMapEntry(String columnName, Object key, Object value)
     {
         ColumnDefinition c = getDefinition(columnName);
-        assert c.isStatic() || update.metadata().comparator.size() == 0 || regularBuilder != null : "Cannot set non static column " + c + " since no clustering has been provided";
+        assert c.isStatic() || partitionUpdateBuilder.metadata().comparator.size() == 0 || regularBuilder != null : "Cannot set non static column " + c + " since no clustering has been provided";
         assert c.type instanceof MapType && c.type.isMultiCell() : "Column " + c + " is not a non-frozen map";
         MapType mt = (MapType)c.type;
         builder(c).addCell(makeCell(c, bb(value, mt.getValuesType()), CellPath.create(bb(key, mt.getKeysType()))));
@@ -392,11 +396,11 @@ public class RowUpdateBuilder
 
     private ColumnDefinition getDefinition(String name)
     {
-        return update.metadata().getColumnDefinition(new ColumnIdentifier(name, true));
+        return partitionUpdateBuilder.metadata().getColumnDefinition(new ColumnIdentifier(name, true));
     }
 
     public UnfilteredRowIterator unfilteredIterator()
     {
-        return update.unfilteredIterator();
+        return partitionUpdateBuilder.build().unfilteredIterator();
     }
 }

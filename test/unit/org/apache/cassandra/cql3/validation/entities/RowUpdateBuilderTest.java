@@ -51,21 +51,21 @@ public class RowUpdateBuilderTest extends CQLTester
 
         long timestamp = FBUtilities.timestampMicros();
 
-        Mutation mutation = new Mutation(keyspace(), Util.dk("test"));
-        addToMutation("row1", timestamp, mutation);
-        addToMutation("row2", timestamp, mutation);
+        Mutation.Builder mutationBuilder = new Mutation.Builder(keyspace(), Util.dk("test"));
+        addToMutation("row1", timestamp, mutationBuilder);
+        addToMutation("row2", timestamp, mutationBuilder);
 
         if (skipCommitLog)
-            mutation.applyUnsafe();
+            mutationBuilder.build().applyUnsafe();
         else
-            mutation.apply();
+            mutationBuilder.build().apply();
 
         assertRowCount(execute("SELECT ck FROM %s"), 2);
     }
 
-    private void addToMutation(String typeName, long timestamp, Mutation mutation)
+    private void addToMutation(String typeName, long timestamp, Mutation.Builder mutationBuilder)
     {
-        RowUpdateBuilder adder = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata, timestamp, mutation)
+        RowUpdateBuilder adder = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata, timestamp, mutationBuilder)
                                  .clustering(typeName);
 
         for (int i = 0; i < 2; i++)
@@ -74,6 +74,6 @@ public class RowUpdateBuilderTest extends CQLTester
                  .addListEntry("l2", i);
         }
 
-        adder.build();
+        adder.populateMutationBuilder();
     }
 }

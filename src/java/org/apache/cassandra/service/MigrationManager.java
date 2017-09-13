@@ -403,7 +403,7 @@ public class MigrationManager
             throw new ConfigurationException(String.format("Cannot update non existing keyspace '%s'.", ksm.name));
 
         logger.info(String.format("Update Keyspace '%s' From %s To %s", ksm.name, oldKsm, ksm));
-        announce(SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, ksm.params, FBUtilities.timestampMicros()), announceLocally);
+        announce(SchemaKeyspace.makeCreateKeyspaceMutationBuilder(ksm.name, ksm.params, FBUtilities.timestampMicros()).build(), announceLocally);
     }
 
     public static void announceColumnFamilyUpdate(CFMetaData cfm) throws ConfigurationException
@@ -430,24 +430,24 @@ public class MigrationManager
         long timestamp = FBUtilities.timestampMicros();
 
         logger.info(String.format("Update table '%s/%s' From %s To %s", cfm.ksName, cfm.cfName, oldCfm, cfm));
-        Mutation mutation = SchemaKeyspace.makeUpdateTableMutation(ksm, oldCfm, cfm, timestamp);
+        Mutation.Builder mutationBuilder = SchemaKeyspace.makeUpdateTableMutationBuilder(ksm, oldCfm, cfm, timestamp);
 
         if (views != null)
-            views.forEach(view -> addViewUpdateToMutation(view, mutation, timestamp));
+            views.forEach(view -> addViewUpdateToMutationBuilder(view, mutationBuilder, timestamp));
 
-        announce(mutation, announceLocally);
+        announce(mutationBuilder.build(), announceLocally);
     }
 
     public static void announceViewUpdate(ViewDefinition view, boolean announceLocally) throws ConfigurationException
     {
         KeyspaceMetadata ksm = Schema.instance.getKSMetaData(view.ksName);
         long timestamp = FBUtilities.timestampMicros();
-        Mutation mutation = SchemaKeyspace.makeCreateKeyspaceMutation(ksm.name, ksm.params, timestamp);
-        addViewUpdateToMutation(view, mutation, timestamp);
-        announce(mutation, announceLocally);
+        Mutation.Builder mutationBuilder = SchemaKeyspace.makeCreateKeyspaceMutationBuilder(ksm.name, ksm.params, timestamp);
+        addViewUpdateToMutationBuilder(view, mutationBuilder, timestamp);
+        announce(mutationBuilder.build(), announceLocally);
     }
 
-    private static void addViewUpdateToMutation(ViewDefinition view, Mutation mutation, long timestamp)
+    private static void addViewUpdateToMutationBuilder(ViewDefinition view, Mutation.Builder mutationBuilder, long timestamp)
     {
         view.metadata.validate();
 
@@ -458,7 +458,7 @@ public class MigrationManager
         oldView.metadata.validateCompatibility(view.metadata);
 
         logger.info(String.format("Update view '%s/%s' From %s To %s", view.ksName, view.viewName, oldView, view));
-        SchemaKeyspace.makeUpdateViewMutation(mutation, oldView, view, timestamp);
+        SchemaKeyspace.addViewUpdateToMutationBuilder(mutationBuilder, oldView, view, timestamp);
     }
 
     public static void announceTypeUpdate(UserType updatedType, boolean announceLocally)

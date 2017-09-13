@@ -102,7 +102,7 @@ public class CompactionsPurgeTest
         // deletes
         for (int i = 0; i < 10; i++)
         {
-            RowUpdateBuilder.deleteRow(cfs.metadata, 1, key, String.valueOf(i)).applyUnsafe();
+            RowUpdateBuilder.deleteRow(cfs.metadata, 1, key, String.valueOf(i)).build().applyUnsafe();
         }
         cfs.forceBlockingFlush();
 
@@ -146,7 +146,7 @@ public class CompactionsPurgeTest
         // deletes
         for (int i = 0; i < 10; i++)
         {
-            RowUpdateBuilder.deleteRow(cfs.metadata, Long.MAX_VALUE, key, String.valueOf(i)).applyUnsafe();
+            RowUpdateBuilder.deleteRow(cfs.metadata, Long.MAX_VALUE, key, String.valueOf(i)).build().applyUnsafe();
         }
         cfs.forceBlockingFlush();
 
@@ -188,8 +188,9 @@ public class CompactionsPurgeTest
         }
         cfs.forceBlockingFlush();
 
-        new Mutation(KEYSPACE1, dk(key))
+        new Mutation.Builder(KEYSPACE1, dk(key))
             .add(PartitionUpdate.fullPartitionDelete(cfs.metadata, dk(key), Long.MAX_VALUE, FBUtilities.nowInSeconds()))
+            .build()
             .applyUnsafe();
         cfs.forceBlockingFlush();
 
@@ -277,7 +278,7 @@ public class CompactionsPurgeTest
             // deletes
             for (int i = 0; i < 10; i++)
             {
-                RowUpdateBuilder.deleteRow(cfs.metadata, 1, key, String.valueOf(i)).applyUnsafe();
+                RowUpdateBuilder.deleteRow(cfs.metadata, 1, key, String.valueOf(i)).build().applyUnsafe();
             }
 
             cfs.forceBlockingFlush();
@@ -336,13 +337,13 @@ public class CompactionsPurgeTest
 
         cfs.forceBlockingFlush();
         // delete c1
-        RowUpdateBuilder.deleteRow(cfs.metadata, 10, key3, "c1").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 10, key3, "c1").build().applyUnsafe();
 
         cfs.forceBlockingFlush();
         Collection<SSTableReader> sstablesIncomplete = cfs.getLiveSSTables();
 
         // delete c2 so we have new delete in a diffrent SSTable
-        RowUpdateBuilder.deleteRow(cfs.metadata, 9, key3, "c2").applyUnsafe();
+        RowUpdateBuilder.deleteRow(cfs.metadata, 9, key3, "c2").build().applyUnsafe();
         cfs.forceBlockingFlush();
 
         // compact the sstables with the c1/c2 data and the c1 tombstone
@@ -379,7 +380,7 @@ public class CompactionsPurgeTest
         // deletes
         for (int i = 0; i < 5; i++)
         {
-            RowUpdateBuilder.deleteRow(cfs.metadata, 1, key, String.valueOf(i)).applyUnsafe();
+            RowUpdateBuilder.deleteRow(cfs.metadata, 1, key, String.valueOf(i)).build().applyUnsafe();
         }
         cfs.forceBlockingFlush();
         assertEquals(String.valueOf(cfs.getLiveSSTables()), 1, cfs.getLiveSSTables().size()); // inserts & deletes were in the same memtable -> only deletes in sstable
@@ -414,9 +415,9 @@ public class CompactionsPurgeTest
         }
 
         // deletes partition
-        Mutation rm = new Mutation(KEYSPACE_CACHED, dk(key));
+        Mutation.Builder rm = new Mutation.Builder(KEYSPACE_CACHED, dk(key));
         rm.add(PartitionUpdate.fullPartitionDelete(cfs.metadata, dk(key), 1, FBUtilities.nowInSeconds()));
-        rm.applyUnsafe();
+        rm.build().applyUnsafe();
 
         // Adds another unrelated partition so that the sstable is not considered fully expired. We do not
         // invalidate the row cache in that latter case.
@@ -454,9 +455,9 @@ public class CompactionsPurgeTest
         }
 
         // deletes partition with timestamp such that not all columns are deleted
-        Mutation rm = new Mutation(KEYSPACE1, dk(key));
+        Mutation.Builder rm = new Mutation.Builder(KEYSPACE1, dk(key));
         rm.add(PartitionUpdate.fullPartitionDelete(cfs.metadata, dk(key), 4, FBUtilities.nowInSeconds()));
-        rm.applyUnsafe();
+        rm.build().applyUnsafe();
 
         ImmutableBTreePartition partition = Util.getOnlyPartitionUnfiltered(Util.cmd(cfs, key).build());
         assertFalse(partition.partitionLevelDeletion().isLive());
