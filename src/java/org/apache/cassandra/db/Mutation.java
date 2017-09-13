@@ -22,6 +22,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.collect.ImmutableCollection;
+import com.google.common.collect.ImmutableMap;
 import org.apache.commons.lang3.StringUtils;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -37,8 +39,6 @@ import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
-// TODO convert this to a Builder pattern instead of encouraging M.add directly,
-// which is less-efficient since we have to keep a mutable HashMap around
 public class Mutation implements IMutation
 {
     public static final MutationSerializer serializer = new MutationSerializer();
@@ -52,37 +52,37 @@ public class Mutation implements IMutation
 
     private final DecoratedKey key;
     // map of column family id to mutations for that column family.
-    private final Map<TableId, PartitionUpdate> modifications;
+    private final ImmutableMap<TableId, PartitionUpdate> modifications;
 
-    // Time at which this mutation was instantiated
-    public final long createdAt = System.currentTimeMillis();
+    // Time at which this mutation or the builder that built it was instantiated
+    public final long createdAt;
     // keep track of when mutation has started waiting for a MV partition lock
     public final AtomicLong viewLockAcquireStart = new AtomicLong(0);
 
-    private boolean cdcEnabled = false;
+    private final boolean cdcEnabled;
 
     public Mutation(String keyspaceName, DecoratedKey key)
     {
-        this(keyspaceName, key, new HashMap<>());
+        this(keyspaceName, key, ImmutableMap.of(), System.currentTimeMillis(), false);
     }
 
     public Mutation(PartitionUpdate update)
     {
-        this(update.metadata().keyspace, update.partitionKey(), Collections.singletonMap(update.metadata().id, update));
+        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), System.currentTimeMillis(), false);
     }
 
-    protected Mutation(String keyspaceName, DecoratedKey key, Map<TableId, PartitionUpdate> modifications)
+    private Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long createdAt, boolean cdcEnabled)
     {
         this.keyspaceName = keyspaceName;
         this.key = key;
         this.modifications = modifications;
-        for (PartitionUpdate pu : modifications.values())
-            cdcEnabled |= pu.metadata().params.cdc;
+        this.cdcEnabled = cdcEnabled;
+        this.createdAt = createdAt;
     }
 
     public Mutation copy()
     {
-        return new Mutation(keyspaceName, key, new HashMap<>(modifications));
+        return new Mutation(keyspaceName, key, modifications, createdAt, cdcEnabled);
     }
 
     public Mutation without(Set<TableId> tableIds)
@@ -90,15 +90,18 @@ public class Mutation implements IMutation
         if (tableIds.isEmpty())
             return this;
 
-        Mutation copy = copy();
+        boolean cdcEnabled = false;
+        ImmutableMap.Builder<TableId, PartitionUpdate> builder = new ImmutableMap.Builder<>();
+        for (Map.Entry<TableId, PartitionUpdate> update : modifications.entrySet())
+        {
+            if (!tableIds.contains(update.getKey()))
+            {
+                builder.put(update);
+                cdcEnabled |= update.getValue().metadata().params.cdc;
+            }
+        }
 
-        copy.modifications.keySet().removeAll(tableIds);
-
-        copy.cdcEnabled = false;
-        for (PartitionUpdate pu : modifications.values())
-            copy.cdcEnabled |= pu.metadata().params.cdc;
-
-        return copy;
+        return new Mutation(keyspaceName, key, builder.build(), createdAt, cdcEnabled);
     }
 
     public Mutation without(TableId tableId)
@@ -121,7 +124,7 @@ public class Mutation implements IMutation
         return key;
     }
 
-    public Collection<PartitionUpdate> getPartitionUpdates()
+    public ImmutableCollection<PartitionUpdate> getPartitionUpdates()
     {
         return modifications.values();
     }
@@ -129,33 +132,6 @@ public class Mutation implements IMutation
     public PartitionUpdate getPartitionUpdate(TableMetadata table)
     {
         return table == null ? null : modifications.get(table.id);
-    }
-
-    /**
-     * Adds PartitionUpdate to the local set of modifications.
-     * Assumes no updates for the Table this PartitionUpdate impacts.
-     *
-     * @param update PartitionUpdate to append to Modifications list
-     * @return Mutation this mutation
-     * @throws IllegalArgumentException If PartitionUpdate for duplicate table is passed as argument
-     */
-    public Mutation add(PartitionUpdate update)
-    {
-        assert update != null;
-        assert update.partitionKey().getPartitioner() == key.getPartitioner();
-
-        cdcEnabled |= update.metadata().params.cdc;
-
-        PartitionUpdate prev = modifications.put(update.metadata().id, update);
-        if (prev != null)
-            // developer error
-            throw new IllegalArgumentException("Table " + update.metadata().name + " already has modifications in this mutation: " + prev);
-        return this;
-    }
-
-    public PartitionUpdate get(TableMetadata metadata)
-    {
-        return modifications.get(metadata.id);
     }
 
     public boolean isEmpty()
@@ -184,6 +160,7 @@ public class Mutation implements IMutation
         Set<TableId> updatedTables = new HashSet<>();
         String ks = null;
         DecoratedKey key = null;
+        boolean cdcEnabled = false;
         for (Mutation mutation : mutations)
         {
             updatedTables.addAll(mutation.modifications.keySet());
@@ -193,10 +170,11 @@ public class Mutation implements IMutation
                 throw new IllegalArgumentException();
             ks = mutation.keyspaceName;
             key = mutation.key;
+            cdcEnabled |= mutation.cdcEnabled;
         }
 
         List<PartitionUpdate> updates = new ArrayList<>(mutations.size());
-        Map<TableId, PartitionUpdate> modifications = new HashMap<>(updatedTables.size());
+        ImmutableMap.Builder<TableId, PartitionUpdate> modifications = new ImmutableMap.Builder<>();
         for (TableId table : updatedTables)
         {
             for (Mutation mutation : mutations)
@@ -212,7 +190,7 @@ public class Mutation implements IMutation
             modifications.put(table, updates.size() == 1 ? updates.get(0) : PartitionUpdate.merge(updates));
             updates.clear();
         }
-        return new Mutation(ks, key, modifications);
+        return new Mutation(ks, key, modifications.build(), System.currentTimeMillis(), cdcEnabled);
     }
 
     public CompletableFuture<?> applyFuture()
@@ -389,17 +367,18 @@ public class Mutation implements IMutation
             if (size == 1)
                 return new Mutation(update);
 
-            Map<TableId, PartitionUpdate> modifications = new HashMap<>(size);
+            ImmutableMap.Builder<TableId, PartitionUpdate> modifications = new ImmutableMap.Builder<>();
             DecoratedKey dk = update.partitionKey();
 
             modifications.put(update.metadata().id, update);
+            boolean cdcEnabled = false;
             for (int i = 1; i < size; ++i)
             {
                 update = PartitionUpdate.serializer.deserialize(in, version, flag);
                 modifications.put(update.metadata().id, update);
+                cdcEnabled |= update.metadata().params.cdc;
             }
-
-            return new Mutation(update.metadata().keyspace, dk, modifications);
+            return new Mutation(update.metadata().keyspace, dk, modifications.build(), System.currentTimeMillis(), cdcEnabled);
         }
 
         public Mutation deserialize(DataInputPlus in, int version) throws IOException
@@ -414,6 +393,119 @@ public class Mutation implements IMutation
                 size += PartitionUpdate.serializer.serializedSize(entry.getValue(), version);
 
             return size;
+        }
+    }
+
+    public static class Builder implements IMutationBuilder
+    {
+        private final HashMap<TableId, PartitionUpdate.Builder> modifications = new HashMap<>();
+        private final DecoratedKey key;
+        private final String keyspaceName;
+        private final long createdAt = System.currentTimeMillis();
+
+        public Builder(String keyspaceName, DecoratedKey key)
+        {
+            this.keyspaceName = keyspaceName;
+            this.key = key;
+        }
+
+        public Builder add(PartitionUpdate.Builder updateBuilder)
+        {
+            assert updateBuilder != null;
+            assert updateBuilder.partitionKey().getPartitioner() == key.getPartitioner();
+            PartitionUpdate.Builder prev = modifications.put(updateBuilder.metadata().id, updateBuilder);
+            if (prev != null)
+                // developer error
+                throw new IllegalArgumentException("Table " + updateBuilder.metadata().name + " already has modifications in this mutation: " + prev);
+            return this;
+        }
+
+        public Mutation build()
+        {
+            ImmutableMap.Builder<TableId, PartitionUpdate> updates = new ImmutableMap.Builder<>();
+            boolean cdcEnabled = false;
+            for (Map.Entry<TableId, PartitionUpdate.Builder> updateEntry : modifications.entrySet())
+            {
+                PartitionUpdate update = updateEntry.getValue().build();
+                updates.put(updateEntry.getKey(), update);
+                cdcEnabled |= update.metadata().params.cdc;
+            }
+            return new Mutation(keyspaceName, key, updates.build(), createdAt, cdcEnabled);
+        }
+
+        public PartitionUpdate.Builder get(TableId tableId)
+        {
+            return modifications.get(tableId);
+        }
+
+        public DecoratedKey key()
+        {
+            return key;
+        }
+
+        public boolean isEmpty()
+        {
+            return modifications.isEmpty();
+        }
+
+        public String getKeyspaceName()
+        {
+            return keyspaceName;
+        }
+    }
+
+    /**
+     * Collects finalized partition updates - no builders here.
+     */
+    public static class PartitionUpdateCollector
+    {
+        private final Map<TableId, PartitionUpdate> modifications = new HashMap<>();
+        private final String keyspaceName;
+        private final DecoratedKey key;
+        private final long createdAt = System.currentTimeMillis();
+
+        public PartitionUpdateCollector(String keyspaceName, DecoratedKey key)
+        {
+            this.keyspaceName = keyspaceName;
+            this.key = key;
+        }
+
+        public PartitionUpdateCollector add(PartitionUpdate partitionUpdate)
+        {
+            assert partitionUpdate != null;
+            assert partitionUpdate.partitionKey().getPartitioner() == key.getPartitioner();
+            PartitionUpdate prev = modifications.put(partitionUpdate.metadata().id, partitionUpdate);
+            if (prev != null)
+                // developer error
+                throw new IllegalArgumentException("Table " + partitionUpdate.metadata().name + " already has modifications in this mutation: " + prev);
+            return this;
+        }
+
+        public DecoratedKey key()
+        {
+            return key;
+        }
+
+        public String getKeyspaceName()
+        {
+            return keyspaceName;
+        }
+
+        public boolean isEmpty()
+        {
+            return modifications.isEmpty();
+        }
+
+        public Mutation build()
+        {
+            ImmutableMap.Builder<TableId, PartitionUpdate> updates = new ImmutableMap.Builder<>();
+            boolean cdcEnabled = false;
+            for (Map.Entry<TableId, PartitionUpdate> entry : modifications.entrySet())
+            {
+                updates.put(entry);
+                cdcEnabled |= entry.getValue().metadata().params.cdc;
+            }
+            return new Mutation(keyspaceName, key, updates.build(), createdAt, cdcEnabled);
         }
     }
 }

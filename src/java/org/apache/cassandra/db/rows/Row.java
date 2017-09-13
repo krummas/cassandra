@@ -583,6 +583,8 @@ public interface Row extends Unfiltered, Collection<ColumnData>
          */
         public SimpleBuilder delete();
 
+        public SimpleBuilder delete(int localDeletionTime);
+
         /**
          * Removes the value for a given column (creating a tombstone).
          *
