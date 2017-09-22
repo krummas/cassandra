@@ -839,7 +839,7 @@ public class BTree
         public Builder<V> add(V v)
         {
             if (count == values.length)
-                values = Arrays.copyOf(values, count * 2);
+                values = Arrays.copyOf(values, count == 0 ? 1 : count * 2);
 
             Object[] values = this.values;
             int prevCount = this.count++;
