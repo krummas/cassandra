@@ -78,7 +78,7 @@ public class DeletePartitionTest
             store.forceBlockingFlush();
 
         // delete the partition
-        new Mutation.Builder(KEYSPACE1, key)
+        new Mutation.PartitionUpdateCollector(KEYSPACE1, key)
                 .add(PartitionUpdate.fullPartitionDelete(store.metadata, key, 0, FBUtilities.nowInSeconds()))
                 .build()
                 .applyUnsafe();

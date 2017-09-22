@@ -681,7 +681,7 @@ public class CommitLogReplayer
                 //    b) have already been flushed,
                 // or c) are part of a cf that was dropped.
                 // Keep in mind that the cf.name() is suspect. do every thing based on the cfid instead.
-                Mutation.Builder newMutationBuilder = null;
+                Mutation.PartitionUpdateCollector newPUCollector = null;
                 for (PartitionUpdate update : replayFilter.filter(mutation))
                 {
                     if (Schema.instance.getCF(update.metadata().cfId) == null)
@@ -691,17 +691,17 @@ public class CommitLogReplayer
                     // if it is the last known segment, if we are after the replay position
                     if (shouldReplay(update.metadata().cfId, new ReplayPosition(desc.id, entryLocation)))
                     {
-                        if (newMutationBuilder == null)
-                            newMutationBuilder = new Mutation.Builder(mutation.getKeyspaceName(), mutation.key());
-                        newMutationBuilder.add(update);
+                        if (newPUCollector == null)
+                            newPUCollector = new Mutation.PartitionUpdateCollector(mutation.getKeyspaceName(), mutation.key());
+                        newPUCollector.add(update);
                         replayedCount.incrementAndGet();
                     }
                 }
-                if (newMutationBuilder != null)
+                if (newPUCollector != null)
                 {
-                    assert !newMutationBuilder.isEmpty();
+                    assert !newPUCollector.isEmpty();
 
-                    Keyspace.open(newMutationBuilder.getKeyspaceName()).apply(newMutationBuilder.build(), false, true, false);
+                    Keyspace.open(newPUCollector.getKeyspaceName()).apply(newPUCollector.build(), false, true, false);
                     keyspacesRecovered.add(keyspace);
                 }
             }

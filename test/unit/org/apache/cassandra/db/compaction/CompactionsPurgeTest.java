@@ -188,7 +188,7 @@ public class CompactionsPurgeTest
         }
         cfs.forceBlockingFlush();
 
-        new Mutation.Builder(KEYSPACE1, dk(key))
+        new Mutation.PartitionUpdateCollector(KEYSPACE1, dk(key))
             .add(PartitionUpdate.fullPartitionDelete(cfs.metadata, dk(key), Long.MAX_VALUE, FBUtilities.nowInSeconds()))
             .build()
             .applyUnsafe();
@@ -415,7 +415,7 @@ public class CompactionsPurgeTest
         }
 
         // deletes partition
-        Mutation.Builder rm = new Mutation.Builder(KEYSPACE_CACHED, dk(key));
+        Mutation.PartitionUpdateCollector rm = new Mutation.PartitionUpdateCollector(KEYSPACE_CACHED, dk(key));
         rm.add(PartitionUpdate.fullPartitionDelete(cfs.metadata, dk(key), 1, FBUtilities.nowInSeconds()));
         rm.build().applyUnsafe();
 
@@ -455,7 +455,7 @@ public class CompactionsPurgeTest
         }
 
         // deletes partition with timestamp such that not all columns are deleted
-        Mutation.Builder rm = new Mutation.Builder(KEYSPACE1, dk(key));
+        Mutation.PartitionUpdateCollector rm = new Mutation.PartitionUpdateCollector(KEYSPACE1, dk(key));
         rm.add(PartitionUpdate.fullPartitionDelete(cfs.metadata, dk(key), 4, FBUtilities.nowInSeconds()));
         rm.build().applyUnsafe();
 

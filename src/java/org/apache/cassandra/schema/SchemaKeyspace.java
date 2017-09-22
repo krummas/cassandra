@@ -361,15 +361,15 @@ public final class SchemaKeyspace
 
     public static Collection<Mutation> convertSchemaToMutations()
     {
-        Map<DecoratedKey, Mutation.Builder> mutationMap = new HashMap<>();
+        Map<DecoratedKey, Mutation.PartitionUpdateCollector> mutationMap = new HashMap<>();
 
         for (String table : ALL)
             convertSchemaToMutations(mutationMap, table);
 
-        return mutationMap.values().stream().map(Mutation.Builder::build).collect(Collectors.toList());
+        return mutationMap.values().stream().map(Mutation.PartitionUpdateCollector::build).collect(Collectors.toList());
     }
 
-    private static void convertSchemaToMutations(Map<DecoratedKey, Mutation.Builder> mutationMap, String schemaTableName)
+    private static void convertSchemaToMutations(Map<DecoratedKey, Mutation.PartitionUpdateCollector> mutationMap, String schemaTableName)
     {
         ReadCommand cmd = getReadCommandForTableSchema(schemaTableName);
         try (ReadOrderGroup orderGroup = cmd.startOrderGroup(); UnfilteredPartitionIterator iter = cmd.executeLocally(orderGroup))
@@ -382,14 +382,14 @@ public final class SchemaKeyspace
                         continue;
 
                     DecoratedKey key = partition.partitionKey();
-                    Mutation.Builder mutationBuilder = mutationMap.get(key);
-                    if (mutationBuilder == null)
+                    Mutation.PartitionUpdateCollector puCollector = mutationMap.get(key);
+                    if (puCollector == null)
                     {
-                        mutationBuilder = new Mutation.Builder(NAME, key);
-                        mutationMap.put(key, mutationBuilder);
+                        puCollector = new Mutation.PartitionUpdateCollector(NAME, key);
+                        mutationMap.put(key, puCollector);
                     }
 
-                    mutationBuilder.add(PartitionUpdate.fromIterator(partition));
+                    puCollector.add(PartitionUpdate.fromIterator(partition));
                 }
             }
         }
@@ -433,12 +433,12 @@ public final class SchemaKeyspace
     public static Mutation makeDropKeyspaceMutation(KeyspaceMetadata keyspace, long timestamp)
     {
         int nowInSec = FBUtilities.nowInSeconds();
-        Mutation.Builder mutationBuilder = new Mutation.Builder(NAME, Keyspaces.decorateKey(getSchemaKSKey(keyspace.name)));
+        Mutation.PartitionUpdateCollector puCollector = new Mutation.PartitionUpdateCollector(NAME, Keyspaces.decorateKey(getSchemaKSKey(keyspace.name)));
 
         for (CFMetaData schemaTable : ALL_TABLE_METADATA)
-            mutationBuilder.add(PartitionUpdate.fullPartitionDelete(schemaTable, mutationBuilder.key(), timestamp, nowInSec));
+            puCollector.add(PartitionUpdate.fullPartitionDelete(schemaTable, puCollector.key(), timestamp, nowInSec));
 
-        return mutationBuilder.build();
+        return puCollector.build();
     }
 
     public static Mutation makeCreateTypeMutation(KeyspaceMetadata keyspace, UserType type, long timestamp)

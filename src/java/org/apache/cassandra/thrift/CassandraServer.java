@@ -1111,8 +1111,8 @@ public class CassandraServer implements Cassandra.Iface
 
             // We need to separate mutation for standard cf and counter cf (that will be encapsulated in a
             // CounterMutation) because it doesn't follow the same code path
-            org.apache.cassandra.db.Mutation.Builder standardMutationBuilder = null;
-            org.apache.cassandra.db.Mutation.Builder counterMutationBuilder = null;
+            org.apache.cassandra.db.Mutation.PartitionUpdateCollector standardPUCollector = null;
+            org.apache.cassandra.db.Mutation.PartitionUpdateCollector counterPUCollector = null;
 
             Map<String, List<Mutation>> columnFamilyToMutations = mutationEntry.getValue();
             for (Map.Entry<String, List<Mutation>> columnFamilyMutations : columnFamilyToMutations.entrySet())
@@ -1153,26 +1153,26 @@ public class CassandraServer implements Cassandra.Iface
                 // Indexed column values cannot be larger than 64K.  See CASSANDRA-3057/4240 for more details
                 Keyspace.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager.validate(update);
 
-                org.apache.cassandra.db.Mutation.Builder mutationBuilder;
+                org.apache.cassandra.db.Mutation.PartitionUpdateCollector puCollector;
                 if (metadata.isCounter())
                 {
-                    counterMutationBuilder = counterMutationBuilder == null ? new org.apache.cassandra.db.Mutation.Builder(keyspace, dk) : counterMutationBuilder;
-                    mutationBuilder = counterMutationBuilder;
+                    counterPUCollector = counterPUCollector == null ? new org.apache.cassandra.db.Mutation.PartitionUpdateCollector(keyspace, dk) : counterPUCollector;
+                    puCollector = counterPUCollector;
                 }
                 else
                 {
-                    standardMutationBuilder = standardMutationBuilder == null ? new org.apache.cassandra.db.Mutation.Builder(keyspace, dk) : standardMutationBuilder;
-                    mutationBuilder = standardMutationBuilder;
+                    standardPUCollector = standardPUCollector == null ? new org.apache.cassandra.db.Mutation.PartitionUpdateCollector(keyspace, dk) : standardPUCollector;
+                    puCollector = standardPUCollector;
                 }
-                mutationBuilder.add(update);
+                puCollector.add(update);
             }
-            if (standardMutationBuilder != null && !standardMutationBuilder.isEmpty())
-                mutations.add(standardMutationBuilder.build());
+            if (standardPUCollector != null && !standardPUCollector.isEmpty())
+                mutations.add(standardPUCollector.build());
 
-            if (counterMutationBuilder != null && !counterMutationBuilder.isEmpty())
+            if (counterPUCollector != null && !counterPUCollector.isEmpty())
             {
                 if (allowCounterMutations)
-                    mutations.add(new CounterMutation(counterMutationBuilder.build(), ThriftConversion.fromThrift(consistency_level)));
+                    mutations.add(new CounterMutation(counterPUCollector.build(), ThriftConversion.fromThrift(consistency_level)));
                 else
                     throw new org.apache.cassandra.exceptions.InvalidRequestException("Counter mutations are not allowed in atomic batches");
             }

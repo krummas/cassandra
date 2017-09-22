@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.PeekingIterator;
@@ -507,23 +508,23 @@ public class TableViews extends AbstractCollection<View>
             return mutations;
         }
 
-        Map<DecoratedKey, Mutation.Builder> mutations = new HashMap<>();
+        Map<DecoratedKey, Mutation.PartitionUpdateCollector> mutations = new HashMap<>();
         for (ViewUpdateGenerator generator : generators)
         {
             for (PartitionUpdate update : generator.generateViewUpdates())
             {
                 DecoratedKey key = update.partitionKey();
-                Mutation.Builder mutationBuilder = mutations.get(key);
-                if (mutationBuilder == null)
+                Mutation.PartitionUpdateCollector collector = mutations.get(key);
+                if (collector == null)
                 {
-                    mutationBuilder = new Mutation.Builder(baseTableMetadata.ksName, key);
-                    mutations.put(key, mutationBuilder);
+                    collector = new Mutation.PartitionUpdateCollector(baseTableMetadata.ksName, key);
+                    mutations.put(key, collector);
                 }
-                mutationBuilder.add(update);
+                collector.add(update);
             }
             generator.clear();
         }
-        return mutations.values().stream().map(Mutation.Builder::build).collect(Collectors.toList());
+        return mutations.values().stream().map(Mutation.PartitionUpdateCollector::build).collect(Collectors.toList());
     }
 
     /**

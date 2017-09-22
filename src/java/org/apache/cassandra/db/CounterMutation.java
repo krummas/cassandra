@@ -113,7 +113,7 @@ public class CounterMutation implements IMutation
      */
     public Mutation apply() throws WriteTimeoutException
     {
-        Mutation.Builder resultBuilder = new Mutation.Builder(getKeyspaceName(), key());
+        Mutation.PartitionUpdateCollector resultBuilder = new Mutation.PartitionUpdateCollector(getKeyspaceName(), key());
         Keyspace keyspace = Keyspace.open(getKeyspaceName());
 
         List<Lock> locks = new ArrayList<>();
@@ -123,6 +123,7 @@ public class CounterMutation implements IMutation
             grabCounterLocks(keyspace, locks);
             for (PartitionUpdate upd : getPartitionUpdates())
                 resultBuilder.add(processModifications(upd));
+
             Mutation result = resultBuilder.build();
             result.apply();
             return result;

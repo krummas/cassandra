@@ -362,11 +362,9 @@ public class Mutation implements IMutation
     public static class Builder implements IMutationBuilder
     {
         private final HashMap<UUID, PartitionUpdate.Builder> modifications = new HashMap<>();
-        // todo: try to rework this - keeping both Builders and standard PartitionUpdates is quite confusing:
-        private final HashMap<UUID, PartitionUpdate> finalizedModifications = new HashMap<>();
         private final DecoratedKey key;
         private final String keyspaceName;
-        private static final long createdAt = System.currentTimeMillis();
+        private final long createdAt = System.currentTimeMillis();
 
         public Builder(String keyspaceName, DecoratedKey key)
         {
@@ -374,27 +372,14 @@ public class Mutation implements IMutation
             this.key = key;
         }
 
-        public Builder add(PartitionUpdate.Builder update)
+        public Builder add(PartitionUpdate.Builder updateBuilder)
         {
-            assert update != null;
-            assert update.partitionKey().getPartitioner() == key.getPartitioner();
-            assert !finalizedModifications.containsKey(update.metadata().cfId) : "Table " + update.metadata().cfName + " already has modifications in this mutation";
-            PartitionUpdate.Builder prev = modifications.put(update.metadata().cfId, update);
+            assert updateBuilder != null;
+            assert updateBuilder.partitionKey().getPartitioner() == key.getPartitioner();
+            PartitionUpdate.Builder prev = modifications.put(updateBuilder.metadata().cfId, updateBuilder);
             if (prev != null)
                 // developer error
-                throw new IllegalArgumentException("Table " + update.metadata().cfName + " already has modifications in this mutation: " + prev);
-            return this;
-        }
-
-        public Builder add(PartitionUpdate update)
-        {
-            assert update != null;
-            assert update.partitionKey().getPartitioner() == key.getPartitioner();
-            assert !modifications.containsKey(update.metadata().cfId) : "Table " + update.metadata().cfName + " already has modifications in this mutation";
-            PartitionUpdate prev = finalizedModifications.put(update.metadata().cfId, update);
-            if (prev != null)
-                // developer error
-                throw new IllegalArgumentException("Table " + update.metadata().cfName + " already has modifications in this mutation: " + prev);
+                throw new IllegalArgumentException("Table " + updateBuilder.metadata().cfName + " already has modifications in this mutation: " + prev);
             return this;
         }
 
@@ -402,10 +387,7 @@ public class Mutation implements IMutation
         {
             ImmutableMap.Builder<UUID, PartitionUpdate> updates = new ImmutableMap.Builder<>();
             for (Map.Entry<UUID, PartitionUpdate.Builder> updateEntry : modifications.entrySet())
-            {
                 updates.put(updateEntry.getKey(), updateEntry.getValue().build());
-            }
-            updates.putAll(finalizedModifications);
             return new Mutation(keyspaceName, key, updates.build(), createdAt);
         }
 
@@ -421,12 +403,62 @@ public class Mutation implements IMutation
 
         public boolean isEmpty()
         {
-            return modifications.isEmpty() && finalizedModifications.isEmpty();
+            return modifications.isEmpty();
         }
 
         public String getKeyspaceName()
         {
             return keyspaceName;
+        }
+    }
+
+    /**
+     * Collects finalized partition updates - no builders here.
+     */
+    public static class PartitionUpdateCollector
+    {
+        private final Map<UUID, PartitionUpdate> modifications = new HashMap<>();
+        private final String keyspaceName;
+        private final DecoratedKey key;
+        private final long createdAt = System.currentTimeMillis();
+
+        public PartitionUpdateCollector(String keyspaceName, DecoratedKey key)
+        {
+            this.keyspaceName = keyspaceName;
+            this.key = key;
+        }
+
+        public PartitionUpdateCollector add(PartitionUpdate partitionUpdate)
+        {
+            assert partitionUpdate != null;
+            assert partitionUpdate.partitionKey().getPartitioner() == key.getPartitioner();
+            PartitionUpdate prev = modifications.put(partitionUpdate.metadata().cfId, partitionUpdate);
+            if (prev != null)
+                // developer error
+                throw new IllegalArgumentException("Table " + partitionUpdate.metadata().cfName + " already has modifications in this mutation: " + prev);
+            return this;
+        }
+
+        public DecoratedKey key()
+        {
+            return key;
+        }
+
+        public String getKeyspaceName()
+        {
+            return keyspaceName;
+        }
+
+        public boolean isEmpty()
+        {
+            return modifications.isEmpty();
+        }
+
+        public Mutation build()
+        {
+            ImmutableMap.Builder<UUID, PartitionUpdate> updates = new ImmutableMap.Builder<>();
+            updates.putAll(modifications);
+            return new Mutation(keyspaceName, key, updates.build(), createdAt);
         }
     }
 }
