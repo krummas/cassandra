@@ -751,7 +751,7 @@ public class BTree
 
     public static <V> Builder<V> builder(Comparator<? super V> comparator, int initialCapacity)
     {
-        return new Builder<>(comparator);
+        return new Builder<>(comparator, initialCapacity);
     }
 
     public static class Builder<V>
