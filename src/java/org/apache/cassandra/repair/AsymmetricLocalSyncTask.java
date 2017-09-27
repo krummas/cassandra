@@ -38,14 +38,13 @@ import org.apache.cassandra.utils.FBUtilities;
 
 public class AsymmetricLocalSyncTask extends AsymmetricSyncTask implements StreamEventHandler
 {
-    private final UUID parentSessionId;
+    private final UUID pendingRepair;
     private final TraceState state = Tracing.instance.get();
 
-    public AsymmetricLocalSyncTask(RepairJobDesc desc, InetAddress fetchFrom, List<Range<Token>> rangesToFetch, UUID parentSessionId, PreviewKind previewKind)
+    public AsymmetricLocalSyncTask(RepairJobDesc desc, InetAddress fetchFrom, List<Range<Token>> rangesToFetch, UUID pendingRepair, PreviewKind previewKind)
     {
         super(desc, FBUtilities.getBroadcastAddress(), fetchFrom, rangesToFetch, previewKind);
-        // todo: pendingrepair
-        this.parentSessionId = parentSessionId;
+        this.pendingRepair = pendingRepair;
     }
 
     public void startSync(List<Range<Token>> rangesToFetch)
@@ -54,10 +53,10 @@ public class AsymmetricLocalSyncTask extends AsymmetricSyncTask implements Strea
         StreamPlan plan = new StreamPlan(StreamOperation.REPAIR,
                                          1, false,
                                          false,
-                                         null,
+                                         pendingRepair,
                                          previewKind)
                           .listeners(this)
-                          .flushBeforeTransfer(true)
+                          .flushBeforeTransfer(pendingRepair == null)
                           // request ranges from the remote node
                           .requestRanges(fetchFrom, preferred, desc.keyspace, rangesToFetch, desc.columnFamily);
         plan.execute();

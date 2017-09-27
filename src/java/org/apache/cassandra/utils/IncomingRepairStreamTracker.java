@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.utils;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -37,19 +38,19 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 
-public class IncomingRepairStreamTracker<T>
+public class IncomingRepairStreamTracker
 {
     private static final Logger logger = LoggerFactory.getLogger(IncomingRepairStreamTracker.class);
-    private final Map<T, Map<T, List<Range<Token>>>> differences;
+    private final Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences;
 
-    private IncomingRepairStreamTracker(Map<T, Map<T, List<Range<Token>>>> differences)
+    private IncomingRepairStreamTracker(Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences)
     {
         this.differences = differences;
     }
 
-    private final Map<Range<Token>, Set<Set<T>>> incoming = new HashMap<>();
+    private final Map<Range<Token>, Set<Set<InetAddress>>> incoming = new HashMap<>();
 
-    private void addIncomingRangeFrom(Range<Token> range, T streamFromNode)
+    private void addIncomingRangeFrom(Range<Token> range, InetAddress streamFromNode)
     {
         logger.trace("adding incoming range {} from {}", range, streamFromNode);
         Set<Range<Token>> newInput = denormalize(range, incoming);
@@ -76,11 +77,11 @@ public class IncomingRepairStreamTracker<T>
      * we know that all intersections are keys in the updated {{incoming}}
      */
     @VisibleForTesting
-    static <T> Set<Range<Token>> denormalize(Range<Token> range, Map<Range<Token>, Set<Set<T>>> incoming)
+    static Set<Range<Token>> denormalize(Range<Token> range, Map<Range<Token>, Set<Set<InetAddress>>> incoming)
     {
         logger.trace("Denormalizing range={} incoming={}", range, incoming);
         Set<Range<Token>> existingRanges = new HashSet<>(incoming.keySet());
-        Map<Range<Token>, Set<Set<T>>> existingOverlappingRanges = new HashMap<>();
+        Map<Range<Token>, Set<Set<InetAddress>>> existingOverlappingRanges = new HashMap<>();
         for (Range<Token> existingRange : existingRanges)
         {
             if (range.intersects(existingRange))
@@ -94,7 +95,7 @@ public class IncomingRepairStreamTracker<T>
         assertNonOverLapping(newInput);
         for (Range<Token> r : newExisting)
         {
-            for (Map.Entry<Range<Token>, Set<Set<T>>> entry : existingOverlappingRanges.entrySet())
+            for (Map.Entry<Range<Token>, Set<Set<InetAddress>>> entry : existingOverlappingRanges.entrySet())
             {
                 if (r.intersects(entry.getKey()))
                     incoming.put(r, copySet(entry.getValue()));
@@ -151,15 +152,15 @@ public class IncomingRepairStreamTracker<T>
         return ret;
     }
 
-    private boolean maybeAddToExisting(Range<Token> r, T streamFromNode, Set<Set<T>> sets)
+    private boolean maybeAddToExisting(Range<Token> r, InetAddress streamFromNode, Set<Set<InetAddress>> sets)
     {
-        for (Set<T> existing : sets)
+        for (Set<InetAddress> existing : sets)
         {
             // the nodes in 'existing' are all equal for 'r'
             // if 'streamFromNode' is also equal for 'range' - we can just add it to the set
             // and later pick a single node in 'existing' to stream from.
             assert existing.size() > 0;
-            T first = existing.iterator().next();
+            InetAddress first = existing.iterator().next();
             if (remoteNodesEqual(r, first, streamFromNode))
             {
                 existing.add(streamFromNode);
@@ -169,7 +170,7 @@ public class IncomingRepairStreamTracker<T>
         return false;
     }
 
-    private boolean remoteNodesEqual(Range<Token> range, T i, T j)
+    private boolean remoteNodesEqual(Range<Token> range, InetAddress i, InetAddress j)
     {
         List<Range<Token>> diffs = differences.getOrDefault(i, Maps.newHashMap()).get(j); // todo: also check [j][i] if someone calls this method with flipped arguments
         if (diffs != null)
@@ -185,7 +186,7 @@ public class IncomingRepairStreamTracker<T>
     }
 
     @VisibleForTesting
-    Map<Range<Token>, Set<Set<T>>> rawRangesToFetch()
+    Map<Range<Token>, Set<Set<InetAddress>>> rawRangesToFetch()
     {
         return ImmutableMap.copyOf(incoming);
     }
@@ -208,12 +209,12 @@ public class IncomingRepairStreamTracker<T>
      * smallest range (either the new difference or the existing one)
      */
     @VisibleForTesting
-    static <T> Map<T, IncomingRepairStreamTracker<T>> reduceDifferences(Map<T, Map<T, List<Range<Token>>>> differences)
+    static Map<InetAddress, IncomingRepairStreamTracker> reduceDifferences(Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences)
     {
-        Map<T, IncomingRepairStreamTracker<T>> trackers = new HashMap<>();
-        for (Map.Entry<T, Map<T, List<Range<Token>>>> diffs : differences.entrySet())
+        Map<InetAddress, IncomingRepairStreamTracker> trackers = new HashMap<>();
+        for (Map.Entry<InetAddress, Map<InetAddress, List<Range<Token>>>> diffs : differences.entrySet())
         {
-            for (Map.Entry<T, List<Range<Token>>> nodeDiffs : diffs.getValue().entrySet())
+            for (Map.Entry<InetAddress, List<Range<Token>>> nodeDiffs : diffs.getValue().entrySet())
             {
                 for (Range<Token> r : nodeDiffs.getValue())
                 {
@@ -225,45 +226,45 @@ public class IncomingRepairStreamTracker<T>
         return trackers;
     }
 
-    public static <T> Reduced<T> reduce(Map<T, Map<T, List<Range<Token>>>> differences, PreferedNodeFilter<T> filter)
+    public static Reduced reduce(Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences, PreferedNodeFilter filter)
     {
-        return new Reduced<>(reduceDifferences(differences), filter);
+        return new Reduced(reduceDifferences(differences), filter);
     }
 
-    private static <T> IncomingRepairStreamTracker<T> getTracker(Map<T, Map<T, List<Range<Token>>>> differences, Map<T, IncomingRepairStreamTracker<T>> trackers, T i)
+    private static IncomingRepairStreamTracker getTracker(Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences, Map<InetAddress, IncomingRepairStreamTracker> trackers, InetAddress i)
     {
         if (!trackers.containsKey(i))
-            trackers.put(i,  new IncomingRepairStreamTracker<>(differences));
+            trackers.put(i,  new IncomingRepairStreamTracker(differences));
         return trackers.get(i);
     }
 
-    public static class Reduced<T>
+    public static class Reduced
     {
-        private final Map<T, Map<T, List<Range<Token>>>> reducedMap;
+        private final Map<InetAddress, Map<InetAddress, List<Range<Token>>>> reducedMap;
 
-        public Reduced(Map<T, IncomingRepairStreamTracker<T>> incomingTrackers, PreferedNodeFilter<T> filter)
+        public Reduced(Map<InetAddress, IncomingRepairStreamTracker> incomingTrackers, PreferedNodeFilter filter)
         {
             reducedMap = reduce(incomingTrackers, filter);
         }
 
-        public Map<T, List<Range<Token>>> streamsFor(T node)
+        public Map<InetAddress, List<Range<Token>>> streamsFor(InetAddress node)
         {
             return reducedMap.get(node);
         }
 
-        private static <T> Map<T, Map<T, List<Range<Token>>>> reduce(Map<T, IncomingRepairStreamTracker<T>> incomingTrackers, PreferedNodeFilter<T> filter)
+        private static Map<InetAddress, Map<InetAddress, List<Range<Token>>>> reduce(Map<InetAddress, IncomingRepairStreamTracker> incomingTrackers, PreferedNodeFilter filter)
         {
-            Map<T, Integer> outgoingStreamCounts = new HashMap<>();
-            Map<T, Map<T, List<Range<Token>>>> retMap = new HashMap<>();
+            Map<InetAddress, Integer> outgoingStreamCounts = new HashMap<>();
+            Map<InetAddress, Map<InetAddress, List<Range<Token>>>> retMap = new HashMap<>();
 
-            for (Map.Entry<T, IncomingRepairStreamTracker<T>> trackerEntry : incomingTrackers.entrySet())
+            for (Map.Entry<InetAddress, IncomingRepairStreamTracker> trackerEntry : incomingTrackers.entrySet())
             {
-                IncomingRepairStreamTracker<T> tracker = trackerEntry.getValue();
-                Map<T, List<Range<Token>>> rangesToFetch = new HashMap<>();
-                for (Map.Entry<Range<Token>, Set<Set<T>>> entry : tracker.incoming.entrySet())
+                IncomingRepairStreamTracker tracker = trackerEntry.getValue();
+                Map<InetAddress, List<Range<Token>>> rangesToFetch = new HashMap<>();
+                for (Map.Entry<Range<Token>, Set<Set<InetAddress>>> entry : tracker.incoming.entrySet())
                 {
                     Range<Token> rangeToFetch = entry.getKey();
-                    for (T remoteNode : pickLeastStreaming(trackerEntry.getKey(), entry.getValue(), outgoingStreamCounts, filter))
+                    for (InetAddress remoteNode : pickLeastStreaming(trackerEntry.getKey(), entry.getValue(), outgoingStreamCounts, filter))
                     {
                         rangesToFetch.computeIfAbsent(remoteNode, k -> new ArrayList<>());
                         rangesToFetch.get(remoteNode).add(rangeToFetch);
@@ -276,14 +277,14 @@ public class IncomingRepairStreamTracker<T>
         }
 
         // greedily pick the nodes doing the least amount of streaming
-        private static <T> Collection<T> pickLeastStreaming(T streamingNode, Set<Set<T>> values, Map<T, Integer> outgoingStreamCounts, PreferedNodeFilter<T> filter)
+        private static Collection<InetAddress> pickLeastStreaming(InetAddress streamingNode, Set<Set<InetAddress>> values, Map<InetAddress, Integer> outgoingStreamCounts, PreferedNodeFilter filter)
         {
-            Set<T> retSet = new HashSet<>();
-            for (Set<T> toStream : values)
+            Set<InetAddress> retSet = new HashSet<>();
+            for (Set<InetAddress> toStream : values)
             {
-                T candidate = null;
-                Set<T> prefered = filter.apply(streamingNode, toStream);
-                for (T node : prefered)
+                InetAddress candidate = null;
+                Set<InetAddress> prefered = filter.apply(streamingNode, toStream);
+                for (InetAddress node : prefered)
                 {
                     if (candidate == null || outgoingStreamCounts.getOrDefault(candidate, 0) > outgoingStreamCounts.getOrDefault(node, 0))
                     {
@@ -293,7 +294,7 @@ public class IncomingRepairStreamTracker<T>
 
                 if (candidate == null)
                 {
-                    for (T node : toStream)
+                    for (InetAddress node : toStream)
                     {
                         if (candidate == null || outgoingStreamCounts.getOrDefault(candidate, 0) > outgoingStreamCounts.getOrDefault(node, 0))
                         {

@@ -19,6 +19,8 @@
 package org.apache.cassandra.utils;
 
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,6 +47,23 @@ import static org.junit.Assert.assertTrue;
 
 public class IncomingRepairStreamTrackerTest
 {
+    private static final InetAddress[] addresses;
+    static
+    {
+        addresses = new InetAddress[20];
+        for (int i = 0; i < 20; i++)
+        {
+            try
+            {
+                addresses[i] = InetAddress.getByName("127.0.0." + i);
+            }
+            catch (UnknownHostException e)
+            {
+                e.printStackTrace();
+            }
+        }
+    }
+
     @Test
     public void testSimpleReducing()
     {
@@ -62,55 +81,55 @@ B         x   x   x
 C             x   x
 D                 =
          */
-        Map<Integer, Map<Integer, List<Range<Token>>>> differences = new HashMap<>();
+        Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences = new HashMap<>();
         for (int i = 0; i < 4; i++)
         {
             for (int j = i + 1; j < 5; j++)
             {
                 List<Range<Token>> diff = list(new Range<>(new Murmur3Partitioner.LongToken(0), new Murmur3Partitioner.LongToken(10)));
-                differences.computeIfAbsent(i, k -> new HashMap<>());
-                differences.get(i).put(j, diff);
+                differences.computeIfAbsent(addresses[i], k -> new HashMap<>());
+                differences.get(addresses[i]).put(addresses[j], diff);
             }
         }
-        differences.get(0).remove(1);
-        differences.get(3).remove(4);
-        Map<Integer, IncomingRepairStreamTracker<Integer>> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
-        assertEquals(set(set(2), set(4,3)), tracker.get(0).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(2), set(4,3)), tracker.get(1).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(0,1), set(4,3)), tracker.get(2).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(0,1), set(2)), tracker.get(3).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(0,1), set(2)), tracker.get(4).rawRangesToFetch().values().iterator().next());
+        differences.get(addresses[0]).remove(addresses[1]);
+        differences.get(addresses[3]).remove(addresses[4]);
+        Map<InetAddress, IncomingRepairStreamTracker> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
+        assertEquals(set(set(addresses[2]), set(addresses[4],addresses[3])), tracker.get(addresses[0]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[2]), set(addresses[4],addresses[3])), tracker.get(addresses[1]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[0],addresses[1]), set(addresses[4],addresses[3])), tracker.get(addresses[2]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[0],addresses[1]), set(addresses[2])), tracker.get(addresses[3]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[0],addresses[1]), set(addresses[2])), tracker.get(addresses[4]).rawRangesToFetch().values().iterator().next());
 
-        IncomingRepairStreamTracker.Reduced<Integer> reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> y);
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> y);
 
-        Map<Integer, List<Range<Token>>> n0 = reduced.streamsFor(0);
-        assertNull(n0.get(0));
-        assertNull(n0.get(1));
-        assertNotNull(n0.get(2));
-        assertTrue(n0.get(3) != null ^ n0.get(4) != null);
+        Map<InetAddress, List<Range<Token>>> n0 = reduced.streamsFor(addresses[0]);
+        assertNull(n0.get(addresses[0]));
+        assertNull(n0.get(addresses[1]));
+        assertNotNull(n0.get(addresses[2]));
+        assertTrue(n0.get(addresses[3]) != null ^ n0.get(addresses[4]) != null);
 
-        Map<Integer, List<Range<Token>>> n1 = reduced.streamsFor(1);
-        assertNull(n1.get(0));
-        assertNull(n1.get(1));
-        assertNotNull(n1.get(2));
-        assertTrue(n1.get(3) != null ^ n1.get(4) != null);
+        Map<InetAddress, List<Range<Token>>> n1 = reduced.streamsFor(addresses[1]);
+        assertNull(n1.get(addresses[0]));
+        assertNull(n1.get(addresses[1]));
+        assertNotNull(n1.get(addresses[2]));
+        assertTrue(n1.get(addresses[3]) != null ^ n1.get(addresses[4]) != null);
 
-        Map<Integer, List<Range<Token>>> n2 = reduced.streamsFor(2);
-        assertTrue(n2.get(0) != null ^ n2.get(1) != null);
-        assertNull(n2.get(2));
-        assertTrue(n2.get(3) != null ^ n2.get(4) != null);
+        Map<InetAddress, List<Range<Token>>> n2 = reduced.streamsFor(addresses[2]);
+        assertTrue(n2.get(addresses[0]) != null ^ n2.get(addresses[1]) != null);
+        assertNull(n2.get(addresses[2]));
+        assertTrue(n2.get(addresses[3]) != null ^ n2.get(addresses[4]) != null);
 
-        Map<Integer, List<Range<Token>>> n3 = reduced.streamsFor(3);
-        assertTrue(n3.get(0) != null ^ n3.get(1) != null);
-        assertNotNull(n3.get(2));
-        assertNull(n3.get(3));
-        assertNull(n3.get(4));
+        Map<InetAddress, List<Range<Token>>> n3 = reduced.streamsFor(addresses[3]);
+        assertTrue(n3.get(addresses[0]) != null ^ n3.get(addresses[1]) != null);
+        assertNotNull(n3.get(addresses[2]));
+        assertNull(n3.get(addresses[3]));
+        assertNull(n3.get(addresses[4]));
 
-        Map<Integer, List<Range<Token>>> n4 = reduced.streamsFor(4);
-        assertTrue(n4.get(0) != null ^ n4.get(1) != null);
-        assertNotNull(n4.get(2));
-        assertNull(n4.get(3));
-        assertNull(n4.get(4));
+        Map<InetAddress, List<Range<Token>>> n4 = reduced.streamsFor(addresses[4]);
+        assertTrue(n4.get(addresses[0]) != null ^ n4.get(addresses[1]) != null);
+        assertNotNull(n4.get(addresses[2]));
+        assertNull(n4.get(addresses[3]));
+        assertNull(n4.get(addresses[4]));
     }
     @Test
     public void testSimpleReducingWithPreferedNodes()
@@ -129,59 +148,60 @@ B         x   x   x
 C             x   x
 D                 =
          */
-        Map<Integer, Map<Integer, List<Range<Token>>>> differences = new HashMap<>();
+        Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences = new HashMap<>();
         for (int i = 0; i < 4; i++)
         {
             for (int j = i + 1; j < 5; j++)
             {
                 List<Range<Token>> diff = list(new Range<>(new Murmur3Partitioner.LongToken(0), new Murmur3Partitioner.LongToken(10)));
-                differences.computeIfAbsent(i, k -> new HashMap<>());
-                differences.get(i).put(j, diff);
+                differences.computeIfAbsent(addresses[i], k -> new HashMap<>());
+                differences.get(addresses[i]).put(addresses[j], diff);
             }
         }
-        differences.get(0).remove(1);
-        differences.get(3).remove(4);
-        Map<Integer, IncomingRepairStreamTracker<Integer>> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
-        assertEquals(set(set(2), set(4,3)), tracker.get(0).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(2), set(4,3)), tracker.get(1).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(0,1), set(4,3)), tracker.get(2).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(0,1), set(2)), tracker.get(3).rawRangesToFetch().values().iterator().next());
-        assertEquals(set(set(0,1), set(2)), tracker.get(4).rawRangesToFetch().values().iterator().next());
+        differences.get(addresses[0]).remove(addresses[1]);
+        differences.get(addresses[3]).remove(addresses[4]);
+
+        Map<InetAddress, IncomingRepairStreamTracker> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
+        assertEquals(set(set(addresses[2]), set(addresses[4],addresses[3])), tracker.get(addresses[0]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[2]), set(addresses[4],addresses[3])), tracker.get(addresses[1]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[0],addresses[1]), set(addresses[4],addresses[3])), tracker.get(addresses[2]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[0],addresses[1]), set(addresses[2])), tracker.get(addresses[3]).rawRangesToFetch().values().iterator().next());
+        assertEquals(set(set(addresses[0],addresses[1]), set(addresses[2])), tracker.get(addresses[4]).rawRangesToFetch().values().iterator().next());
 
         // if there is an option, never stream from node 1:
-        IncomingRepairStreamTracker.Reduced<Integer> reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> Sets.difference(y, set(1)));
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> Sets.difference(y, set(addresses[1])));
 
-        Map<Integer, List<Range<Token>>> n0 = reduced.streamsFor(0);
-        assertNull(n0.get(0));
-        assertNull(n0.get(1));
-        assertNotNull(n0.get(2));
-        assertTrue(n0.get(3) != null ^ n0.get(4) != null);
+        Map<InetAddress, List<Range<Token>>> n0 = reduced.streamsFor(addresses[0]);
+        assertNull(n0.get(addresses[0]));
+        assertNull(n0.get(addresses[1]));
+        assertNotNull(n0.get(addresses[2]));
+        assertTrue(n0.get(addresses[3]) != null ^ n0.get(addresses[4]) != null);
 
-        Map<Integer, List<Range<Token>>> n1 = reduced.streamsFor(1);
-        assertNull(n1.get(0));
-        assertNull(n1.get(1));
-        assertNotNull(n1.get(2));
-        assertTrue(n1.get(3) != null ^ n1.get(4) != null);
+        Map<InetAddress, List<Range<Token>>> n1 = reduced.streamsFor(addresses[1]);
+        assertNull(n1.get(addresses[0]));
+        assertNull(n1.get(addresses[1]));
+        assertNotNull(n1.get(addresses[2]));
+        assertTrue(n1.get(addresses[3]) != null ^ n1.get(addresses[4]) != null);
 
-        Map<Integer, List<Range<Token>>> n2 = reduced.streamsFor(2);
-        assertNotNull(n2.get(0));
-        assertNull(n2.get(1));
-        assertNull(n2.get(2));
-        assertTrue(n2.get(3) != null ^ n2.get(4) != null);
+        Map<InetAddress, List<Range<Token>>> n2 = reduced.streamsFor(addresses[2]);
+        assertNotNull(n2.get(addresses[0]));
+        assertNull(n2.get(addresses[1]));
+        assertNull(n2.get(addresses[2]));
+        assertTrue(n2.get(addresses[3]) != null ^ n2.get(addresses[4]) != null);
 
-        Map<Integer, List<Range<Token>>> n3 = reduced.streamsFor(3);
-        assertNotNull(n3.get(0));
-        assertNull(n3.get(1));
-        assertNotNull(n3.get(2));
-        assertNull(n3.get(3));
-        assertNull(n3.get(4));
+        Map<InetAddress, List<Range<Token>>> n3 = reduced.streamsFor(addresses[3]);
+        assertNotNull(n3.get(addresses[0]));
+        assertNull(n3.get(addresses[1]));
+        assertNotNull(n3.get(addresses[2]));
+        assertNull(n3.get(addresses[3]));
+        assertNull(n3.get(addresses[4]));
 
-        Map<Integer, List<Range<Token>>> n4 = reduced.streamsFor(4);
-        assertNotNull(n4.get(0));
-        assertNull(n4.get(1));
-        assertNotNull(n4.get(2));
-        assertNull(n4.get(3));
-        assertNull(n4.get(4));
+        Map<InetAddress, List<Range<Token>>> n4 = reduced.streamsFor(addresses[4]);
+        assertNotNull(n4.get(addresses[0]));
+        assertNull(n4.get(addresses[1]));
+        assertNotNull(n4.get(addresses[2]));
+        assertNull(n4.get(addresses[3]));
+        assertNull(n4.get(addresses[4]));
     }
 
     @Test
@@ -204,48 +224,48 @@ D                 =
          B streams (0, 50] from {C}, (50, 100] from {A, C}
          C streams (0, 50] from {A, B}, (50, 100] from B
          */
-        Map<Integer, Map<Integer, List<Range<Token>>>> differences = new HashMap<>();
-        differences.put(0, new HashMap<>());
-        differences.get(0).put(1, list(range(50, 100)));
-        differences.get(0).put(2, list(range(0, 50)));
-        differences.put(1, new HashMap<>());
-        differences.get(1).put(2, list(range(0, 100)));
-        Map<Integer, IncomingRepairStreamTracker<Integer>> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
-        assertEquals(set(set(2)), tracker.get(0).rawRangesToFetch().get(range(0, 50)));
-        assertEquals(set(set(1)), tracker.get(0).rawRangesToFetch().get(range(50, 100)));
-        assertEquals(set(set(2)), tracker.get(1).rawRangesToFetch().get(range(0, 50)));
-        assertEquals(set(set(0,2)), tracker.get(1).rawRangesToFetch().get(range(50, 100)));
-        assertEquals(set(set(0,1)), tracker.get(2).rawRangesToFetch().get(range(0, 50)));
-        assertEquals(set(set(1)), tracker.get(2).rawRangesToFetch().get(range(50, 100)));
+        Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences = new HashMap<>();
+        differences.put(addresses[0], new HashMap<>());
+        differences.get(addresses[0]).put(addresses[1], list(range(50, 100)));
+        differences.get(addresses[0]).put(addresses[2], list(range(0, 50)));
+        differences.put(addresses[1], new HashMap<>());
+        differences.get(addresses[1]).put(addresses[2], list(range(0, 100)));
+        Map<InetAddress, IncomingRepairStreamTracker> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
+        assertEquals(set(set(addresses[2])), tracker.get(addresses[0]).rawRangesToFetch().get(range(0, 50)));
+        assertEquals(set(set(addresses[1])), tracker.get(addresses[0]).rawRangesToFetch().get(range(50, 100)));
+        assertEquals(set(set(addresses[2])), tracker.get(addresses[1]).rawRangesToFetch().get(range(0, 50)));
+        assertEquals(set(set(addresses[0],addresses[2])), tracker.get(addresses[1]).rawRangesToFetch().get(range(50, 100)));
+        assertEquals(set(set(addresses[0],addresses[1])), tracker.get(addresses[2]).rawRangesToFetch().get(range(0, 50)));
+        assertEquals(set(set(addresses[1])), tracker.get(addresses[2]).rawRangesToFetch().get(range(50, 100)));
 
-        IncomingRepairStreamTracker.Reduced<Integer> reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> y);
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x,y) -> y);
 
-        Map<Integer, List<Range<Token>>> n0 = reduced.streamsFor(0);
+        Map<InetAddress, List<Range<Token>>> n0 = reduced.streamsFor(addresses[0]);
 
-        assertTrue(n0.get(1).equals(list(range(50, 100))));
-        assertTrue(n0.get(2).equals(list(range(0, 50))));
+        assertTrue(n0.get(addresses[1]).equals(list(range(50, 100))));
+        assertTrue(n0.get(addresses[2]).equals(list(range(0, 50))));
 
-        Map<Integer, List<Range<Token>>> n1 = reduced.streamsFor(1);
-        assertNull(n1.get(1));
-        if (n1.get(0) != null)
+        Map<InetAddress, List<Range<Token>>> n1 = reduced.streamsFor(addresses[1]);
+        assertNull(n1.get(addresses[1]));
+        if (n1.get(addresses[0]) != null)
         {
-            assertTrue(n1.get(2).equals(list(range(0, 50))));
-            assertTrue(n1.get(0).equals(list(range(50, 100))));
+            assertTrue(n1.get(addresses[2]).equals(list(range(0, 50))));
+            assertTrue(n1.get(addresses[0]).equals(list(range(50, 100))));
         }
         else
         {
-            assertTrue(n1.get(2).equals(list(range(0, 50), range(50, 100))));
+            assertTrue(n1.get(addresses[2]).equals(list(range(0, 50), range(50, 100))));
         }
-        Map<Integer, List<Range<Token>>> n2 = reduced.streamsFor(2);
-        assertNull(n2.get(2));
-        if (n2.get(0) != null)
+        Map<InetAddress, List<Range<Token>>> n2 = reduced.streamsFor(addresses[2]);
+        assertNull(n2.get(addresses[2]));
+        if (n2.get(addresses[0]) != null)
         {
-            assertTrue(n2.get(0).equals(list(range(0,50))));
-            assertTrue(n2.get(1).equals(list(range(50, 100))));
+            assertTrue(n2.get(addresses[0]).equals(list(range(0,50))));
+            assertTrue(n2.get(addresses[1]).equals(list(range(50, 100))));
         }
         else
         {
-            assertTrue(n2.get(0).equals(list(range(0, 50), range(50, 100))));
+            assertTrue(n2.get(addresses[0]).equals(list(range(0, 50), range(50, 100))));
         }
 
 
@@ -269,53 +289,53 @@ D                 =
          B == C on (5, 10], (40, 45]
          */
 
-        Map<Integer, Map<Integer, List<Range<Token>>>> differences = new HashMap<>();
-        differences.put(0, new HashMap<>());
-        differences.get(0).put(1, list(range(5, 45)));
-        differences.get(0).put(2, list(range(0, 10), range(40,50)));
-        differences.put(1, new HashMap<>());
-        differences.get(1).put(2, list(range(0, 5), range(10,40), range(45,50)));
-        Map<Integer, IncomingRepairStreamTracker<Integer>> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
+        Map<InetAddress, Map<InetAddress, List<Range<Token>>>> differences = new HashMap<>();
+        differences.put(addresses[0], new HashMap<>());
+        differences.get(addresses[0]).put(addresses[1], list(range(5, 45)));
+        differences.get(addresses[0]).put(addresses[2], list(range(0, 10), range(40,50)));
+        differences.put(addresses[1], new HashMap<>());
+        differences.get(addresses[1]).put(addresses[2], list(range(0, 5), range(10,40), range(45,50)));
+        Map<InetAddress, IncomingRepairStreamTracker> tracker = IncomingRepairStreamTracker.reduceDifferences(differences);
 
-        Map<Range<Token>, Set<Set<Integer>>> ranges = tracker.get(0).rawRangesToFetch();
+        Map<Range<Token>, Set<Set<InetAddress>>> ranges = tracker.get(addresses[0]).rawRangesToFetch();
         assertEquals(5, ranges.size());
 
-        assertEquals(set(set(2)), ranges.get(range(0, 5)));
-        assertEquals(set(set(1, 2)), ranges.get(range(5, 10)));
-        assertEquals(set(set(1)), ranges.get(range(10, 40)));
-        assertEquals(set(set(1, 2)), ranges.get(range(40, 45)));
-        assertEquals(set(set(2)), ranges.get(range(45, 50)));
+        assertEquals(set(set(addresses[2])), ranges.get(range(0, 5)));
+        assertEquals(set(set(addresses[1], addresses[2])), ranges.get(range(5, 10)));
+        assertEquals(set(set(addresses[1])), ranges.get(range(10, 40)));
+        assertEquals(set(set(addresses[1], addresses[2])), ranges.get(range(40, 45)));
+        assertEquals(set(set(addresses[2])), ranges.get(range(45, 50)));
 
-        ranges = tracker.get(1).rawRangesToFetch();
+        ranges = tracker.get(addresses[1]).rawRangesToFetch();
         assertEquals(5, ranges.size());
-        assertEquals(set(set(2)), ranges.get(range(0, 5)));
-        assertEquals(set(set(0)), ranges.get(range(5, 10)));
-        assertEquals(set(set(0,2)), ranges.get(range(10, 40)));
-        assertEquals(set(set(0)), ranges.get(range(40, 45)));
-        assertEquals(set(set(2)), ranges.get(range(45, 50)));
+        assertEquals(set(set(addresses[2])), ranges.get(range(0, 5)));
+        assertEquals(set(set(addresses[0])), ranges.get(range(5, 10)));
+        assertEquals(set(set(addresses[0], addresses[2])), ranges.get(range(10, 40)));
+        assertEquals(set(set(addresses[0])), ranges.get(range(40, 45)));
+        assertEquals(set(set(addresses[2])), ranges.get(range(45, 50)));
 
-        ranges = tracker.get(2).rawRangesToFetch();
+        ranges = tracker.get(addresses[2]).rawRangesToFetch();
         assertEquals(5, ranges.size());
-        assertEquals(set(set(0, 1)), ranges.get(range(0, 5)));
-        assertEquals(set(set(0)), ranges.get(range(5, 10)));
-        assertEquals(set(set(1)), ranges.get(range(10, 40)));
-        assertEquals(set(set(0)), ranges.get(range(40, 45)));
-        assertEquals(set(set(0,1)), ranges.get(range(45, 50)));
-        IncomingRepairStreamTracker.Reduced<Integer> reduced = IncomingRepairStreamTracker.reduce(differences, (x, y) -> y);
+        assertEquals(set(set(addresses[0], addresses[1])), ranges.get(range(0, 5)));
+        assertEquals(set(set(addresses[0])), ranges.get(range(5, 10)));
+        assertEquals(set(set(addresses[1])), ranges.get(range(10, 40)));
+        assertEquals(set(set(addresses[0])), ranges.get(range(40, 45)));
+        assertEquals(set(set(addresses[0],addresses[1])), ranges.get(range(45, 50)));
+        IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, (x, y) -> y);
 
-        assertNoOverlap(0, reduced.streamsFor(0), list(range(0, 50)));
-        assertNoOverlap(1, reduced.streamsFor(1), list(range(0, 50)));
-        assertNoOverlap(2, reduced.streamsFor(2), list(range(0, 50)));
+        assertNoOverlap(addresses[0], reduced.streamsFor(addresses[0]), list(range(0, 50)));
+        assertNoOverlap(addresses[1], reduced.streamsFor(addresses[1]), list(range(0, 50)));
+        assertNoOverlap(addresses[2], reduced.streamsFor(addresses[2]), list(range(0, 50)));
     }
 
-    private void assertNoOverlap(int incomingNode, Map<Integer, List<Range<Token>>> node, List<Range<Token>> expectedAfterNormalize)
+    private void assertNoOverlap(InetAddress incomingNode, Map<InetAddress, List<Range<Token>>> node, List<Range<Token>> expectedAfterNormalize)
     {
         Set<Range<Token>> allRanges = new HashSet<>();
-        Set<Integer> remoteNodes = Sets.newHashSet(0,1,2);
+        Set<InetAddress> remoteNodes = Sets.newHashSet(addresses[0],addresses[1],addresses[2]);
         remoteNodes.remove(incomingNode);
-        Iterator<Integer> iter = remoteNodes.iterator();
+        Iterator<InetAddress> iter = remoteNodes.iterator();
         allRanges.addAll(node.get(iter.next()));
-        int i = iter.next();
+        InetAddress i = iter.next();
         for (Range<Token> r : node.get(i))
         {
             for (Range<Token> existing : allRanges)
@@ -336,14 +356,14 @@ D                 =
         return ranges;
     }
 
-    private static Set<Integer> set(Integer ... elem)
+    private static Set<InetAddress> set(InetAddress ... elem)
     {
         return Sets.newHashSet(elem);
     }
     @SafeVarargs
-    private static Set<Set<Integer>> set(Set<Integer> ... elem)
+    private static Set<Set<InetAddress>> set(Set<InetAddress> ... elem)
     {
-        Set<Set<Integer>> ret = Sets.newHashSet();
+        Set<Set<InetAddress>> ret = Sets.newHashSet();
         ret.addAll(Arrays.asList(elem));
         return ret;
     }
@@ -373,8 +393,8 @@ D                 =
     public void testDenormalize()
     {
         // test when the new incoming range is fully contained within an existing incoming range
-        Set<Set<Integer>> dummy = Sets.<Set<Integer>>newHashSet(Sets.newHashSet(1));
-        Map<Range<Token>, Set<Set<Integer>>> incoming = new HashMap<>();
+        Set<Set<InetAddress>> dummy = Sets.<Set<InetAddress>>newHashSet(Sets.newHashSet(addresses[1]));
+        Map<Range<Token>, Set<Set<InetAddress>>> incoming = new HashMap<>();
         incoming.put(range(0, 100), dummy);
         Set<Range<Token>> newInput = IncomingRepairStreamTracker.denormalize(range(30, 40), incoming);
         assertEquals(3, incoming.size());
@@ -389,8 +409,8 @@ D                 =
     public void testDenormalize2()
     {
         // test when the new incoming range fully contains an existing incoming range
-        Set<Set<Integer>> dummy = Sets.<Set<Integer>>newHashSet(Sets.newHashSet(1));
-        Map<Range<Token>, Set<Set<Integer>>> incoming = new HashMap<>();
+        Set<Set<InetAddress>> dummy = Sets.<Set<InetAddress>>newHashSet(Sets.newHashSet(addresses[1]));
+        Map<Range<Token>, Set<Set<InetAddress>>> incoming = new HashMap<>();
         incoming.put(range(40, 50), dummy);
         Set<Range<Token>> newInput = IncomingRepairStreamTracker.denormalize(range(0, 100), incoming);
         assertEquals(1, incoming.size());
@@ -405,8 +425,8 @@ D                 =
     public void testDenormalize3()
     {
         // test when there are multiple existing incoming ranges and the new incoming overlaps some and contains some
-        Set<Set<Integer>> dummy = Sets.<Set<Integer>>newHashSet(Sets.newHashSet(1));
-        Map<Range<Token>, Set<Set<Integer>>> incoming = new HashMap<>();
+        Set<Set<InetAddress>> dummy = Sets.<Set<InetAddress>>newHashSet(Sets.newHashSet(addresses[1]));
+        Map<Range<Token>, Set<Set<InetAddress>>> incoming = new HashMap<>();
         incoming.put(range(0, 100), dummy);
         incoming.put(range(200, 300), dummy);
         incoming.put(range(500, 600), dummy);

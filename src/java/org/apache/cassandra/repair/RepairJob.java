@@ -218,7 +218,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                                                                                                        .filter(node -> getDC(streaming)
                                                                                                                        .equals(getDC(node)))
                                                                                                        .collect(Collectors.toSet());
-            IncomingRepairStreamTracker.Reduced<InetAddress> reduced = IncomingRepairStreamTracker.reduce(differences, preferSameDCFilter);
+            IncomingRepairStreamTracker.Reduced reduced = IncomingRepairStreamTracker.reduce(differences, preferSameDCFilter);
 
             for (int i = 0; i < trees.size(); i++)
             {
@@ -234,7 +234,6 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                         AsymmetricSyncTask task;
                         if (address.equals(local))
                         {
-                            // todo: handle pullrepair
                             task = new AsymmetricLocalSyncTask(desc, fetchFrom, entry.getValue(), isIncremental ? desc.parentSessionId : null, previewKind);
                         }
                         else
