@@ -135,6 +135,7 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
      * @return
      */
     @Override
+    @SuppressWarnings("resource")
     public synchronized AbstractCompactionTask getNextBackgroundTask(int gcBefore)
     {
         refreshRangeBoundaries();
@@ -224,6 +225,7 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
      * @param splitOutput
      * @return
      */
+    @SuppressWarnings("resource")
     @Override
     public synchronized Collection<AbstractCompactionTask> getMaximalTask(int gcBefore, boolean splitOutput)
     {
@@ -261,6 +263,7 @@ public class RangeAwareCompactionStrategy extends AbstractCompactionStrategy imp
      *
      * @return
      */
+    @SuppressWarnings("resource")
     @Override
     public synchronized AbstractCompactionTask getUserDefinedTask(Collection<SSTableReader> sstables, int gcBefore)
     {
