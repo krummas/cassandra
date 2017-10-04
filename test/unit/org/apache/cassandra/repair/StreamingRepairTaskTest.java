@@ -67,7 +67,7 @@ public class StreamingRepairTaskTest extends AbstractRepairTest
         RepairJobDesc desc = new RepairJobDesc(sessionID, UUIDGen.getTimeUUID(), ks, tbl, prs.getRanges());
 
         SyncRequest request = new SyncRequest(desc, PARTICIPANT1, PARTICIPANT2, PARTICIPANT3, prs.getRanges(), PreviewKind.NONE);
-        StreamingRepairTask task = new StreamingRepairTask(desc, request.initiator, request.src, request.dst, request.ranges, null, PreviewKind.NONE, false);
+        StreamingRepairTask task = new StreamingRepairTask(desc, request.initiator, request.src, request.dst, request.ranges, desc.sessionId, PreviewKind.NONE, false);
 
         StreamPlan plan = task.createStreamPlan(request.src, request.dst);
         Assert.assertFalse(plan.getFlushBeforeTransfer());

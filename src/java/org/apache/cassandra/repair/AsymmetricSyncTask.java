@@ -20,12 +20,14 @@ package org.apache.cassandra.repair;
 
 import java.net.InetAddress;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.util.concurrent.AbstractFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.streaming.PreviewKind;
@@ -71,6 +73,13 @@ public abstract class AsymmetricSyncTask extends AbstractFuture<SyncStat> implem
         Tracing.traceRepair("Endpoint {} has {} range(s) out of sync with {} for {}", fetchingNode, rangesToFetch.size(), fetchFrom, desc.columnFamily);
         startSync(rangesToFetch);
     }
+
+    protected void finished()
+    {
+        if (startTime != Long.MIN_VALUE)
+            Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).metric.syncTime.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+    }
+
 
     public abstract void startSync(List<Range<Token>> rangesToFetch);
 }

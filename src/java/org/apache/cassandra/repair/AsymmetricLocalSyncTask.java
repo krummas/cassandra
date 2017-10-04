@@ -95,10 +95,12 @@ public class AsymmetricLocalSyncTask extends AsymmetricSyncTask implements Strea
 //        logger.info("[repair #{}] {}", desc.sessionId, message);
         Tracing.traceRepair(message);
         set(stat);
+        finished();
     }
 
     public void onFailure(Throwable t)
     {
         setException(t);
+        finished();
     }
 }

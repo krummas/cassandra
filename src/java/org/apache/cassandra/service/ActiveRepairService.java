@@ -213,7 +213,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                                              boolean pullRepair,
                                              boolean force,
                                              PreviewKind previewKind,
-                                             boolean asymmetricSyncing,
+                                             boolean optimiseStreams,
                                              ListeningExecutorService executor,
                                              String... cfnames)
     {
@@ -224,7 +224,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             return null;
 
 
-        final RepairSession session = new RepairSession(parentRepairSession, UUIDGen.getTimeUUID(), range, keyspace, parallelismDegree, endpoints, isIncremental, pullRepair, force, previewKind, asymmetricSyncing, cfnames);
+        final RepairSession session = new RepairSession(parentRepairSession, UUIDGen.getTimeUUID(), range, keyspace, parallelismDegree, endpoints, isIncremental, pullRepair, force, previewKind, optimiseStreams, cfnames);
 
         sessions.put(session.getId(), session);
         // register listeners

@@ -50,7 +50,7 @@ public class RepairOption
     public static final String PULL_REPAIR_KEY = "pullRepair";
     public static final String FORCE_REPAIR_KEY = "forceRepair";
     public static final String PREVIEW = "previewKind";
-    public static final String ASYMMETRIC_KEY = "asymmetricSyncing";
+    public static final String OPTIMISE_STREAMS_KEY = "optimiseStreams";
 
     // we don't want to push nodes too much for repair
     public static final int MAX_JOB_THREADS = 4;
@@ -128,16 +128,15 @@ public class RepairOption
      *             <td>false</td>
      *         </tr>
      *         <tr>
-<<<<<<< HEAD
      *             <td>forceRepair</td>
      *             <td>"true" if the repair should continue, even if one of the replicas involved is down.
      *             <td>false</td>
-=======
-     *             <td>asymmetricSyncing</td>
+     *         </tr>
+     *         <tr>
+     *             <td>optimiseStreams</td>
      *             <td>"true" if we should try to optimise the syncing to avoid transfering identical
      *             ranges to the same host multiple times</td>
      *             <td>true</td>
->>>>>>> 3602f00a24... Optimize Merkle tree comparison across replicas
      *         </tr>
      *     </tbody>
      * </table>
@@ -188,7 +187,7 @@ public class RepairOption
                 ranges.add(new Range<>(parsedBeginToken, parsedEndToken));
             }
         }
-        boolean asymmetricSyncing = Boolean.parseBoolean(options.get(ASYMMETRIC_KEY));
+        boolean asymmetricSyncing = Boolean.parseBoolean(options.get(OPTIMISE_STREAMS_KEY));
 
         RepairOption option = new RepairOption(parallelism, primaryRange, incremental, trace, jobThreads, ranges, !ranges.isEmpty(), pullRepair, force, previewKind, asymmetricSyncing);
 
@@ -268,14 +267,14 @@ public class RepairOption
     private final boolean pullRepair;
     private final boolean forceRepair;
     private final PreviewKind previewKind;
-    private final boolean asymmetricSyncing;
+    private final boolean optimiseStreams;
 
     private final Collection<String> columnFamilies = new HashSet<>();
     private final Collection<String> dataCenters = new HashSet<>();
     private final Collection<String> hosts = new HashSet<>();
     private final Collection<Range<Token>> ranges = new HashSet<>();
 
-    public RepairOption(RepairParallelism parallelism, boolean primaryRange, boolean incremental, boolean trace, int jobThreads, Collection<Range<Token>> ranges, boolean isSubrangeRepair, boolean pullRepair, boolean forceRepair, PreviewKind previewKind, boolean asymmetricSyncing)
+    public RepairOption(RepairParallelism parallelism, boolean primaryRange, boolean incremental, boolean trace, int jobThreads, Collection<Range<Token>> ranges, boolean isSubrangeRepair, boolean pullRepair, boolean forceRepair, PreviewKind previewKind, boolean optimiseStreams)
     {
         if (FBUtilities.isWindows &&
             (DatabaseDescriptor.getDiskAccessMode() != Config.DiskAccessMode.standard || DatabaseDescriptor.getIndexAccessMode() != Config.DiskAccessMode.standard) &&
@@ -296,7 +295,7 @@ public class RepairOption
         this.pullRepair = pullRepair;
         this.forceRepair = forceRepair;
         this.previewKind = previewKind;
-        this.asymmetricSyncing = asymmetricSyncing;
+        this.optimiseStreams = optimiseStreams;
     }
 
     public RepairParallelism getParallelism()
@@ -374,8 +373,14 @@ public class RepairOption
         return previewKind.isPreview();
     }
 
-    public boolean isInLocalDCOnly() {
+    public boolean isInLocalDCOnly()
+    {
         return dataCenters.size() == 1 && dataCenters.contains(DatabaseDescriptor.getLocalDataCenter());
+    }
+
+    public boolean optimiseStreams()
+    {
+        return optimiseStreams;
     }
 
     @Override
@@ -393,7 +398,7 @@ public class RepairOption
                ", # of ranges: " + ranges.size() +
                ", pull repair: " + pullRepair +
                ", force repair: " + forceRepair +
-               ", asymmetric syncing: "+asymmetricSyncing+
+               ", optimise streams: "+ optimiseStreams +
                ')';
     }
 
@@ -413,12 +418,7 @@ public class RepairOption
         options.put(PULL_REPAIR_KEY, Boolean.toString(pullRepair));
         options.put(FORCE_REPAIR_KEY, Boolean.toString(forceRepair));
         options.put(PREVIEW, previewKind.toString());
-        options.put(ASYMMETRIC_KEY, Boolean.toString(asymmetricSyncing));
+        options.put(OPTIMISE_STREAMS_KEY, Boolean.toString(optimiseStreams));
         return options;
-    }
-
-    public boolean asymmetricSyncing()
-    {
-        return asymmetricSyncing;
     }
 }

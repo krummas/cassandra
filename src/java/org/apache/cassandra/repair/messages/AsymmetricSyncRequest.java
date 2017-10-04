@@ -126,6 +126,7 @@ public class AsymmetricSyncRequest extends RepairMessage
                ", fetchFrom=" + fetchFrom +
                ", ranges=" + ranges +
                ", previewKind=" + previewKind +
+               ", desc="+desc+
                '}';
     }
 }

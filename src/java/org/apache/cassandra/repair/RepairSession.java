@@ -108,7 +108,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
 
     // Tasks(snapshot, validate request, differencing, ...) are run on taskExecutor
     public final ListeningExecutorService taskExecutor = MoreExecutors.listeningDecorator(DebuggableThreadPoolExecutor.createCachedThreadpoolWithMaxSize("RepairJobTask"));
-    private final boolean asymmetricSync;
+    private final boolean optimiseStreams;
 
     private volatile boolean terminated = false;
 
@@ -135,7 +135,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
                          boolean pullRepair,
                          boolean force,
                          PreviewKind previewKind,
-                         boolean asymmetricSync,
+                         boolean optimiseStreams,
                          String... cfnames)
     {
         assert cfnames.length > 0 : "Repairing no column families seems pointless, doesn't it";
@@ -176,7 +176,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
         this.previewKind = previewKind;
         this.pullRepair = pullRepair;
         this.skippedReplicas = forceSkippedReplicas;
-        this.asymmetricSync = asymmetricSync;
+        this.optimiseStreams = optimiseStreams;
     }
 
     public UUID getId()
@@ -305,7 +305,7 @@ public class RepairSession extends AbstractFuture<RepairSessionResult> implement
         List<ListenableFuture<RepairResult>> jobs = new ArrayList<>(cfnames.length);
         for (String cfname : cfnames)
         {
-            RepairJob job = new RepairJob(this, cfname, isIncremental, previewKind, asymmetricSync);
+            RepairJob job = new RepairJob(this, cfname, isIncremental, previewKind, optimiseStreams);
             executor.execute(job);
             jobs.add(job);
         }
