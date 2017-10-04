@@ -21,6 +21,7 @@ import java.io.*;
 import java.util.*;
 
 import com.google.common.collect.Lists;
+import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 
@@ -53,6 +54,7 @@ import org.apache.cassandra.utils.FBUtilities;
 public class MetadataSerializer implements IMetadataSerializer
 {
     private static final Logger logger = LoggerFactory.getLogger(MetadataSerializer.class);
+    private static final HashFunction hashFunction = Hashing.md5();
 
     public void serialize(Map<MetadataType, MetadataComponent> components, DataOutputPlus out, Version version) throws IOException
     {
@@ -84,13 +86,11 @@ public class MetadataSerializer implements IMetadataSerializer
             try (DataOutputBuffer dob = new DataOutputBuffer(sizes.get(component.getType())))
             {
                 component.getType().serializer.serialize(version, component, dob);
-                bytes = dob.toByteArray();
+                bytes = dob.getData();
             }
-            Hasher hasher = Hashing.md5().newHasher();
-            hasher.putBytes(bytes);
             out.write(bytes);
             if (checksum)
-                out.writeLong(hasher.hash().asLong());
+                out.writeLong(hashFunction.hashBytes(bytes).asLong());
         }
     }
 
@@ -122,6 +122,7 @@ public class MetadataSerializer implements IMetadataSerializer
 
     public Map<MetadataType, MetadataComponent> deserialize(Descriptor descriptor, FileDataInput in, EnumSet<MetadataType> types) throws IOException
     {
+        int totalSize = (int) in.bytesRemaining();
         Map<MetadataType, MetadataComponent> components = new EnumMap<>(MetadataType.class);
         // read number of components
         int numComponents = in.readInt();
@@ -142,6 +143,7 @@ public class MetadataSerializer implements IMetadataSerializer
             start = position;
             lastType = values[metadataTypeId];
         }
+        lengths.put(lastType, totalSize - start);
         for (MetadataType type : types)
         {
             Integer offset = toc.get(type);
@@ -151,24 +153,16 @@ public class MetadataSerializer implements IMetadataSerializer
 
                 if (descriptor.version.hasMetadataChecksum())
                 {
-                    int size;
-                    if (lengths.containsKey(type))
-                        size = lengths.get(type) - 8;
-                    else
-                        size = (int) in.bytesRemaining() - 8;
-
+                    int size = lengths.get(type) - 8; // 8 bytes checksum
                     byte[] bytes = new byte[size];
                     in.readFully(bytes);
-                    Hasher h = Hashing.md5().newHasher();
-                    h.putBytes(bytes);
-
                     MetadataComponent component;
                     try (DataInputBuffer dib = new DataInputBuffer(bytes))
                     {
                         component = type.serializer.deserialize(descriptor.version, dib);
                     }
                     long writtenChecksum = in.readLong();
-                    if (writtenChecksum != h.hash().asLong())
+                    if (writtenChecksum != hashFunction.hashBytes(bytes).asLong())
                     {
                         String filename = descriptor.filenameFor(Component.STATS);
                         throw new CorruptSSTableException(new IOException("Checksums do not match for " + filename), filename);
