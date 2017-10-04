@@ -35,7 +35,6 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -61,7 +60,6 @@ public class Verifier implements Closeable
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
 
     private int goodRows;
-    private int badRows;
 
     private final OutputHandler outputHandler;
     private FileDigestValidator validator;
@@ -204,7 +202,7 @@ public class Verifier implements Closeable
                     if (key == null || dataSize > dataFile.length())
                         markAndThrow();
 
-                    //mimic the scrub read path
+                    //mimic the scrub read path, intentionally unused
                     try (UnfilteredRowIterator iterator = new SSTableIdentityIterator(sstable, dataFile, key))
                     {
                     }
@@ -221,7 +219,6 @@ public class Verifier implements Closeable
                 }
                 catch (Throwable th)
                 {
-                    badRows++;
                     markAndThrow();
                 }
             }
