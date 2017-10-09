@@ -82,6 +82,7 @@ public class CompactionStrategyManager implements INotificationConsumer
     private volatile CompactionParams schemaCompactionParams;
     private Directories.DataDirectory[] locations;
     private boolean shouldDefragment;
+    private int fanout;
 
     public CompactionStrategyManager(ColumnFamilyStore cfs)
     {
@@ -185,6 +186,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             repaired.forEach(AbstractCompactionStrategy::startup);
             unrepaired.forEach(AbstractCompactionStrategy::startup);
             shouldDefragment = repaired.get(0).shouldDefragment();
+            fanout = (repaired.get(0) instanceof LeveledCompactionStrategy) ? ((LeveledCompactionStrategy) repaired.get(0)).getLevelFanoutSize() : LeveledCompactionStrategy.DEFAULT_LEVEL_FANOUT_SIZE;
         }
         finally
         {
@@ -346,19 +348,7 @@ public class CompactionStrategyManager implements INotificationConsumer
 
     public int getLevelFanoutSize()
     {
-        readLock.lock();
-        try
-        {
-            if (repaired.get(0) instanceof LeveledCompactionStrategy)
-            {
-                return ((LeveledCompactionStrategy) repaired.get(0)).getLevelFanoutSize();
-            }
-        }
-        finally
-        {
-            readLock.unlock();
-        }
-        return LeveledCompactionStrategy.DEFAULT_LEVEL_FANOUT_SIZE;
+        return fanout;
     }
 
     public int[] getSSTableCountPerLevel()
