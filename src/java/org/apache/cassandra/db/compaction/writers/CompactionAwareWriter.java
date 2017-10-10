@@ -174,7 +174,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         while (locationIndex == -1 || key.compareTo(diskBoundaries.get(locationIndex)) > 0)
             locationIndex++;
         if (prevIdx >= 0)
-            logger.debug("Switching write location from {} to {}", locations[prevIdx], locations[locationIndex]);
+            logger.debug("Switching write location from {} to {}", locations[prevIdx].location, locations[locationIndex].location);
         switchCompactionLocation(locations[locationIndex]);
     }
 

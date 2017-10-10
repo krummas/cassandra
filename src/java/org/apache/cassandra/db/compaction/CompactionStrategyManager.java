@@ -18,6 +18,7 @@
 package org.apache.cassandra.db.compaction;
 
 
+import java.io.File;
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -243,7 +244,9 @@ public class CompactionStrategyManager implements INotificationConsumer
             for (int i = 0; i < directories.length; i++)
             {
                 Directories.DataDirectory directory = directories[i];
-                if (sstable.descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
+                String sstablePath = sstable.descriptor.directory.getAbsolutePath() + File.separator;
+                String directoryPath = directory.location.getAbsolutePath() + File.separator;
+                if (sstablePath.startsWith(directoryPath))
                     return i;
             }
             return 0;
