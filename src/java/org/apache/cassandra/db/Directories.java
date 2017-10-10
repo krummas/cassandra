@@ -285,9 +285,15 @@ public class Directories
     public File getLocationForDisk(DataDirectory dataDirectory)
     {
         if (dataDirectory != null)
+        {
             for (File dir : dataPaths)
-                if (dir.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+            {
+                String dirPath = dir.getAbsolutePath() + File.separator;
+                String locationPath = dataDirectory.location.getAbsolutePath() + File.separator;
+                if (dirPath.startsWith(locationPath))
                     return dir;
+            }
+        }
         return null;
     }
 
@@ -297,7 +303,9 @@ public class Directories
         {
             for (DataDirectory dataDirectory : paths)
             {
-                if (directory.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+                String dirPath = directory.getAbsolutePath() + File.separator;
+                String locationPath = dataDirectory.location.getAbsolutePath() + File.separator;
+                if (dirPath.startsWith(locationPath))
                     return dataDirectory;
             }
         }

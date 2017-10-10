@@ -471,6 +471,44 @@ public class DirectoriesTest
         }
     }
 
+    @Test
+    public void testGetLocationForDisk()
+    {
+        Collection<DataDirectory> paths = new ArrayList<>();
+        paths.add(new DataDirectory(new File("/tmp/aaa")));
+        paths.add(new DataDirectory(new File("/tmp/aa")));
+        paths.add(new DataDirectory(new File("/tmp/a")));
+
+        for (CFMetaData cfm : CFM)
+        {
+            Directories dirs = new Directories(cfm, paths);
+            for (DataDirectory dir : paths)
+            {
+                String p = dirs.getLocationForDisk(dir).getAbsolutePath();
+                assertTrue(p.startsWith(dir.location.getAbsolutePath() + File.separator));
+            }
+        }
+    }
+
+    @Test
+    public void getDataDirectoryForFile()
+    {
+        Collection<DataDirectory> paths = new ArrayList<>();
+        paths.add(new DataDirectory(new File("/tmp/a")));
+        paths.add(new DataDirectory(new File("/tmp/aa")));
+        paths.add(new DataDirectory(new File("/tmp/aaa")));
+
+        for (CFMetaData cfm : CFM)
+        {
+            Directories dirs = new Directories(cfm, paths);
+            for (DataDirectory dir : paths)
+            {
+                String p = dirs.getDataDirectoryForFile(dir.location).location.getAbsolutePath() + File.separator;
+                assertTrue(p.startsWith(dir.location.getAbsolutePath() + File.separator));
+            }
+        }
+    }
+
     private List<Directories.DataDirectoryCandidate> getWriteableDirectories(DataDirectory[] dataDirectories, long writeSize)
     {
         // copied from Directories.getWriteableLocation(long)

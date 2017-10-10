@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.db;
 
+import java.io.File;
 import java.util.Collections;
 import java.util.List;
 
@@ -118,7 +119,9 @@ public class DiskBoundaries
         for (int i = 0; i < directories.size(); i++)
         {
             Directories.DataDirectory directory = directories.get(i);
-            if (sstable.descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
+            String dataDirectoryPath = directory.location.getAbsolutePath() + File.separator;
+            String sstablePath = sstable.descriptor.directory.getAbsolutePath() + File.separator;
+            if (sstablePath.startsWith(dataDirectoryPath))
                 return i;
         }
         return 0;
