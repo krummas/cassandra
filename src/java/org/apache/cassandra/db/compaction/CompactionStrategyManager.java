@@ -20,6 +20,7 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -50,6 +51,7 @@ import org.apache.cassandra.notifications.*;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.NoSpamLogger;
 
 /**
  * Manages the compaction strategies.
@@ -61,6 +63,7 @@ import org.apache.cassandra.service.StorageService;
 public class CompactionStrategyManager implements INotificationConsumer
 {
     private static final Logger logger = LoggerFactory.getLogger(CompactionStrategyManager.class);
+    private static final NoSpamLogger oneMinNoSpamLogger = NoSpamLogger.getLogger(logger, 1, TimeUnit.MINUTES);
     public final CompactionLogger compactionLogger;
     private final ColumnFamilyStore cfs;
     private final List<AbstractCompactionStrategy> repaired = new ArrayList<>();
@@ -250,6 +253,10 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
 
         int pos = Collections.binarySearch(boundaries, sstable.first);
+        if (logger.isDebugEnabled())
+            logger.debug("Got position {} for {} (first token = {})", -pos - 1, sstable, sstable.first.getToken());
+        oneMinNoSpamLogger.info("Boundaries = {}, directories = {}", boundaries, Arrays.stream(directories).map(dir -> dir.location).collect(Collectors.toList()));
+
         assert pos < 0; // boundaries are .minkeybound and .maxkeybound so they should never be equal
         return -pos - 1;
     }
