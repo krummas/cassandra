@@ -21,6 +21,7 @@ import java.net.InetAddress;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +33,6 @@ import org.apache.cassandra.repair.asymmetric.DifferenceHolder;
 import org.apache.cassandra.repair.asymmetric.HostDifferences;
 import org.apache.cassandra.repair.asymmetric.PreferedNodeFilter;
 import org.apache.cassandra.repair.asymmetric.ReduceHelper;
-import org.apache.cassandra.repair.asymmetric.ReducedDifferenceHolder;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -210,7 +210,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                                                               .filter(node -> getDC(streaming)
                                                                               .equals(getDC(node)))
                                                               .collect(Collectors.toSet());
-            ReducedDifferenceHolder reducedDifferences = ReduceHelper.reduce(diffHolder, preferSameDCFilter);
+            ImmutableMap<InetAddress, HostDifferences> reducedDifferences = ReduceHelper.reduce(diffHolder, preferSameDCFilter);
 
             for (int i = 0; i < trees.size(); i++)
             {

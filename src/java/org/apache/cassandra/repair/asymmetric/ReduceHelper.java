@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -46,11 +47,11 @@ public class ReduceHelper
     /**
      * Reduces the differences provided by the merkle trees to a minimum set of differences
      */
-    public static ReducedDifferenceHolder reduce(DifferenceHolder differences, PreferedNodeFilter filter)
+    public static ImmutableMap<InetAddress, HostDifferences> reduce(DifferenceHolder differences, PreferedNodeFilter filter)
     {
         Map<InetAddress, IncomingRepairStreamTracker> trackers = createIncomingRepairStreamTrackers(differences);
         Map<InetAddress, Integer> outgoingStreamCounts = new HashMap<>();
-        Map<InetAddress, HostDifferences> retMap = new HashMap<>();
+        ImmutableMap.Builder<InetAddress, HostDifferences> mapBuilder = ImmutableMap.builder();
         for (Map.Entry<InetAddress, IncomingRepairStreamTracker> trackerEntry : trackers.entrySet())
         {
             IncomingRepairStreamTracker tracker = trackerEntry.getValue();
@@ -61,9 +62,10 @@ public class ReduceHelper
                 for (InetAddress remoteNode : pickLeastStreaming(trackerEntry.getKey(), entry.getValue(), outgoingStreamCounts, filter))
                     rangesToFetch.addSingleRange(remoteNode, rangeToFetch);
             }
-            retMap.put(trackerEntry.getKey(), rangesToFetch);
+            mapBuilder.put(trackerEntry.getKey(), rangesToFetch);
         }
-        return new ReducedDifferenceHolder(retMap);
+
+        return mapBuilder.build();
     }
 
     @VisibleForTesting

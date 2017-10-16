@@ -41,7 +41,7 @@ public abstract class AsymmetricSyncTask extends AbstractFuture<SyncStat> implem
     protected final List<Range<Token>> rangesToFetch;
     protected final InetAddress fetchingNode;
     protected final PreviewKind previewKind;
-    private long startTime;
+    private long startTime = Long.MIN_VALUE;
     protected volatile SyncStat stat;
 
 

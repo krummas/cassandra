@@ -55,14 +55,11 @@ public class HostDifferences
     public boolean hasDifferencesFor(InetAddress node2, Range<Token> range)
     {
         List<Range<Token>> differences = get(node2);
-        if (!differences.isEmpty())
+        for (Range<Token> diff : differences)
         {
-            for (Range<Token> diff : differences)
-            {
-                // if the other node has a diff for this range, we know they are not equal.
-                if (range.equals(diff) || range.intersects(diff))
-                    return true;
-            }
+            // if the other node has a diff for this range, we know they are not equal.
+            if (range.equals(diff) || range.intersects(diff))
+                return true;
         }
         return false;
     }

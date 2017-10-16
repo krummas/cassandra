@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import org.junit.Test;
@@ -82,11 +83,11 @@ public class ReduceHelperTest
         D streams from {A, B}, C since A==B
         E streams from {A, B}, C since A==B
 
-  A   B   C   D   E
-A     =   x   x   x
-B         x   x   x
-C             x   x
-D                 =
+          A   B   C   D   E
+        A     =   x   x   x
+        B         x   x   x
+        C             x   x
+        D                 =
          */
         Map<InetAddress, HostDifferences> differences = new HashMap<>();
         for (int i = 0; i < 4; i++)
@@ -112,7 +113,7 @@ D                 =
         assertEquals(set(set(A,B), set(C)), streams(tracker.get(D)));
         assertEquals(set(set(A,B), set(C)), streams(tracker.get(E)));
 
-        ReducedDifferenceHolder reduced = ReduceHelper.reduce(differenceHolder, (x,y) -> y);
+        ImmutableMap<InetAddress, HostDifferences> reduced = ReduceHelper.reduce(differenceHolder, (x,y) -> y);
 
         HostDifferences n0 = reduced.get(A);
         assertEquals(0, n0.get(A).size());
@@ -156,11 +157,11 @@ D                 =
         D streams from {A, B}, C since A==B
         E streams from {A, B}, C since A==B
 
-  A   B   C   D   E
-A     =   x   x   x
-B         x   x   x
-C             x   x
-D                 =
+          A   B   C   D   E
+        A     =   x   x   x
+        B         x   x   x
+        C             x   x
+        D                 =
          */
         Map<InetAddress, HostDifferences> differences = new HashMap<>();
         for (int i = 0; i < 4; i++)
@@ -186,7 +187,7 @@ D                 =
         assertEquals(set(set(A, B), set(C)), streams(tracker.get(E)));
 
         // if there is an option, never stream from node 1:
-        ReducedDifferenceHolder reduced = ReduceHelper.reduce(differenceHolder, (x,y) -> Sets.difference(y, set(B)));
+        ImmutableMap<InetAddress, HostDifferences> reduced = ReduceHelper.reduce(differenceHolder, (x,y) -> Sets.difference(y, set(B)));
 
         HostDifferences n0 = reduced.get(A);
         assertEquals(0, n0.get(A).size());
@@ -260,7 +261,7 @@ D                 =
         assertEquals(set(set(A,B)), tracker.get(C).getIncoming().get(range(0, 50)).allStreams());
         assertEquals(set(set(B)), tracker.get(C).getIncoming().get(range(50, 100)).allStreams());
 
-        ReducedDifferenceHolder reduced = ReduceHelper.reduce(differenceHolder, (x,y) -> y);
+        ImmutableMap<InetAddress, HostDifferences> reduced = ReduceHelper.reduce(differenceHolder, (x, y) -> y);
 
         HostDifferences n0 = reduced.get(A);
 
@@ -343,7 +344,7 @@ D                 =
         assertEquals(set(set(B)), ranges.get(range(10, 40)).allStreams());
         assertEquals(set(set(A)), ranges.get(range(40, 45)).allStreams());
         assertEquals(set(set(A,B)), ranges.get(range(45, 50)).allStreams());
-        ReducedDifferenceHolder reduced = ReduceHelper.reduce(differenceHolder, (x, y) -> y);
+        ImmutableMap<InetAddress, HostDifferences> reduced = ReduceHelper.reduce(differenceHolder, (x, y) -> y);
 
         assertNoOverlap(A, reduced.get(A), list(range(0, 50)));
         assertNoOverlap(B, reduced.get(B), list(range(0, 50)));

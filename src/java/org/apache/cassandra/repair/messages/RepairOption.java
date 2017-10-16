@@ -136,7 +136,7 @@ public class RepairOption
      *             <td>optimiseStreams</td>
      *             <td>"true" if we should try to optimise the syncing to avoid transfering identical
      *             ranges to the same host multiple times</td>
-     *             <td>true</td>
+     *             <td>false</td>
      *         </tr>
      *     </tbody>
      * </table>
