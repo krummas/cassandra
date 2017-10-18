@@ -1182,14 +1182,16 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
     }
 
-    public void setBestLevelsOn(Collection<SSTableReader> sstables)
+    public Collection<SSTableReader> prepareForAddition(Collection<SSTableReader> sstables)
     {
+        List<SSTableReader> preparedSSTables = new ArrayList<>(sstables.size());
         Map<Integer, List<SSTableReader>> repairedGroups = sstables.stream().filter(s -> s.isRepaired()).collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
         Map<Integer, List<SSTableReader>> unrepairedGroups = sstables.stream().filter(s -> !s.isRepaired()).collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
-        for (Map.Entry<Integer, List<SSTableReader>> entry : repairedGroups.entrySet())
-            repaired.get(entry.getKey()).setBestLevelsOn(entry.getValue());
-        for (Map.Entry<Integer, List<SSTableReader>> entry : unrepairedGroups.entrySet())
-            unrepaired.get(entry.getKey()).setBestLevelsOn(entry.getValue());
 
+        for (Map.Entry<Integer, List<SSTableReader>> entry : repairedGroups.entrySet())
+            preparedSSTables.addAll(repaired.get(entry.getKey()).prepareForAddition(entry.getValue()));
+        for (Map.Entry<Integer, List<SSTableReader>> entry : unrepairedGroups.entrySet())
+            preparedSSTables.addAll(unrepaired.get(entry.getKey()).prepareForAddition(entry.getValue()));
+        return preparedSSTables;
     }
 }

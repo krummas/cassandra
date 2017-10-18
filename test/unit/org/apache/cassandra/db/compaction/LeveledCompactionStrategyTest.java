@@ -553,26 +553,27 @@ public class LeveledCompactionStrategyTest
         Set<SSTableReader> sstablesOriginal = cfs.getLiveSSTables();
         // now create a single sstable covering the whole range - this will overlap with all old sstables
         // and it should therefor only be possible to add it in L0
-        for (int r = 0; r < rows; r++)
+        DecoratedKey smallest = null;
+        DecoratedKey largest = null;
+        for (SSTableReader sstable : cfs.getLiveSSTables())
         {
-            DecoratedKey key = Util.dk(String.valueOf(r));
-            UpdateBuilder builder = UpdateBuilder.create(cfs.metadata(), key);
-            for (int c = 0; c < columns; c++)
-                builder.newRow("column" + c).add("val", value);
-            Mutation rm = new Mutation(builder.build());
-            rm.apply();
+            if (smallest == null || smallest.compareTo(sstable.first) < 0)
+                smallest = sstable.first;
+            if (largest == null || largest.compareTo(sstable.last) > 0)
+                largest = sstable.last;
         }
+        UpdateBuilder builder = UpdateBuilder.create(cfs.metadata(), smallest);
+        builder.newRow("column1").add("val", value);
+        Mutation rm = new Mutation(builder.build());
+        rm.apply();
+        builder = UpdateBuilder.create(cfs.metadata(), largest);
+        builder.newRow("column1").add("val", value);
+        rm = new Mutation(builder.build());
+        rm.apply();
         cfs.forceBlockingFlush();
         Set<SSTableReader> newSSTables = new HashSet<>(cfs.getLiveSSTables());
         newSSTables.removeAll(sstablesOriginal);
-        if (newSSTables.size() > 1)
-        {
-            Set<Descriptor> descs = newSSTables.stream().map(s -> s.descriptor).collect(Collectors.toSet());
-            CompactionManager.instance.submitUserDefined(cfs, descs, 0).get();
-            newSSTables = new HashSet<>(cfs.getLiveSSTables());
-            newSSTables.removeAll(sstablesOriginal);
-            assert newSSTables.size() == 1;
-        }
+        assertEquals(1, newSSTables.size());
         int totalSSTableCount = cfs.getLiveSSTables().size();
         cfs.getTracker().removeSSTablesFromTrackerUnsafe(newSSTables);
         cfs.loadNewSSTables();

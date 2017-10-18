@@ -812,8 +812,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         {
             runWithCompactionsDisabled(() ->
                                        {
-                                           getCompactionStrategyManager().setBestLevelsOn(refs);
-                                           data.addSSTables(refs);
+                                           Collection<SSTableReader> preparedSSTables = getCompactionStrategyManager().prepareForAddition(refs);
+                                           data.addSSTables(preparedSSTables);
                                            return null;
                                        },
                                        false,

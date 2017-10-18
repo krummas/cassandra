@@ -574,9 +574,9 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
      * @param sstables the sstables to update the levels on
      */
     @Override
-    public void setBestLevelsOn(List<SSTableReader> sstables)
+    public Collection<SSTableReader> prepareForAddition(List<SSTableReader> sstables)
     {
-
+        Set<SSTableReader> preparedSSTables = new HashSet<>(sstables);
         List<List<SSTableReader>> potentialLeveling = potentialLeveling(sstables);
         // now try to add the sstables in order to any level:
         List<SSTableReader> [] currentGenerations = copyGenerations(manifest.generations);
@@ -604,6 +604,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
                 }
             }
         }
+        return preparedSSTables;
     }
 
     private void setLevel(SSTableReader sstable, int level)
@@ -642,7 +643,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
      */
     public static List<List<SSTableReader>> potentialLeveling(Collection<SSTableReader> sstables)
     {
-        List<SSTableReader> sortedSSTables = Lists.newArrayList(sstables);
+        List<SSTableReader> sortedSSTables = Lists.newLinkedList(sstables);
         sortedSSTables.sort(Comparator.comparing(o -> o.last));
         List<List<SSTableReader>> levels = new ArrayList<>();
         while (!sortedSSTables.isEmpty())

@@ -332,10 +332,13 @@ public abstract class AbstractCompactionStrategy
     @VisibleForTesting
     protected abstract Set<SSTableReader> getSSTables();
 
-    public void setBestLevelsOn(List<SSTableReader> value)
+    /**
+     * Prepares the given sstables for addition, for LCS it will set the best possible levels on the sstables
+     * to reduce the amount of compaction we need to do
+     */
+    public Collection<SSTableReader> prepareForAddition(List<SSTableReader> newSSTables)
     {
-        // only lcs needs to implement this
-        return;
+        return newSSTables;
     }
 
     public static class ScannerList implements AutoCloseable
