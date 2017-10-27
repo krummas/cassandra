@@ -517,9 +517,7 @@ public class CompactionManager implements CompactionManagerMBean
             return AllSSTableOpStatus.ABORTED;
         }
 
-        final List<Range<Token>> localRanges = Range.sort(r);
-        final Directories.DataDirectory[] locations = cfs.getDirectories().getWriteableLocations();
-        final List<PartitionPosition> diskBoundaries = StorageService.getDiskBoundaries(localRanges, cfs.getPartitioner(), locations);
+        final List<PartitionPosition> diskBoundaries = cfs.getDiskBoundaries().positions;
 
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
         {

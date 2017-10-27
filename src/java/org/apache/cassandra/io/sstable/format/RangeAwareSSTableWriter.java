@@ -26,6 +26,7 @@ import java.util.UUID;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
+import org.apache.cassandra.db.DiskBoundaryManager;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -53,7 +54,8 @@ public class RangeAwareSSTableWriter implements SSTableMultiWriter
 
     public RangeAwareSSTableWriter(ColumnFamilyStore cfs, long estimatedKeys, long repairedAt, SSTableFormat.Type format, int sstableLevel, long totalSize, LifecycleTransaction txn, SerializationHeader header) throws IOException
     {
-        directories = cfs.getDirectories().getWriteableLocations();
+        DiskBoundaryManager.DiskBoundaries db = cfs.getDiskBoundaries();
+        directories = db.directories;
         this.sstableLevel = sstableLevel;
         this.cfs = cfs;
         this.estimatedKeys = estimatedKeys / directories.length;
@@ -61,7 +63,7 @@ public class RangeAwareSSTableWriter implements SSTableMultiWriter
         this.format = format;
         this.txn = txn;
         this.header = header;
-        boundaries = StorageService.getDiskBoundaries(cfs, directories);
+        boundaries = db.positions;
         if (boundaries == null)
         {
             Directories.DataDirectory localDir = cfs.getDirectories().getWriteableLocation(totalSize);

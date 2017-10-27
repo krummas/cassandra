@@ -25,6 +25,7 @@ import java.lang.management.ManagementFactory;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
@@ -41,6 +42,8 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
 
     private final Set<File> unreadableDirectories = new CopyOnWriteArraySet<File>();
     private final Set<File> unwritableDirectories = new CopyOnWriteArraySet<File>();
+
+    private static AtomicInteger diskVersion = new AtomicInteger();
 
     private BlacklistedDirectories()
     {
@@ -89,6 +92,7 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
         File directory = getDirectory(path);
         if (instance.unreadableDirectories.add(directory))
         {
+            diskVersion.incrementAndGet();
             logger.warn("Blacklisting {} for reads", directory);
             return directory;
         }
@@ -106,10 +110,16 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
         File directory = getDirectory(path);
         if (instance.unwritableDirectories.add(directory))
         {
+            diskVersion.incrementAndGet();
             logger.warn("Blacklisting {} for writes", directory);
             return directory;
         }
         return null;
+    }
+
+    public static int getDiskVersion()
+    {
+        return diskVersion.get();
     }
 
     /**

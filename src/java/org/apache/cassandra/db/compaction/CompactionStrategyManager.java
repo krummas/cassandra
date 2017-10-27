@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.google.common.collect.Iterables;
+
+import org.apache.cassandra.db.DiskBoundaryManager;
 import org.apache.cassandra.index.Index;
 import com.google.common.primitives.Ints;
 
@@ -240,9 +242,10 @@ public class CompactionStrategyManager implements INotificationConsumer
         if (!cfs.getPartitioner().splitter().isPresent())
             return 0;
 
-        Directories.DataDirectory[] directories = locations.getWriteableLocations();
-        List<PartitionPosition> boundaries = StorageService.getDiskBoundaries(cfs, directories);
-        if (boundaries == null)
+        DiskBoundaryManager.DiskBoundaries boundaries = cfs.getDiskBoundaries(/*locations*/);
+        Directories.DataDirectory[] directories = boundaries.directories;
+
+        if (boundaries.positions == null)
         {
             // try to figure out location based on sstable directory:
             for (int i = 0; i < directories.length; i++)
@@ -254,7 +257,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             return 0;
         }
 
-        int pos = Collections.binarySearch(boundaries, sstable.first);
+        int pos = Collections.binarySearch(boundaries.positions, sstable.first);
         assert pos < 0; // boundaries are .minkeybound and .maxkeybound so they should never be equal
         return -pos - 1;
     }

@@ -297,20 +297,19 @@ public class Memtable implements Comparable<Memtable>
 
     public List<FlushRunnable> flushRunnables(LifecycleTransaction txn)
     {
-        List<Range<Token>> localRanges = Range.sort(StorageService.instance.getLocalRanges(cfs.keyspace.getName()));
-
-        if (!cfs.getPartitioner().splitter().isPresent() || localRanges.isEmpty())
-            return Collections.singletonList(new FlushRunnable(txn));
-
-        return createFlushRunnables(localRanges, txn);
+        return createFlushRunnables(txn);
     }
 
-    private List<FlushRunnable> createFlushRunnables(List<Range<Token>> localRanges, LifecycleTransaction txn)
+    private List<FlushRunnable> createFlushRunnables(LifecycleTransaction txn)
     {
         assert cfs.getPartitioner().splitter().isPresent();
 
-        Directories.DataDirectory[] locations = cfs.getDirectories().getWriteableLocations();
-        List<PartitionPosition> boundaries = StorageService.getDiskBoundaries(localRanges, cfs.getPartitioner(), locations);
+        DiskBoundaryManager.DiskBoundaries diskBoundaries = cfs.getDiskBoundaries();
+        List<PartitionPosition> boundaries = diskBoundaries.positions;
+        Directories.DataDirectory[] locations = diskBoundaries.directories;
+        if (boundaries == null)
+            return Collections.singletonList(new FlushRunnable(txn));
+
         List<FlushRunnable> runnables = new ArrayList<>(boundaries.size());
         PartitionPosition rangeStart = cfs.getPartitioner().getMinimumToken().minKeyBound();
         try
