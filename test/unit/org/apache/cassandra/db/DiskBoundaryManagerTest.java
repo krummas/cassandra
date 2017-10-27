@@ -22,8 +22,10 @@ import java.io.File;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.List;
 
 import com.google.common.collect.Lists;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -36,6 +38,7 @@ import org.apache.cassandra.utils.FBUtilities;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class DiskBoundaryManagerTest extends CQLTester
 {
@@ -61,22 +64,22 @@ public class DiskBoundaryManagerTest extends CQLTester
     public void getBoundariesTest()
     {
         DiskBoundaryManager.DiskBoundaries dbv = dbm.getDiskBoundaries(mock);
-        assertEquals(3, dbv.positions.size());
-        assertTrue(Arrays.equals(dbv.directories, dirs.getWriteableLocations()));
+        Assert.assertEquals(3, dbv.positions.size());
+        assertEquals(dbv.directories, dirs.getWriteableLocations());
     }
 
     @Test
     public void blackListTest()
     {
         DiskBoundaryManager.DiskBoundaries dbv = dbm.getDiskBoundaries(mock);
-        assertEquals(3, dbv.positions.size());
-        assertTrue(Arrays.equals(dbv.directories, dirs.getWriteableLocations()));
+        Assert.assertEquals(3, dbv.positions.size());
+        assertEquals(dbv.directories, dirs.getWriteableLocations());
         BlacklistedDirectories.maybeMarkUnwritable(new File("/tmp/3"));
         dbv = dbm.getDiskBoundaries(mock);
-        assertEquals(2, dbv.positions.size());
-        assertTrue(Arrays.equals(new Directories.DataDirectory[] {new Directories.DataDirectory(new File("/tmp/1")),
-                                                                  new Directories.DataDirectory(new File("/tmp/2"))},
-                                 dbv.directories));
+        Assert.assertEquals(2, dbv.positions.size());
+        Assert.assertEquals(Lists.newArrayList(new Directories.DataDirectory(new File("/tmp/1")),
+                                        new Directories.DataDirectory(new File("/tmp/2"))),
+                                 dbv.directories);
     }
 
     @Test
@@ -99,6 +102,17 @@ public class DiskBoundaryManagerTest extends CQLTester
         DiskBoundaryManager.DiskBoundaries dbv3 = dbm.getDiskBoundaries(mock);
         assertTrue(dbv2 == dbv3);
 
+    }
+
+    private static void assertEquals(List<Directories.DataDirectory> dir1, Directories.DataDirectory[] dir2)
+    {
+        if (dir1.size() != dir2.length)
+            fail();
+        for (int i = 0; i < dir2.length; i++)
+        {
+            if (!dir1.get(i).equals(dir2[i]))
+                fail();
+        }
     }
 
     // just to be able to override the data directories

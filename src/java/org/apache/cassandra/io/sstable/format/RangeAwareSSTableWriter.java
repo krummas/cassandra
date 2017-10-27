@@ -39,7 +39,7 @@ import org.apache.cassandra.utils.FBUtilities;
 public class RangeAwareSSTableWriter implements SSTableMultiWriter
 {
     private final List<PartitionPosition> boundaries;
-    private final Directories.DataDirectory[] directories;
+    private final List<Directories.DataDirectory> directories;
     private final int sstableLevel;
     private final long estimatedKeys;
     private final long repairedAt;
@@ -58,7 +58,7 @@ public class RangeAwareSSTableWriter implements SSTableMultiWriter
         directories = db.directories;
         this.sstableLevel = sstableLevel;
         this.cfs = cfs;
-        this.estimatedKeys = estimatedKeys / directories.length;
+        this.estimatedKeys = estimatedKeys / directories.size();
         this.repairedAt = repairedAt;
         this.format = format;
         this.txn = txn;
@@ -92,7 +92,7 @@ public class RangeAwareSSTableWriter implements SSTableMultiWriter
             if (currentWriter != null)
                 finishedWriters.add(currentWriter);
 
-            Descriptor desc = Descriptor.fromFilename(cfs.getSSTablePath(cfs.getDirectories().getLocationForDisk(directories[currentIndex])), format);
+            Descriptor desc = Descriptor.fromFilename(cfs.getSSTablePath(cfs.getDirectories().getLocationForDisk(directories.get(currentIndex))), format);
             currentWriter = cfs.createSSTableMultiWriter(desc, estimatedKeys, repairedAt, sstableLevel, header, txn);
         }
     }

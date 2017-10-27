@@ -243,14 +243,14 @@ public class CompactionStrategyManager implements INotificationConsumer
             return 0;
 
         DiskBoundaryManager.DiskBoundaries boundaries = cfs.getDiskBoundaries(/*locations*/);
-        Directories.DataDirectory[] directories = boundaries.directories;
+        List<Directories.DataDirectory> directories = boundaries.directories;
 
         if (boundaries.positions == null)
         {
             // try to figure out location based on sstable directory:
-            for (int i = 0; i < directories.length; i++)
+            for (int i = 0; i < directories.size(); i++)
             {
-                Directories.DataDirectory directory = directories[i];
+                Directories.DataDirectory directory = directories.get(i);
                 if (sstable.descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
                     return i;
             }

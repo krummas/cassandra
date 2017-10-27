@@ -59,7 +59,7 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
 
     protected final SSTableRewriter sstableWriter;
     protected final LifecycleTransaction txn;
-    private final Directories.DataDirectory[] locations;
+    private final List<Directories.DataDirectory> locations;
     private final List<PartitionPosition> diskBoundaries;
     private int locationIndex;
 
@@ -176,8 +176,8 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
         while (locationIndex == -1 || key.compareTo(diskBoundaries.get(locationIndex)) > 0)
             locationIndex++;
         if (prevIdx >= 0)
-            logger.debug("Switching write location from {} to {}", locations[prevIdx], locations[locationIndex]);
-        switchCompactionLocation(locations[locationIndex]);
+            logger.debug("Switching write location from {} to {}", locations.get(prevIdx), locations.get(locationIndex));
+        switchCompactionLocation(locations.get(locationIndex));
     }
 
     /**

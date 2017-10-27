@@ -302,11 +302,9 @@ public class Memtable implements Comparable<Memtable>
 
     private List<FlushRunnable> createFlushRunnables(LifecycleTransaction txn)
     {
-        assert cfs.getPartitioner().splitter().isPresent();
-
         DiskBoundaryManager.DiskBoundaries diskBoundaries = cfs.getDiskBoundaries();
         List<PartitionPosition> boundaries = diskBoundaries.positions;
-        Directories.DataDirectory[] locations = diskBoundaries.directories;
+        List<Directories.DataDirectory> locations = diskBoundaries.directories;
         if (boundaries == null)
             return Collections.singletonList(new FlushRunnable(txn));
 
@@ -317,7 +315,7 @@ public class Memtable implements Comparable<Memtable>
             for (int i = 0; i < boundaries.size(); i++)
             {
                 PartitionPosition t = boundaries.get(i);
-                runnables.add(new FlushRunnable(rangeStart, t, locations[i], txn));
+                runnables.add(new FlushRunnable(rangeStart, t, locations.get(i), txn));
                 rangeStart = t;
             }
             return runnables;

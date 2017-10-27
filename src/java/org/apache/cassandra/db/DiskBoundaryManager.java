@@ -43,8 +43,10 @@ public class DiskBoundaryManager
 
     public DiskBoundaries getDiskBoundaries(ColumnFamilyStore cfs)
     {
+        if (!cfs.getPartitioner().splitter().isPresent())
+            return new DiskBoundaries(cfs.getDirectories().getWriteableLocations(), null, -1, -1);
         // copy the reference to avoid getting nulled out by invalidate() below
-        // - it is ok to race at times, compaction will move any incorrect tokens to their correct places, but
+        // - it is ok to race, compaction will move any incorrect tokens to their correct places, but
         // returning null would be bad
         DiskBoundaries db = diskBoundaries;
         if (isOutOfDate(diskBoundaries))
@@ -63,7 +65,7 @@ public class DiskBoundaryManager
     }
 
     /**
-     * check if the given disk boundaries are out of date due not being set or to having too old diskVersion or ringVersion
+     * check if the given disk boundaries are out of date due not being set or to having too old diskVersion/ringVersion
      */
     private boolean isOutOfDate(DiskBoundaries db)
     {
@@ -150,14 +152,14 @@ public class DiskBoundaryManager
 
     public static class DiskBoundaries
     {
-        public final Directories.DataDirectory[] directories;
+        public final List<Directories.DataDirectory> directories;
         public final ImmutableList<PartitionPosition> positions;
         private final long ringVersion;
         private final int diskVersion;
 
         private DiskBoundaries(Directories.DataDirectory[] directories, List<PartitionPosition> positions, long ringVersion, int diskVersion)
         {
-            this.directories = directories;
+            this.directories = directories == null ? null : ImmutableList.copyOf(directories);
             this.positions = positions == null ? null : ImmutableList.copyOf(positions);
             this.ringVersion = ringVersion;
             this.diskVersion = diskVersion;
@@ -172,13 +174,13 @@ public class DiskBoundaryManager
 
             if (ringVersion != that.ringVersion) return false;
             if (diskVersion != that.diskVersion) return false;
-            if (!Arrays.equals(directories, that.directories)) return false;
+            if (!directories.equals(that.directories)) return false;
             return positions != null ? positions.equals(that.positions) : that.positions == null;
         }
 
         public int hashCode()
         {
-            int result = Arrays.hashCode(directories);
+            int result = directories != null ? directories.hashCode() : 0;
             result = 31 * result + (positions != null ? positions.hashCode() : 0);
             result = 31 * result + (int) (ringVersion ^ (ringVersion >>> 32));
             result = 31 * result + diskVersion;
