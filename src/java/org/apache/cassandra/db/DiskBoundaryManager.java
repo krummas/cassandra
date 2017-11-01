@@ -72,13 +72,13 @@ public class DiskBoundaryManager
         if (db == null)
             return true;
         long currentRingVersion = StorageService.instance.getTokenMetadata().getRingVersion();
-        int currentDiskVersion = BlacklistedDirectories.getDiskVersion();
-        return currentRingVersion != db.ringVersion || currentDiskVersion != db.diskVersion;
+        int currentDiskVersion = BlacklistedDirectories.getDirectoriesVersion();
+        return currentRingVersion != db.ringVersion || currentDiskVersion != db.directoriesVersion;
     }
 
     private DiskBoundaries getDiskBoundaryValue(ColumnFamilyStore cfs)
     {
-        Collection<Range<Token>> lr;
+        Collection<Range<Token>> localRanges;
 
         long ringVersion;
         TokenMetadata tmd;
@@ -88,35 +88,36 @@ public class DiskBoundaryManager
             ringVersion = tmd.getRingVersion();
             if (StorageService.instance.isBootstrapMode())
             {
-                lr = tmd.getPendingRanges(cfs.keyspace.getName(), FBUtilities.getBroadcastAddress());
+                localRanges = tmd.getPendingRanges(cfs.keyspace.getName(), FBUtilities.getBroadcastAddress());
             }
             else
             {
                 // Reason we use use the future settled TMD is that if we decommission a node, we want to stream
                 // from that node to the correct location on disk, if we didn't, we would put new files in the wrong places.
                 // We do this to minimize the amount of data we need to move in rebalancedisks once everything settled
-                lr = cfs.keyspace.getReplicationStrategy().getAddressRanges(tmd.cloneAfterAllLeft()).get(FBUtilities.getBroadcastAddress());
+                localRanges = cfs.keyspace.getReplicationStrategy().getAddressRanges(tmd.cloneAfterAllSettled()).get(FBUtilities.getBroadcastAddress());
             }
-            logger.debug("Got local ranges {} (ringVersion = {})", lr, ringVersion);
+            logger.debug("Got local ranges {} (ringVersion = {})", localRanges, ringVersion);
         }
         while (ringVersion != tmd.getRingVersion()); // if ringVersion is different here it means that
-                                                     // it might have changed before we calculated lr - recalculate
+                                                     // it might have changed before we calculated localRanges - recalculate
 
-        int diskVersion = -1;
-        Directories.DataDirectory[] dirs = null;
-        while (diskVersion != BlacklistedDirectories.getDiskVersion())
+        int directoriesVersion;
+        Directories.DataDirectory[] dirs;
+        do
         {
+            directoriesVersion = BlacklistedDirectories.getDirectoriesVersion();
             dirs = cfs.getDirectories().getWriteableLocations();
-            diskVersion = BlacklistedDirectories.getDiskVersion();
         }
+        while (directoriesVersion != BlacklistedDirectories.getDirectoriesVersion()); // if directoriesVersion has changed we need to recalculate
 
-        if (lr == null || lr.isEmpty())
-            return new DiskBoundaries(dirs, null, ringVersion, diskVersion);
+        if (localRanges == null || localRanges.isEmpty())
+            return new DiskBoundaries(dirs, null, ringVersion, directoriesVersion);
 
-        List<Range<Token>> localRanges = Range.sort(lr);
+        List<Range<Token>> sortedLocalRanges = Range.sort(localRanges);
 
-        List<PartitionPosition> positions = getDiskBoundaries(localRanges, cfs.getPartitioner(), dirs);
-        return new DiskBoundaries(dirs, positions, ringVersion, diskVersion);
+        List<PartitionPosition> positions = getDiskBoundaries(sortedLocalRanges, cfs.getPartitioner(), dirs);
+        return new DiskBoundaries(dirs, positions, ringVersion, directoriesVersion);
     }
 
     /**
@@ -128,15 +129,15 @@ public class DiskBoundaryManager
      *
      * The final entry in the returned list will always be the partitioner maximum tokens upper key bound
      */
-    private List<PartitionPosition> getDiskBoundaries(List<Range<Token>> localRanges, IPartitioner partitioner, Directories.DataDirectory[] dataDirectories)
+    private List<PartitionPosition> getDiskBoundaries(List<Range<Token>> sortedLocalRanges, IPartitioner partitioner, Directories.DataDirectory[] dataDirectories)
     {
         assert partitioner.splitter().isPresent();
         Splitter splitter = partitioner.splitter().get();
         boolean dontSplitRanges = DatabaseDescriptor.getNumTokens() > 1;
-        List<Token> boundaries = splitter.splitOwnedRanges(dataDirectories.length, localRanges, dontSplitRanges);
+        List<Token> boundaries = splitter.splitOwnedRanges(dataDirectories.length, sortedLocalRanges, dontSplitRanges);
         // If we can't split by ranges, split evenly to ensure utilisation of all disks
         if (dontSplitRanges && boundaries.size() < dataDirectories.length)
-            boundaries = splitter.splitOwnedRanges(dataDirectories.length, localRanges, false);
+            boundaries = splitter.splitOwnedRanges(dataDirectories.length, sortedLocalRanges, false);
 
         List<PartitionPosition> diskBoundaries = new ArrayList<>();
         for (int i = 0; i < boundaries.size() - 1; i++)
@@ -155,14 +156,14 @@ public class DiskBoundaryManager
         public final List<Directories.DataDirectory> directories;
         public final ImmutableList<PartitionPosition> positions;
         private final long ringVersion;
-        private final int diskVersion;
+        private final int directoriesVersion;
 
         private DiskBoundaries(Directories.DataDirectory[] directories, List<PartitionPosition> positions, long ringVersion, int diskVersion)
         {
             this.directories = directories == null ? null : ImmutableList.copyOf(directories);
             this.positions = positions == null ? null : ImmutableList.copyOf(positions);
             this.ringVersion = ringVersion;
-            this.diskVersion = diskVersion;
+            this.directoriesVersion = diskVersion;
         }
 
         public boolean equals(Object o)
@@ -173,7 +174,7 @@ public class DiskBoundaryManager
             DiskBoundaries that = (DiskBoundaries) o;
 
             if (ringVersion != that.ringVersion) return false;
-            if (diskVersion != that.diskVersion) return false;
+            if (directoriesVersion != that.directoriesVersion) return false;
             if (!directories.equals(that.directories)) return false;
             return positions != null ? positions.equals(that.positions) : that.positions == null;
         }
@@ -183,7 +184,7 @@ public class DiskBoundaryManager
             int result = directories != null ? directories.hashCode() : 0;
             result = 31 * result + (positions != null ? positions.hashCode() : 0);
             result = 31 * result + (int) (ringVersion ^ (ringVersion >>> 32));
-            result = 31 * result + diskVersion;
+            result = 31 * result + directoriesVersion;
             return result;
         }
     }

@@ -43,7 +43,7 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
     private final Set<File> unreadableDirectories = new CopyOnWriteArraySet<File>();
     private final Set<File> unwritableDirectories = new CopyOnWriteArraySet<File>();
 
-    private static AtomicInteger diskVersion = new AtomicInteger();
+    private static final AtomicInteger directoriesVersion = new AtomicInteger();
 
     private BlacklistedDirectories()
     {
@@ -92,7 +92,7 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
         File directory = getDirectory(path);
         if (instance.unreadableDirectories.add(directory))
         {
-            diskVersion.incrementAndGet();
+            directoriesVersion.incrementAndGet();
             logger.warn("Blacklisting {} for reads", directory);
             return directory;
         }
@@ -110,16 +110,16 @@ public class BlacklistedDirectories implements BlacklistedDirectoriesMBean
         File directory = getDirectory(path);
         if (instance.unwritableDirectories.add(directory))
         {
-            diskVersion.incrementAndGet();
+            directoriesVersion.incrementAndGet();
             logger.warn("Blacklisting {} for writes", directory);
             return directory;
         }
         return null;
     }
 
-    public static int getDiskVersion()
+    public static int getDirectoriesVersion()
     {
-        return diskVersion.get();
+        return directoriesVersion.get();
     }
 
     /**
