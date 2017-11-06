@@ -25,6 +25,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.hash.Hasher;
+
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.CompactionsTest;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -211,6 +213,35 @@ public class ValidatorTest
             assertEquals(Math.pow(2, Math.ceil(Math.log(n) / Math.log(2))), iterator.next().getValue().size(), 0.0);
         }
         assertEquals(trees.rowCount(), n);
+    }
+
+    @Test
+    public void testCountingHasher()
+    {
+        Hasher [] hashers = new Hasher[] {new Validator.CountingHasher(), Validator.CountingHasher.hashFunctions[0].newHasher(), Validator.CountingHasher.hashFunctions[1].newHasher() };
+        byte [] random = UUIDGen.getTimeUUIDBytes();
+
+        // call all overloaded methods:
+        for (Hasher hasher : hashers)
+        {
+            hasher.putByte((byte) 33)
+                  .putBytes(random)
+                  .putBytes(random, 0, 3)
+                  .putChar('a')
+                  .putBoolean(false)
+                  .putDouble(3.3)
+                  .putInt(77)
+                  .putFloat(99)
+                  .putLong(101)
+                  .putShort((short) 23);
+        }
+
+        long len = Byte.BYTES + random.length + 3 + Character.BYTES + Byte.BYTES + Double.BYTES + Integer.BYTES + Float.BYTES + Long.BYTES + Short.BYTES;
+
+        byte [] h = hashers[0].hash().asBytes();
+        assertTrue(Arrays.equals(hashers[1].hash().asBytes(), Arrays.copyOfRange(h, 0, 16)));
+        assertTrue(Arrays.equals(hashers[2].hash().asBytes(), Arrays.copyOfRange(h, 16, 32)));
+        assertEquals(len, ((Validator.CountingHasher)hashers[0]).getCount());
     }
 
     private CompletableFuture<MessageOut> registerOutgoingMessageSink()
