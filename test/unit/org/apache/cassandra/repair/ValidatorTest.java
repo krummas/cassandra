@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.repair;
 
+import java.net.InetAddress;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -226,6 +228,7 @@ public class ValidatorTest
         {
             hasher.putByte((byte) 33)
                   .putBytes(random)
+                  .putBytes(ByteBuffer.wrap(random))
                   .putBytes(random, 0, 3)
                   .putChar('a')
                   .putBoolean(false)
@@ -236,7 +239,16 @@ public class ValidatorTest
                   .putShort((short) 23);
         }
 
-        long len = Byte.BYTES + random.length + 3 + Character.BYTES + Byte.BYTES + Double.BYTES + Integer.BYTES + Float.BYTES + Long.BYTES + Short.BYTES;
+        long len = Byte.BYTES
+                   + random.length * 2 // both the byte[] and the ByteBuffer
+                   + 3 // 3 bytes from the random byte[]
+                   + Character.BYTES
+                   + Byte.BYTES
+                   + Double.BYTES
+                   + Integer.BYTES
+                   + Float.BYTES
+                   + Long.BYTES
+                   + Short.BYTES;
 
         byte [] h = hashers[0].hash().asBytes();
         assertTrue(Arrays.equals(hashers[1].hash().asBytes(), Arrays.copyOfRange(h, 0, 16)));

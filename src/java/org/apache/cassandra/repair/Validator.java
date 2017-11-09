@@ -255,7 +255,11 @@ public class Validator implements Runnable
         public Hasher putBytes(ByteBuffer byteBuffer)
         {
             count += byteBuffer.remaining();
-            return underlying.putBytes(byteBuffer);
+            for (Hasher h : underlying)
+            {
+                h.putBytes(byteBuffer.duplicate());
+            }
+            return this;
         }
 
         public Hasher putShort(short i)
