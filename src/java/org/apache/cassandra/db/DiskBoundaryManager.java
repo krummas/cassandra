@@ -76,7 +76,7 @@ public class DiskBoundaryManager
         return currentRingVersion != db.ringVersion || currentDiskVersion != db.directoriesVersion;
     }
 
-    private DiskBoundaries getDiskBoundaryValue(ColumnFamilyStore cfs)
+    private static DiskBoundaries getDiskBoundaryValue(ColumnFamilyStore cfs)
     {
         Collection<Range<Token>> localRanges;
 
@@ -129,7 +129,7 @@ public class DiskBoundaryManager
      *
      * The final entry in the returned list will always be the partitioner maximum tokens upper key bound
      */
-    private List<PartitionPosition> getDiskBoundaries(List<Range<Token>> sortedLocalRanges, IPartitioner partitioner, Directories.DataDirectory[] dataDirectories)
+    private static List<PartitionPosition> getDiskBoundaries(List<Range<Token>> sortedLocalRanges, IPartitioner partitioner, Directories.DataDirectory[] dataDirectories)
     {
         assert partitioner.splitter().isPresent();
         Splitter splitter = partitioner.splitter().get();

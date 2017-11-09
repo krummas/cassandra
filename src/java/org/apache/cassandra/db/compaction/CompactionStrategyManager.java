@@ -209,7 +209,7 @@ public class CompactionStrategyManager implements INotificationConsumer
      */
     public AbstractCompactionStrategy getCompactionStrategyFor(SSTableReader sstable)
     {
-        int index = getCompactionStrategyIndex(cfs, getDirectories(), sstable);
+        int index = getCompactionStrategyIndex(cfs, sstable);
         readLock.lock();
         try
         {
@@ -233,16 +233,15 @@ public class CompactionStrategyManager implements INotificationConsumer
      * sstables in the correct locations and give them to the correct compaction strategy instance.
      *
      * @param cfs
-     * @param locations
      * @param sstable
      * @return
      */
-    public static int getCompactionStrategyIndex(ColumnFamilyStore cfs, Directories locations, SSTableReader sstable)
+    public static int getCompactionStrategyIndex(ColumnFamilyStore cfs, SSTableReader sstable)
     {
         if (!cfs.getPartitioner().splitter().isPresent())
             return 0;
 
-        DiskBoundaryManager.DiskBoundaries boundaries = cfs.getDiskBoundaries(/*locations*/);
+        DiskBoundaryManager.DiskBoundaries boundaries = cfs.getDiskBoundaries();
         List<Directories.DataDirectory> directories = boundaries.directories;
 
         if (boundaries.positions == null)
@@ -452,7 +451,7 @@ public class CompactionStrategyManager implements INotificationConsumer
 
         for (SSTableReader sstable : removed)
         {
-            int i = getCompactionStrategyIndex(cfs, getDirectories(), sstable);
+            int i = getCompactionStrategyIndex(cfs, sstable);
             if (sstable.isRepaired())
                 repairedRemoved.get(i).add(sstable);
             else
@@ -460,7 +459,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
         for (SSTableReader sstable : added)
         {
-            int i = getCompactionStrategyIndex(cfs, getDirectories(), sstable);
+            int i = getCompactionStrategyIndex(cfs, sstable);
             if (sstable.isRepaired())
                 repairedAdded.get(i).add(sstable);
             else
@@ -497,7 +496,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             for (SSTableReader sstable : sstables)
             {
-                int index = getCompactionStrategyIndex(cfs, getDirectories(), sstable);
+                int index = getCompactionStrategyIndex(cfs, sstable);
                 if (sstable.isRepaired())
                 {
                     unrepaired.get(index).removeSSTable(sstable);
@@ -611,9 +610,9 @@ public class CompactionStrategyManager implements INotificationConsumer
         for (SSTableReader sstable : sstables)
         {
             if (sstable.isRepaired())
-                repairedSSTables.get(getCompactionStrategyIndex(cfs, getDirectories(), sstable)).add(sstable);
+                repairedSSTables.get(getCompactionStrategyIndex(cfs, sstable)).add(sstable);
             else
-                unrepairedSSTables.get(getCompactionStrategyIndex(cfs, getDirectories(), sstable)).add(sstable);
+                unrepairedSSTables.get(getCompactionStrategyIndex(cfs, sstable)).add(sstable);
         }
 
         List<ISSTableScanner> scanners = new ArrayList<>(sstables.size());
@@ -650,7 +649,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         readLock.lock();
         try
         {
-            Map<Integer, List<SSTableReader>> groups = sstablesToGroup.stream().collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+            Map<Integer, List<SSTableReader>> groups = sstablesToGroup.stream().collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, s)));
             Collection<Collection<SSTableReader>> anticompactionGroups = new ArrayList<>();
 
             for (Map.Entry<Integer, List<SSTableReader>> group : groups.entrySet())
@@ -688,12 +687,12 @@ public class CompactionStrategyManager implements INotificationConsumer
         SSTableReader firstSSTable = Iterables.getFirst(input, null);
         assert firstSSTable != null;
         boolean repaired = firstSSTable.isRepaired();
-        int firstIndex = getCompactionStrategyIndex(cfs, directories, firstSSTable);
+        int firstIndex = getCompactionStrategyIndex(cfs, firstSSTable);
         for (SSTableReader sstable : input)
         {
             if (sstable.isRepaired() != repaired)
                 throw new UnsupportedOperationException("You can't mix repaired and unrepaired data in a compaction");
-            if (firstIndex != getCompactionStrategyIndex(cfs, directories, sstable))
+            if (firstIndex != getCompactionStrategyIndex(cfs, sstable))
                 throw new UnsupportedOperationException("You can't mix sstables from different directories in a compaction");
         }
     }
@@ -755,11 +754,11 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             Map<Integer, List<SSTableReader>> repairedSSTables = sstables.stream()
                                                                          .filter(s -> !s.isMarkedSuspect() && s.isRepaired())
-                                                                         .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+                                                                         .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, s)));
 
             Map<Integer, List<SSTableReader>> unrepairedSSTables = sstables.stream()
                                                                            .filter(s -> !s.isMarkedSuspect() && !s.isRepaired())
-                                                                           .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, getDirectories(), s)));
+                                                                           .collect(Collectors.groupingBy((s) -> getCompactionStrategyIndex(cfs, s)));
 
 
             for (Map.Entry<Integer, List<SSTableReader>> group : repairedSSTables.entrySet())
