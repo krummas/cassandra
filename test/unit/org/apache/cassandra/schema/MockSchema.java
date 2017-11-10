@@ -82,8 +82,12 @@ public class MockSchema
     {
         return sstable(generation, size, false, cfs);
     }
-
     public static SSTableReader sstable(int generation, int size, boolean keepRef, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, size, keepRef, readerBounds(generation), readerBounds(generation), 0, cfs);
+    }
+
+    public static SSTableReader sstable(int generation, int size, boolean keepRef, DecoratedKey first, DecoratedKey last, int sstableLevel, ColumnFamilyStore cfs)
     {
         Descriptor descriptor = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(),
                                                cfs.keyspace.getName(),
@@ -118,12 +122,14 @@ public class MockSchema
         }
         SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
         StatsMetadata metadata = (StatsMetadata) new MetadataCollector(cfs.metadata().comparator)
+                                                 .sstableLevel(sstableLevel)
                                                  .finalizeMetadata(cfs.metadata().partitioner.getClass().getCanonicalName(), 0.01f, -1, null, header)
                                                  .get(MetadataType.STATS);
         SSTableReader reader = SSTableReader.internalOpen(descriptor, components, cfs.metadata,
                                                           RANDOM_ACCESS_READER_FACTORY.sharedCopy(), RANDOM_ACCESS_READER_FACTORY.sharedCopy(), indexSummary.sharedCopy(),
                                                           new AlwaysPresentFilter(), 1L, metadata, SSTableReader.OpenReason.NORMAL, header);
-        reader.first = reader.last = readerBounds(generation);
+        reader.first = first;
+        reader.last = last;
         if (!keepRef)
             reader.selfRef().release();
         return reader;

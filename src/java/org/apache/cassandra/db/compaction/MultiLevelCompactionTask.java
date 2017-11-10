@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.compaction;
 
+import java.util.Collection;
 import java.util.Set;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -25,21 +26,21 @@ import org.apache.cassandra.db.compaction.writers.CompactionAwareWriter;
 import org.apache.cassandra.db.compaction.writers.MajorLeveledCompactionWriter;
 import org.apache.cassandra.db.compaction.writers.MaxSSTableSizeWriter;
 import org.apache.cassandra.db.compaction.writers.MultiLevelWriter;
-import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 
-public class LeveledCompactionTask extends CompactionTask
+public class MultiLevelCompactionTask extends CompactionTask
 {
-    private final int level;
     private final long maxSSTableBytes;
-    private final boolean majorCompaction;
+    private final Range<Token> range;
 
-    public LeveledCompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int level, int gcBefore, long maxSSTableBytes, boolean majorCompaction)
+    public MultiLevelCompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, Range<Token> range, int gcBefore, long maxSSTableBytes)
     {
         super(cfs, txn, gcBefore);
-        this.level = level;
         this.maxSSTableBytes = maxSSTableBytes;
-        this.majorCompaction = majorCompaction;
+        this.range = range;
     }
 
     @Override
@@ -48,19 +49,17 @@ public class LeveledCompactionTask extends CompactionTask
                                                           LifecycleTransaction txn,
                                                           Set<SSTableReader> nonExpiredSSTables)
     {
-        if (majorCompaction)
-            return new MajorLeveledCompactionWriter(cfs, directories, txn, nonExpiredSSTables, maxSSTableBytes, false);
-        return new MaxSSTableSizeWriter(cfs, directories, txn, nonExpiredSSTables, maxSSTableBytes, getLevel(), false);
+        return new MultiLevelWriter(cfs, directories, txn, nonExpiredSSTables, range, maxSSTableBytes, false);
     }
 
     @Override
     protected boolean partialCompactionsAcceptable()
     {
-        return level == 0;
+        return false;
     }
 
     protected int getLevel()
     {
-        return level;
+        return 0;
     }
 }

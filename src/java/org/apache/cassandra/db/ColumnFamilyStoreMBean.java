@@ -51,7 +51,7 @@ public interface ColumnFamilyStoreMBean
     /**
      * force a major compaction of specified key range in this column family
      */
-    public void forceCompactionForTokenRange(Collection<Range<Token>> tokenRanges) throws ExecutionException, InterruptedException;
+    public void forceCompactionForTokenRange(Range<Token> tokenRanges) throws ExecutionException, InterruptedException;
     /**
      * Gets the minimum number of sstables in queue before compaction kicks off
      */

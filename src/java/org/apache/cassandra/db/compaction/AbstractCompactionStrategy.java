@@ -26,6 +26,7 @@ import com.google.common.collect.Iterables;
 
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.SerializationHeader;
+import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
@@ -181,6 +182,17 @@ public abstract class AbstractCompactionStrategy
      * Is responsible for marking its sstables as compaction-pending.
      */
     public abstract Collection<AbstractCompactionTask> getMaximalTask(final int gcBefore, boolean splitOutput);
+
+    public AbstractCompactionTask getMaximalTask(final int gcBefore, Range<Token> range)
+    {
+        Set<SSTableReader> sstables = new HashSet<>();
+        for (SSTableReader sstable : getSSTables())
+        {
+            if (range.intersects(new Bounds<>(sstable.first.getToken(), sstable.last.getToken())))
+                sstables.add(sstable);
+        }
+        return getUserDefinedTask(sstables, gcBefore);
+    }
 
     /**
      * @param sstables SSTables to compact. Must be marked as compacting.

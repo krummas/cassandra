@@ -749,18 +749,10 @@ public class CompactionManager implements CompactionManagerMBean
         return futures;
     }
 
-    public void forceCompactionForTokenRange(ColumnFamilyStore cfStore, Collection<Range<Token>> ranges)
+    public void forceCompactionForTokenRange(ColumnFamilyStore cfStore, Range<Token> range)
     {
-        final Collection<AbstractCompactionTask> tasks = cfStore.runWithCompactionsDisabled(() ->
-                   {
-                       Collection<SSTableReader> sstables = sstablesInBounds(cfStore, ranges);
-                       if (sstables == null || sstables.isEmpty())
-                       {
-                           logger.debug("No sstables found for the provided token range");
-                           return null;
-                       }
-                       return cfStore.getCompactionStrategyManager().getUserDefinedTasks(sstables, getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()));
-                   }, false, false);
+        final Collection<AbstractCompactionTask> tasks = cfStore.runWithCompactionsDisabled(() -> cfStore.getCompactionStrategyManager()
+                                                                                                         .getMaximalTasks(getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()), range), false, false);
 
         if (tasks == null)
             return;
@@ -781,20 +773,6 @@ public class CompactionManager implements CompactionManagerMBean
             return;
         }
         FBUtilities.waitOnFuture(executor.submit(runnable));
-    }
-
-    private static Collection<SSTableReader> sstablesInBounds(ColumnFamilyStore cfs, Collection<Range<Token>> tokenRangeCollection)
-    {
-        final Set<SSTableReader> sstables = new HashSet<>();
-        Iterable<SSTableReader> liveTables = cfs.getTracker().getView().select(SSTableSet.LIVE);
-        SSTableIntervalTree tree = SSTableIntervalTree.build(liveTables);
-
-        for (Range<Token> tokenRange : tokenRangeCollection)
-        {
-            Iterable<SSTableReader> ssTableReaders = View.sstablesInBounds(tokenRange.left.minKeyBound(), tokenRange.right.maxKeyBound(), tree);
-            Iterables.addAll(sstables, ssTableReaders);
-        }
-        return sstables;
     }
 
     public void forceUserDefinedCompaction(String dataFiles)

@@ -432,8 +432,7 @@ public class LeveledCompactionStrategyTest
         // Compact just the tables with key2
         // Bit hackish to use the key1.token as the prior key but works in BytesToken
         Range<Token> tokenRange = new Range<>(key2.getToken(), key2.getToken());
-        Collection<Range<Token>> tokenRanges = new ArrayList<>(Arrays.asList(tokenRange));
-        cfs.forceCompactionForTokenRange(tokenRanges);
+        cfs.forceCompactionForTokenRange(tokenRange);
 
         while(CompactionManager.instance.isCompacting(Arrays.asList(cfs))) {
             Thread.sleep(100);
@@ -444,8 +443,7 @@ public class LeveledCompactionStrategyTest
 
         // Compact just the tables with key1. At this point all 11 tables should have key1
         Range<Token> tokenRange2 = new Range<>(key1.getToken(), key1.getToken());
-        Collection<Range<Token>> tokenRanges2 = new ArrayList<>(Arrays.asList(tokenRange2));
-        cfs.forceCompactionForTokenRange(tokenRanges2);
+        cfs.forceCompactionForTokenRange(tokenRange2);
 
 
         while(CompactionManager.instance.isCompacting(Arrays.asList(cfs))) {

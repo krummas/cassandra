@@ -28,6 +28,7 @@ import com.google.common.primitives.Doubles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -70,10 +71,10 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
                 {
                     if (configuredMaxSSTableSize >= 1000)
                         logger.warn("Max sstable size of {}MB is configured for {}.{}; having a unit of compaction this large is probably a bad idea",
-                                configuredMaxSSTableSize, cfs.name, cfs.getTableName());
+                                    configuredMaxSSTableSize, cfs.name, cfs.getTableName());
                     if (configuredMaxSSTableSize < 50)
                         logger.warn("Max sstable size of {}MB is configured for {}.{}.  Testing done for CASSANDRA-5727 indicates that performance improves up to 160MB",
-                                configuredMaxSSTableSize, cfs.name, cfs.getTableName());
+                                    configuredMaxSSTableSize, cfs.name, cfs.getTableName());
                 }
             }
 
@@ -170,7 +171,26 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
         if (txn == null)
             return null;
         return Arrays.<AbstractCompactionTask>asList(new LeveledCompactionTask(cfs, txn, 0, gcBefore, getMaxSSTableBytes(), true));
+    }
 
+    public synchronized AbstractCompactionTask getMaximalTask(int gcBefore, Range<Token> range)
+    {
+        Iterable<SSTableReader> sstables = manifest.getAllSSTables();
+
+        Iterable<SSTableReader> filteredSSTables = filterSuspectSSTables(sstables);
+        if (Iterables.isEmpty(filteredSSTables))
+            return null;
+        Set<SSTableReader> intersectingSSTables = new HashSet<>();
+        for (SSTableReader sstable : filteredSSTables)
+        {
+            // todo: fix - use Bounds<> everywhere?
+            if (new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(new Bounds<>(range.left, range.right)))
+                intersectingSSTables.add(sstable);
+        }
+        LifecycleTransaction txn = cfs.getTracker().tryModify(intersectingSSTables, OperationType.COMPACTION);
+        if (txn == null)
+            return null;
+        return new MultiLevelCompactionTask(cfs, txn, range, gcBefore, getMaxSSTableBytes());
     }
 
     @Override

@@ -1011,6 +1011,33 @@ public class CompactionStrategyManager implements INotificationConsumer
         }, false, false);
     }
 
+    public Collection<AbstractCompactionTask> getMaximalTasks(int gcBefore, Range<Token> range)
+    {
+        return cfs.runWithCompactionsDisabled(new Callable<List<AbstractCompactionTask>>()
+        {
+            public List<AbstractCompactionTask> call() throws Exception
+            {
+                List<AbstractCompactionTask> tasks = new ArrayList<>();
+                readLock.lock();
+                try
+                {
+                    for (AbstractCompactionStrategy strategy : Iterables.concat(repaired, unrepaired))
+                    {
+                        AbstractCompactionTask task = strategy.getMaximalTask(gcBefore, range);
+                        if (task != null)
+                            tasks.add(task);
+                    }
+                    // todo: do we need to do this for pending as well?
+                }
+                finally
+                {
+                    readLock.unlock();
+                }
+                return tasks;
+            }
+        }, false, false);
+    }
+
     /**
      * Return a list of compaction tasks corresponding to the sstables requested. Split the sstables according
      * to whether they are repaired or not, and by disk location. Return a task per disk location and repair status

@@ -2063,9 +2063,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         CompactionManager.instance.performMaximal(this, splitOutput);
     }
 
-    public void forceCompactionForTokenRange(Collection<Range<Token>> tokenRanges) throws ExecutionException, InterruptedException
+    public void forceCompactionForTokenRange(Range<Token> tokenRange) throws ExecutionException, InterruptedException
     {
-        CompactionManager.instance.forceCompactionForTokenRange(this, tokenRanges);
+        CompactionManager.instance.forceCompactionForTokenRange(this, tokenRange);
     }
 
     public static Iterable<ColumnFamilyStore> all()
