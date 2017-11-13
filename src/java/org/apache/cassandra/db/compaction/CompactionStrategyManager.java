@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 
 import com.google.common.collect.Iterables;
 
-import org.apache.cassandra.db.DiskBoundaryManager;
+import org.apache.cassandra.db.DiskBoundaries;
 import org.apache.cassandra.index.Index;
 import com.google.common.primitives.Ints;
 
@@ -38,7 +38,6 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.Memtable;
 import org.apache.cassandra.db.SerializationHeader;
-import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.dht.Range;
@@ -51,7 +50,6 @@ import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.notifications.*;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.service.ActiveRepairService;
-import org.apache.cassandra.service.StorageService;
 
 /**
  * Manages the compaction strategies.
@@ -241,7 +239,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         if (!cfs.getPartitioner().splitter().isPresent())
             return 0;
 
-        DiskBoundaryManager.DiskBoundaries boundaries = cfs.getDiskBoundaries();
+        DiskBoundaries boundaries = cfs.getDiskBoundaries();
         List<Directories.DataDirectory> directories = boundaries.directories;
 
         if (boundaries.positions == null)

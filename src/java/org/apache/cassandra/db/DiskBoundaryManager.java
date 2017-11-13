@@ -19,11 +19,9 @@
 package org.apache.cassandra.db;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-import com.google.common.collect.ImmutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -149,43 +147,5 @@ public class DiskBoundaryManager
     public void invalidate()
     {
         diskBoundaries = null;
-    }
-
-    public static class DiskBoundaries
-    {
-        public final List<Directories.DataDirectory> directories;
-        public final ImmutableList<PartitionPosition> positions;
-        private final long ringVersion;
-        private final int directoriesVersion;
-
-        private DiskBoundaries(Directories.DataDirectory[] directories, List<PartitionPosition> positions, long ringVersion, int diskVersion)
-        {
-            this.directories = directories == null ? null : ImmutableList.copyOf(directories);
-            this.positions = positions == null ? null : ImmutableList.copyOf(positions);
-            this.ringVersion = ringVersion;
-            this.directoriesVersion = diskVersion;
-        }
-
-        public boolean equals(Object o)
-        {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            DiskBoundaries that = (DiskBoundaries) o;
-
-            if (ringVersion != that.ringVersion) return false;
-            if (directoriesVersion != that.directoriesVersion) return false;
-            if (!directories.equals(that.directories)) return false;
-            return positions != null ? positions.equals(that.positions) : that.positions == null;
-        }
-
-        public int hashCode()
-        {
-            int result = directories != null ? directories.hashCode() : 0;
-            result = 31 * result + (positions != null ? positions.hashCode() : 0);
-            result = 31 * result + (int) (ringVersion ^ (ringVersion >>> 32));
-            result = 31 * result + directoriesVersion;
-            return result;
-        }
     }
 }

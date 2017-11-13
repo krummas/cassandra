@@ -2653,7 +2653,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return getIfExists(tableId).metric;
     }
 
-    public DiskBoundaryManager.DiskBoundaries getDiskBoundaries()
+    public DiskBoundaries getDiskBoundaries()
     {
         return diskBoundaryManager.getDiskBoundaries(this);
     }
