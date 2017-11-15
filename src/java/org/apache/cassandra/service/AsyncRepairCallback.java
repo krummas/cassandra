@@ -47,7 +47,7 @@ public class AsyncRepairCallback implements IAsyncCallback<ReadResponse>
             {
                 protected void runMayThrow()
                 {
-                    repairResolver.compareResponses();
+                    repairResolver.evaluateAllResponses();
                 }
             });
         }

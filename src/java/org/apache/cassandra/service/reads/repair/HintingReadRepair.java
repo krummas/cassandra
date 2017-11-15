@@ -15,21 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.service;
 
-import java.nio.ByteBuffer;
+package org.apache.cassandra.service.reads.repair;
 
-import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.utils.ByteBufferUtil;
-
-@SuppressWarnings("serial")
-public class DigestMismatchException extends Exception
+/**
+ * Created by blakeeggleston on 11/13/17.
+ */
+public class HintingReadRepair
 {
-    public DigestMismatchException(DecoratedKey key, ByteBuffer digest1, ByteBuffer digest2)
-    {
-        super(String.format("Mismatch for key %s (%s vs %s)",
-                            key.toString(),
-                            ByteBufferUtil.bytesToHex(digest1),
-                            ByteBufferUtil.bytesToHex(digest2)));
-    }
+    // TODO: figure out what the creationTime/gcgs implications are
 }

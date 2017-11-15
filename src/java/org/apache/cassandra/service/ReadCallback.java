@@ -29,21 +29,17 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.concurrent.Stage;
-import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.exceptions.ReadFailureException;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
 import org.apache.cassandra.exceptions.UnavailableException;
-import org.apache.cassandra.metrics.ReadRepairMetrics;
 import org.apache.cassandra.net.IAsyncCallbackWithFailure;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.db.ConsistencyLevel;
-import org.apache.cassandra.tracing.TraceState;
+import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.SimpleCondition;
@@ -69,10 +65,12 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
 
     private final Keyspace keyspace; // TODO push this into ConsistencyLevel?
 
+    private final ReadRepair readRepair;
+
     /**
      * Constructor when response count has to be calculated and blocked for.
      */
-    public ReadCallback(ResponseResolver resolver, ConsistencyLevel consistencyLevel, ReadCommand command, List<InetAddress> filteredEndpoints, long queryStartNanoTime)
+    public ReadCallback(ResponseResolver resolver, ConsistencyLevel consistencyLevel, ReadCommand command, List<InetAddress> filteredEndpoints, long queryStartNanoTime, ReadRepair readRepair)
     {
         this(resolver,
              consistencyLevel,
@@ -80,10 +78,10 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
              command,
              Keyspace.open(command.metadata().keyspace),
              filteredEndpoints,
-             queryStartNanoTime);
+             queryStartNanoTime, readRepair);
     }
 
-    public ReadCallback(ResponseResolver resolver, ConsistencyLevel consistencyLevel, int blockfor, ReadCommand command, Keyspace keyspace, List<InetAddress> endpoints, long queryStartNanoTime)
+    public ReadCallback(ResponseResolver resolver, ConsistencyLevel consistencyLevel, int blockfor, ReadCommand command, Keyspace keyspace, List<InetAddress> endpoints, long queryStartNanoTime, ReadRepair readRepair)
     {
         this.command = command;
         this.keyspace = keyspace;
@@ -92,6 +90,7 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
         this.resolver = resolver;
         this.queryStartNanoTime = queryStartNanoTime;
         this.endpoints = endpoints;
+        this.readRepair = readRepair;
         this.failureReasonByEndpoint = new ConcurrentHashMap<>();
         // we don't support read repair (or rapid read protection) for range scans yet (CASSANDRA-6897)
         assert !(command instanceof PartitionRangeReadCommand) || blockfor >= endpoints.size();
@@ -137,16 +136,6 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
             : new ReadTimeoutException(consistencyLevel, received, blockfor, resolver.isDataPresent());
     }
 
-    public PartitionIterator get() throws ReadFailureException, ReadTimeoutException, DigestMismatchException
-    {
-        awaitResults();
-
-        PartitionIterator result = blockfor == 1 ? resolver.getData() : resolver.resolve();
-        if (logger.isTraceEnabled())
-            logger.trace("Read: {} ms.", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - queryStartNanoTime));
-        return result;
-    }
-
     public int blockFor()
     {
         return blockfor;
@@ -165,10 +154,7 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
             // the original resolve that get() kicks off as soon as the condition is signaled
             if (blockfor < endpoints.size() && n == endpoints.size())
             {
-                TraceState traceState = Tracing.instance.get();
-                if (traceState != null)
-                    traceState.trace("Initiating read-repair");
-                StageManager.getStage(Stage.READ_REPAIR).execute(new AsyncRepairRunner(traceState, queryStartNanoTime));
+                readRepair.maybeStartBackgroundRepair(resolver);
             }
         }
     }
@@ -209,46 +195,6 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
     public boolean isLatencyForSnitch()
     {
         return true;
-    }
-
-    private class AsyncRepairRunner implements Runnable
-    {
-        private final TraceState traceState;
-        private final long queryStartNanoTime;
-
-        public AsyncRepairRunner(TraceState traceState, long queryStartNanoTime)
-        {
-            this.traceState = traceState;
-            this.queryStartNanoTime = queryStartNanoTime;
-        }
-
-        public void run()
-        {
-            // If the resolver is a DigestResolver, we need to do a full data read if there is a mismatch.
-            // Otherwise, resolve will send the repairs directly if needs be (and in that case we should never
-            // get a digest mismatch).
-            try
-            {
-                resolver.compareResponses();
-            }
-            catch (DigestMismatchException e)
-            {
-                assert resolver instanceof DigestResolver;
-
-                if (traceState != null)
-                    traceState.trace("Digest mismatch: {}", e.toString());
-                if (logger.isDebugEnabled())
-                    logger.debug("Digest mismatch:", e);
-
-                ReadRepairMetrics.repairedBackground.mark();
-
-                final DataResolver repairResolver = new DataResolver(keyspace, command, consistencyLevel, endpoints.size(), queryStartNanoTime);
-                AsyncRepairCallback repairHandler = new AsyncRepairCallback(repairResolver, endpoints.size());
-
-                for (InetAddress endpoint : endpoints)
-                    MessagingService.instance().sendRR(command.createMessage(), endpoint, repairHandler);
-            }
-        }
     }
 
     @Override

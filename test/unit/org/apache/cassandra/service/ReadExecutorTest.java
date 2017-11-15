@@ -81,7 +81,7 @@ public class ReadExecutorTest
         executor.maybeTryAdditionalReplicas();
         try
         {
-            executor.get();
+            executor.awaitResponses();
             fail();
         }
         catch (ReadTimeoutException e)
@@ -96,7 +96,7 @@ public class ReadExecutorTest
         executor.maybeTryAdditionalReplicas();
         try
         {
-            executor.get();
+            executor.awaitResponses();
             fail();
         }
         catch (ReadTimeoutException e)
@@ -134,7 +134,7 @@ public class ReadExecutorTest
 
         try
         {
-            executor.get();
+            executor.awaitResponses();
             fail();
         }
         catch (ReadFailureException e)
@@ -163,7 +163,7 @@ public class ReadExecutorTest
         executor.maybeTryAdditionalReplicas();
         try
         {
-            executor.get();
+            executor.awaitResponses();
             fail();
         }
         catch (ReadTimeoutException e)
