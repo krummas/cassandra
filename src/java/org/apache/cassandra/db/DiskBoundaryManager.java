@@ -55,7 +55,9 @@ public class DiskBoundaryManager
                 if (isOutOfDate(diskBoundaries))
                 {
                     logger.debug("Refreshing disk boundary cache for {}.{}", cfs.keyspace.getName(), cfs.getTableName());
+                    DiskBoundaries oldBoundaries = diskBoundaries;
                     db = diskBoundaries = getDiskBoundaryValue(cfs);
+                    logger.debug("Updating boundaries from {} to {} for {}.{}", oldBoundaries, diskBoundaries, cfs.keyspace.getName(), cfs.getTableName());
                 }
             }
         }
