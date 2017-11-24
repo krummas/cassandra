@@ -61,14 +61,9 @@ public class Mutation implements IMutation
 
     private final boolean cdcEnabled;
 
-    public Mutation(String keyspaceName, DecoratedKey key)
-    {
-        this(keyspaceName, key, ImmutableMap.of(), System.currentTimeMillis(), false);
-    }
-
     public Mutation(PartitionUpdate update)
     {
-        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), System.currentTimeMillis(), false);
+        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), System.currentTimeMillis(), update.metadata().params.cdc);
     }
 
     private Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long createdAt, boolean cdcEnabled)
@@ -78,11 +73,6 @@ public class Mutation implements IMutation
         this.modifications = modifications;
         this.cdcEnabled = cdcEnabled;
         this.createdAt = createdAt;
-    }
-
-    public Mutation copy()
-    {
-        return new Mutation(keyspaceName, key, modifications, createdAt, cdcEnabled);
     }
 
     public Mutation without(Set<TableId> tableIds)

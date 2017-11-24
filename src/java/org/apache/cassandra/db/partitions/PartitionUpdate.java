@@ -772,9 +772,9 @@ public class PartitionUpdate extends AbstractBTreePartition
                 // this assert is expensive, and possibly of limited value; we should consider removing it
                 // or introducing a new class of assertions for test purposes
                 assert columns().statics.containsAll(row.columns()) : columns().statics + " is not superset of " + row.columns();
-                staticRow = this.staticRow.isEmpty()
+                staticRow = staticRow.isEmpty()
                             ? row
-                            : Rows.merge(this.staticRow, row, createdAtInSec);
+                            : Rows.merge(staticRow, row, createdAtInSec);
             }
             else
             {
@@ -807,7 +807,7 @@ public class PartitionUpdate extends AbstractBTreePartition
 
         public PartitionUpdate build()
         {
-            // assert that we are not calling build() several times - mostly to give a better error message than the NPE from rowBuilder being null
+            // assert that we are not calling build() several times
             assert !isBuilt : "A PartitionUpdate.Builder should only get built once";
             Object[] add = rowBuilder.build();
             Object[] merged = BTree.<Row>merge(tree, add, metadata.comparator,
