@@ -120,18 +120,6 @@ public class RowUpdateBuilder
         SimpleBuilders.RowBuilder b = new SimpleBuilders.RowBuilder(updateBuilder.metadata(), clusteringValues);
         b.timestamp(timestamp).delete(localDeletionTime);
         updateBuilder.add(b.build());
-//        assert clusteringValues.length == updateBuilder.metadata().comparator.size() || (clusteringValues.length == 0 && !updateBuilder.columns().statics.isEmpty());
-//
-//        boolean isStatic = clusteringValues.length != updateBuilder.metadata().comparator.size();
-//        Row.Builder builder = BTreeRow.sortedBuilder();
-//
-//        if (isStatic)
-//            builder.newRow(Clustering.STATIC_CLUSTERING);
-//        else
-//            builder.newRow(clusteringValues.length == 0 ? Clustering.EMPTY : updateBuilder.metadata().comparator.make(clusteringValues));
-//        builder.addRowDeletion(Row.Deletion.regular(new DeletionTime(timestamp, localDeletionTime)));
-//
-//        updateBuilder.add(builder.build());
     }
 
     public static Mutation deleteRow(TableMetadata metadata, long timestamp, Object key, Object... clusteringValues)
@@ -143,8 +131,6 @@ public class RowUpdateBuilder
     {
         PartitionUpdate.Builder update = new PartitionUpdate.Builder(metadata, makeKey(metadata, key), metadata.regularAndStaticColumns(), 0);
         deleteRow(update, timestamp, localDeletionTime, clusteringValues);
-        // note that the created mutation may get further update later on, so we don't use the ctor that create a singletonMap
-        // underneath (this class if for convenience, not performance)
         return new Mutation.PartitionUpdateCollector(update.metadata().keyspace, update.partitionKey()).add(update.build()).build();
     }
 

@@ -688,9 +688,11 @@ public class PartitionUpdate extends AbstractBTreePartition
         private final DecoratedKey key;
         private final MutableDeletionInfo deletionInfo;
         private final boolean canHaveShadowedData;
-        private Holder holder;
-        private BTree.Builder<Row> rowBuilder;
+        private Object[] tree = BTree.empty();
+        private final BTree.Builder<Row> rowBuilder;
         private final int createdAtInSec = FBUtilities.nowInSeconds();
+        private Row staticRow = Rows.EMPTY_STATIC_ROW;
+        private final RegularAndStaticColumns columns;
         private boolean isBuilt = false;
 
         public Builder(TableMetadata metadata,
@@ -699,27 +701,36 @@ public class PartitionUpdate extends AbstractBTreePartition
                        int initialRowCapacity,
                        boolean canHaveShadowedData)
         {
-            this.metadata = metadata;
-            this.key = key;
-            rowBuilder = rowBuilder(initialRowCapacity);
-            this.canHaveShadowedData = canHaveShadowedData;
-            deletionInfo =  MutableDeletionInfo.live();
-            this.holder = new Holder(columns, BTree.empty(), deletionInfo, Rows.EMPTY_STATIC_ROW, EncodingStats.NO_STATS);
+            this(metadata, key, columns, initialRowCapacity, canHaveShadowedData, Rows.EMPTY_STATIC_ROW, MutableDeletionInfo.live(), BTree.empty());
         }
 
-        public Builder(TableMetadata metadata,
+        private Builder(TableMetadata metadata,
                        DecoratedKey key,
                        RegularAndStaticColumns columns,
                        int initialRowCapacity,
                        boolean canHaveShadowedData,
                        Holder holder)
         {
+            this(metadata, key, columns, initialRowCapacity, canHaveShadowedData, holder.staticRow, holder.deletionInfo, holder.tree);
+        }
+
+        private Builder(TableMetadata metadata,
+                        DecoratedKey key,
+                        RegularAndStaticColumns columns,
+                        int initialRowCapacity,
+                        boolean canHaveShadowedData,
+                        Row staticRow,
+                        DeletionInfo deletionInfo,
+                        Object[] tree)
+        {
             this.metadata = metadata;
             this.key = key;
-            rowBuilder = rowBuilder(initialRowCapacity);
+            this.columns = columns;
+            this.rowBuilder = rowBuilder(initialRowCapacity);
             this.canHaveShadowedData = canHaveShadowedData;
-            deletionInfo = holder.deletionInfo.mutableCopy();
-            this.holder = new Holder(columns, holder.tree, deletionInfo, holder.staticRow, holder.stats);
+            this.deletionInfo = deletionInfo.mutableCopy();
+            this.staticRow = staticRow;
+            this.tree = tree;
         }
 
         public Builder(TableMetadata metadata, DecoratedKey key, RegularAndStaticColumns columnDefinitions, int size)
@@ -761,10 +772,9 @@ public class PartitionUpdate extends AbstractBTreePartition
                 // this assert is expensive, and possibly of limited value; we should consider removing it
                 // or introducing a new class of assertions for test purposes
                 assert columns().statics.containsAll(row.columns()) : columns().statics + " is not superset of " + row.columns();
-                Row staticRow = holder.staticRow.isEmpty()
-                                ? row
-                                : Rows.merge(holder.staticRow, row, createdAtInSec);
-                holder = new Holder(holder.columns, holder.tree, holder.deletionInfo, staticRow, holder.stats);
+                staticRow = this.staticRow.isEmpty()
+                            ? row
+                            : Rows.merge(this.staticRow, row, createdAtInSec);
             }
             else
             {
@@ -800,20 +810,18 @@ public class PartitionUpdate extends AbstractBTreePartition
             // assert that we are not calling build() several times - mostly to give a better error message than the NPE from rowBuilder being null
             assert !isBuilt : "A PartitionUpdate.Builder should only get built once";
             Object[] add = rowBuilder.build();
-            Object[] merged = BTree.<Row>merge(holder.tree, add, metadata.comparator,
+            Object[] merged = BTree.<Row>merge(tree, add, metadata.comparator,
                                                UpdateFunction.Simple.of((a, b) -> Rows.merge(a, b, createdAtInSec)));
 
-            assert deletionInfo == holder.deletionInfo;
-            EncodingStats newStats = EncodingStats.Collector.collect(holder.staticRow, BTree.iterator(merged), deletionInfo);
+            EncodingStats newStats = EncodingStats.Collector.collect(staticRow, BTree.iterator(merged), deletionInfo);
 
-            rowBuilder = null;
             isBuilt = true;
             return new PartitionUpdate(metadata,
                                        partitionKey(),
-                                       new Holder(holder.columns,
+                                       new Holder(columns,
                                                   merged,
-                                                  holder.deletionInfo,
-                                                  holder.staticRow,
+                                                  deletionInfo,
+                                                  staticRow,
                                                   newStats),
                                        deletionInfo,
                                        canHaveShadowedData);
@@ -821,7 +829,7 @@ public class PartitionUpdate extends AbstractBTreePartition
 
         public RegularAndStaticColumns columns()
         {
-            return holder.columns;
+            return columns;
         }
 
         public DeletionTime partitionLevelDeletion()
@@ -852,10 +860,8 @@ public class PartitionUpdate extends AbstractBTreePartition
         public Builder updateAllTimestamp(long newTimestamp)
         {
             deletionInfo.updateAllTimestamp(newTimestamp - 1);
-            Object[] tree = BTree.<Row>transformAndFilter(holder.tree, (x) -> x.updateAllTimestamp(newTimestamp));
-            Row staticRow = holder.staticRow.updateAllTimestamp(newTimestamp);
-            EncodingStats newStats = EncodingStats.Collector.collect(staticRow, BTree.iterator(tree), deletionInfo);
-            this.holder = new Holder(holder.columns, tree, deletionInfo, staticRow, newStats);
+            tree = BTree.<Row>transformAndFilter(tree, (x) -> x.updateAllTimestamp(newTimestamp));
+            staticRow = this.staticRow.updateAllTimestamp(newTimestamp);
             return this;
         }
     }
