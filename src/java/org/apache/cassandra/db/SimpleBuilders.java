@@ -420,13 +420,6 @@ public abstract class SimpleBuilders
             return this;
         }
 
-        public Row.SimpleBuilder delete(int nowInSec)
-        {
-            assert !initiated : "If called, delete() should be called before any other column value addition";
-            builder.addRowDeletion(Row.Deletion.regular(new DeletionTime(timestamp, nowInSec)));
-            return this;
-        }
-
         public Row.SimpleBuilder delete(String columnName)
         {
             return add(columnName, null);

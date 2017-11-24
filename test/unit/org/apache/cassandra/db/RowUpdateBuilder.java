@@ -118,7 +118,7 @@ public class RowUpdateBuilder
     private static void deleteRow(PartitionUpdate.Builder updateBuilder, long timestamp, int localDeletionTime, Object... clusteringValues)
     {
         SimpleBuilders.RowBuilder b = new SimpleBuilders.RowBuilder(updateBuilder.metadata(), clusteringValues);
-        b.timestamp(timestamp).delete(localDeletionTime);
+        b.nowInSec(localDeletionTime).timestamp(timestamp).delete();
         updateBuilder.add(b.build());
     }
 
