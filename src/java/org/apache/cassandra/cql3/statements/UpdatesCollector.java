@@ -34,6 +34,8 @@ public interface UpdatesCollector
 
     default void validateIndexedColumns(Collection<? extends IMutation> mutations)
     {
-        mutations.forEach(mutation -> mutation.getPartitionUpdates().forEach(update -> Keyspace.openAndGetStore(update.metadata()).indexManager.validate(update)));
+        for (IMutation m : mutations)
+            for (PartitionUpdate pu : m.getPartitionUpdates())
+                Keyspace.openAndGetStore(pu.metadata()).indexManager.validate(pu);
     }
 }
