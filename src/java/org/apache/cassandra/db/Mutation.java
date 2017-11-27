@@ -449,10 +449,12 @@ public class Mutation implements IMutation
      */
     public static class PartitionUpdateCollector
     {
-        private final Map<TableId, PartitionUpdate> modifications = new HashMap<>();
+        private final ImmutableMap.Builder<TableId, PartitionUpdate> modifications = new ImmutableMap.Builder<>();
         private final String keyspaceName;
         private final DecoratedKey key;
         private final long createdAt = System.currentTimeMillis();
+        private boolean empty = true;
+        private boolean cdc = false;
 
         public PartitionUpdateCollector(String keyspaceName, DecoratedKey key)
         {
@@ -464,10 +466,10 @@ public class Mutation implements IMutation
         {
             assert partitionUpdate != null;
             assert partitionUpdate.partitionKey().getPartitioner() == key.getPartitioner();
-            PartitionUpdate prev = modifications.put(partitionUpdate.metadata().id, partitionUpdate);
-            if (prev != null)
-                // developer error
-                throw new IllegalArgumentException("Table " + partitionUpdate.metadata().name + " already has modifications in this mutation: " + prev);
+            // note that ImmutableMap.Builder only allows put:ing the same key once, it will fail during build() below otherwise
+            modifications.put(partitionUpdate.metadata().id, partitionUpdate);
+            cdc |= partitionUpdate.metadata().params.cdc;
+            empty = false;
             return this;
         }
 
@@ -483,19 +485,12 @@ public class Mutation implements IMutation
 
         public boolean isEmpty()
         {
-            return modifications.isEmpty();
+            return empty;
         }
 
         public Mutation build()
         {
-            ImmutableMap.Builder<TableId, PartitionUpdate> updates = new ImmutableMap.Builder<>();
-            boolean cdcEnabled = false;
-            for (Map.Entry<TableId, PartitionUpdate> entry : modifications.entrySet())
-            {
-                updates.put(entry);
-                cdcEnabled |= entry.getValue().metadata().params.cdc;
-            }
-            return new Mutation(keyspaceName, key, updates.build(), createdAt, cdcEnabled);
+            return new Mutation(keyspaceName, key, modifications.build(), createdAt, cdc);
         }
     }
 }
