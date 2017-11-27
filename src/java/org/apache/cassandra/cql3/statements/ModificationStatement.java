@@ -643,11 +643,9 @@ public abstract class ModificationStatement implements CQLStatement
      */
     private Collection<? extends IMutation> getMutations(QueryOptions options, boolean local, long now, long queryStartNanoTime)
     {
-        UpdatesCollector collector = new UpdatesCollector(Collections.singletonMap(metadata.id, updatedColumns), 1);
+        UpdatesCollector collector = new SingleTableUpdatesCollector(metadata, updatedColumns, 1);
         addUpdates(collector, options, local, now, queryStartNanoTime);
-        Collection<IMutation> mutations = collector.toMutations();
-        UpdatesCollector.validateIndexedColumns(mutations);
-        return mutations;
+        return collector.toMutations();
     }
 
     final void addUpdates(UpdatesCollector collector,
