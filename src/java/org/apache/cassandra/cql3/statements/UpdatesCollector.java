@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableMap;
+
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.*;
@@ -86,8 +88,8 @@ final class UpdatesCollector
         IMutationBuilder mutationBuilder = keyspaceMap(ksName).get(dk.getKey());
         if (mutationBuilder == null)
         {
-            Mutation.Builder builder = new Mutation.Builder(ksName, dk);
-            mutationBuilder = metadata.isCounter() ? new CounterMutation.Builder(builder, consistency) : builder;
+            MutationBuilder builder = new MutationBuilder(ksName, dk);
+            mutationBuilder = metadata.isCounter() ? new CounterMutationBuilder(builder, consistency) : builder;
             keyspaceMap(ksName).put(dk.getKey(), mutationBuilder);
         }
         return mutationBuilder;
@@ -120,5 +122,113 @@ final class UpdatesCollector
     public static void validateIndexedColumns(Collection<? extends IMutation> mutations)
     {
         mutations.forEach(mutation -> mutation.getPartitionUpdates().forEach(update -> Keyspace.openAndGetStore(update.metadata()).indexManager.validate(update)));
+    }
+
+    private interface IMutationBuilder
+    {
+        /**
+         * Add a new PartitionUpdate builder to this mutation builder
+         * @param builder the builder to add
+         * @return this
+         */
+        IMutationBuilder add(PartitionUpdate.Builder builder);
+
+        /**
+         * Build the immutable mutation
+         * @return
+         */
+        IMutation build();
+
+        /**
+         * Get the builder for the given cfId
+         * @param cfId
+         * @return
+         */
+        PartitionUpdate.Builder get(TableId tableId);
+    }
+
+    private static class MutationBuilder implements IMutationBuilder
+    {
+        private final HashMap<TableId, PartitionUpdate.Builder> modifications = new HashMap<>();
+        private final DecoratedKey key;
+        private final String keyspaceName;
+        private final long createdAt = System.currentTimeMillis();
+
+        public MutationBuilder(String keyspaceName, DecoratedKey key)
+        {
+            this.keyspaceName = keyspaceName;
+            this.key = key;
+        }
+
+        public MutationBuilder add(PartitionUpdate.Builder updateBuilder)
+        {
+            assert updateBuilder != null;
+            assert updateBuilder.partitionKey().getPartitioner() == key.getPartitioner();
+            PartitionUpdate.Builder prev = modifications.put(updateBuilder.metadata().id, updateBuilder);
+            if (prev != null)
+                // developer error
+                throw new IllegalArgumentException("Table " + updateBuilder.metadata().name + " already has modifications in this mutation: " + prev);
+            return this;
+        }
+
+        public Mutation build()
+        {
+            ImmutableMap.Builder<TableId, PartitionUpdate> updates = new ImmutableMap.Builder<>();
+            boolean cdcEnabled = false;
+            for (Map.Entry<TableId, PartitionUpdate.Builder> updateEntry : modifications.entrySet())
+            {
+                PartitionUpdate update = updateEntry.getValue().build();
+                updates.put(updateEntry.getKey(), update);
+                cdcEnabled |= update.metadata().params.cdc;
+            }
+            return new Mutation(keyspaceName, key, updates.build(), createdAt, cdcEnabled);
+        }
+
+        public PartitionUpdate.Builder get(TableId tableId)
+        {
+            return modifications.get(tableId);
+        }
+
+        public DecoratedKey key()
+        {
+            return key;
+        }
+
+        public boolean isEmpty()
+        {
+            return modifications.isEmpty();
+        }
+
+        public String getKeyspaceName()
+        {
+            return keyspaceName;
+        }
+    }
+
+    public static class CounterMutationBuilder implements IMutationBuilder
+    {
+        private final MutationBuilder mutationBuilder;
+        private final ConsistencyLevel cl;
+
+        public CounterMutationBuilder(MutationBuilder mutationBuilder, ConsistencyLevel cl)
+        {
+            this.mutationBuilder = mutationBuilder;
+            this.cl = cl;
+        }
+
+        public IMutationBuilder add(PartitionUpdate.Builder builder)
+        {
+            return mutationBuilder.add(builder);
+        }
+
+        public IMutation build()
+        {
+            return new CounterMutation(mutationBuilder.build(), cl);
+        }
+
+        public PartitionUpdate.Builder get(TableId id)
+        {
+            return mutationBuilder.get(id);
+        }
     }
 }

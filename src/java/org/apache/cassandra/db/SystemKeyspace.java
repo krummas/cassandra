@@ -1136,8 +1136,6 @@ public final class SystemKeyspace
     {
         long timestamp = FBUtilities.timestampMicros();
         PartitionUpdate.Builder update = new PartitionUpdate.Builder(SizeEstimates, UTF8Type.instance.decompose(keyspace), SizeEstimates.regularAndStaticColumns(), estimates.size());
-        Mutation.Builder mutationBuilder = new Mutation.Builder(SizeEstimates.keyspace, update.partitionKey()).add(update);
-
         // delete all previous values with a single range tombstone.
         int nowInSec = FBUtilities.nowInSeconds();
         update.add(new RangeTombstone(Slice.make(SizeEstimates.comparator, table), new DeletionTime(timestamp - 1, nowInSec)));
@@ -1153,8 +1151,7 @@ public final class SystemKeyspace
                            .add("mean_partition_size", values.right)
                            .build());
         }
-
-        mutationBuilder.build().apply();
+        new Mutation(update.build()).apply();
     }
 
     /**

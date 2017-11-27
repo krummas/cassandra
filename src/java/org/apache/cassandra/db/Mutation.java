@@ -55,9 +55,9 @@ public class Mutation implements IMutation
     private final ImmutableMap<TableId, PartitionUpdate> modifications;
 
     // Time at which this mutation or the builder that built it was instantiated
-    public final long createdAt;
+    final long createdAt;
     // keep track of when mutation has started waiting for a MV partition lock
-    public final AtomicLong viewLockAcquireStart = new AtomicLong(0);
+    final AtomicLong viewLockAcquireStart = new AtomicLong(0);
 
     private final boolean cdcEnabled;
 
@@ -66,7 +66,7 @@ public class Mutation implements IMutation
         this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), System.currentTimeMillis(), update.metadata().params.cdc);
     }
 
-    private Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long createdAt, boolean cdcEnabled)
+    public Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long createdAt, boolean cdcEnabled)
     {
         this.keyspaceName = keyspaceName;
         this.key = key;
@@ -386,66 +386,8 @@ public class Mutation implements IMutation
         }
     }
 
-    public static class Builder implements IMutationBuilder
-    {
-        private final HashMap<TableId, PartitionUpdate.Builder> modifications = new HashMap<>();
-        private final DecoratedKey key;
-        private final String keyspaceName;
-        private final long createdAt = System.currentTimeMillis();
-
-        public Builder(String keyspaceName, DecoratedKey key)
-        {
-            this.keyspaceName = keyspaceName;
-            this.key = key;
-        }
-
-        public Builder add(PartitionUpdate.Builder updateBuilder)
-        {
-            assert updateBuilder != null;
-            assert updateBuilder.partitionKey().getPartitioner() == key.getPartitioner();
-            PartitionUpdate.Builder prev = modifications.put(updateBuilder.metadata().id, updateBuilder);
-            if (prev != null)
-                // developer error
-                throw new IllegalArgumentException("Table " + updateBuilder.metadata().name + " already has modifications in this mutation: " + prev);
-            return this;
-        }
-
-        public Mutation build()
-        {
-            ImmutableMap.Builder<TableId, PartitionUpdate> updates = new ImmutableMap.Builder<>();
-            boolean cdcEnabled = false;
-            for (Map.Entry<TableId, PartitionUpdate.Builder> updateEntry : modifications.entrySet())
-            {
-                PartitionUpdate update = updateEntry.getValue().build();
-                updates.put(updateEntry.getKey(), update);
-                cdcEnabled |= update.metadata().params.cdc;
-            }
-            return new Mutation(keyspaceName, key, updates.build(), createdAt, cdcEnabled);
-        }
-
-        public PartitionUpdate.Builder get(TableId tableId)
-        {
-            return modifications.get(tableId);
-        }
-
-        public DecoratedKey key()
-        {
-            return key;
-        }
-
-        public boolean isEmpty()
-        {
-            return modifications.isEmpty();
-        }
-
-        public String getKeyspaceName()
-        {
-            return keyspaceName;
-        }
-    }
-
     /**
-     * Collects finalized partition updates - no builders here.
+     * Collects finalized partition updates
      */
     public static class PartitionUpdateCollector
     {

@@ -346,31 +346,4 @@ public class CounterMutation implements IMutation
                  + TypeSizes.sizeof(cm.consistency.name());
         }
     }
-
-    public static class Builder implements IMutationBuilder
-    {
-        private final Mutation.Builder mutationBuilder;
-        private final ConsistencyLevel cl;
-
-        public Builder(Mutation.Builder mutationBuilder, ConsistencyLevel cl)
-        {
-            this.mutationBuilder = mutationBuilder;
-            this.cl = cl;
-        }
-
-        public IMutationBuilder add(PartitionUpdate.Builder builder)
-        {
-            return mutationBuilder.add(builder);
-        }
-
-        public IMutation build()
-        {
-            return new CounterMutation(mutationBuilder.build(), cl);
-        }
-
-        public PartitionUpdate.Builder get(TableId id)
-        {
-            return mutationBuilder.get(id);
-        }
-    }
 }
