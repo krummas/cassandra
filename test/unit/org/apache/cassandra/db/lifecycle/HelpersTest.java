@@ -22,7 +22,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -232,5 +234,23 @@ public class HelpersTest
 
         txnLogs.finish();
         txnLogs2.finish();
+    }
+
+    @Test
+    public void testObsoletionPerformance()
+    {
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        LogTransaction txnLogs = new LogTransaction(OperationType.UNKNOWN);
+        List<SSTableReader> readers = new ArrayList<>();
+
+        for (int i = 0; i < 10000; i++)
+        {
+            readers.add(MockSchema.sstable(i + 1, cfs));
+        }
+        long start = System.currentTimeMillis();
+
+        Helpers.prepareForObsoletion(readers.subList(0, 500), txnLogs, new ArrayList<>(),null );
+        txnLogs.finish();
+        System.out.println(System.currentTimeMillis() - start);
     }
 }
