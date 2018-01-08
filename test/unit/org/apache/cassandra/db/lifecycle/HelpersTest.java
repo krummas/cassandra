@@ -47,6 +47,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class HelpersTest
 {
@@ -164,18 +165,9 @@ public class HelpersTest
         assertNotNull(accumulate);
     }
 
+
     @Test
     public void testMarkObsolete()
-    {
-        testMarkObsoleteHelper(false);
-    }
-    @Test
-    public void testBulkMarkObsolete()
-    {
-        testMarkObsoleteHelper(true);
-    }
-
-    public void testMarkObsoleteHelper(boolean bulk)
     {
         ColumnFamilyStore cfs = MockSchema.newCFS();
         LogTransaction txnLogs = new LogTransaction(OperationType.UNKNOWN);
@@ -183,7 +175,7 @@ public class HelpersTest
         Iterable<SSTableReader> readersToKeep = Lists.newArrayList(MockSchema.sstable(3, cfs), MockSchema.sstable(4, cfs));
 
         List<LogTransaction.Obsoletion> obsoletions = new ArrayList<>();
-        Assert.assertNull(bulk ? Helpers.prepareForBulkObsoletion(readers, txnLogs, obsoletions, null) : Helpers.prepareForObsoletion(readers, txnLogs, obsoletions, null));
+        Helpers.prepareForObsoletion(readers, txnLogs, obsoletions, null);
         assertNotNull(obsoletions);
         assertEquals(2, obsoletions.size());
 
@@ -202,41 +194,6 @@ public class HelpersTest
     }
 
     @Test
-    public void compareBulkAndNormalObsolete() throws IOException
-    {
-        ColumnFamilyStore cfs = MockSchema.newCFS();
-        LogTransaction txnLogs = new LogTransaction(OperationType.UNKNOWN);
-        LogTransaction txnLogs2 = new LogTransaction(OperationType.UNKNOWN);
-
-        Collection<SSTableReader> readers = Lists.newArrayList(MockSchema.sstable(1, cfs), MockSchema.sstable(2, cfs));
-        // add a few readers that should not be removed:
-        Lists.newArrayList(MockSchema.sstable(3, cfs), MockSchema.sstable(4, cfs));
-
-        List<LogTransaction.Obsoletion> normalObsoletions = new ArrayList<>();
-        List<LogTransaction.Obsoletion> bulkObsoletions = new ArrayList<>();
-
-        Assert.assertNull(Helpers.prepareForBulkObsoletion(readers, txnLogs, normalObsoletions, null));
-        Assert.assertNull(Helpers.prepareForObsoletion(readers, txnLogs2, bulkObsoletions, null));
-
-        assertEquals(Sets.newHashSet(readers), normalObsoletions.stream().map(obs -> obs.reader).collect(Collectors.toSet()));
-        assertEquals(Sets.newHashSet(readers), bulkObsoletions.stream().map(obs -> obs.reader).collect(Collectors.toSet()));
-
-        Set<String> normalLogRecords = new HashSet<>();
-        Set<String> bulkLogRecords = new HashSet<>();
-
-        for (File f : txnLogs.logFiles())
-            Files.lines(f.toPath()).forEach(bulkLogRecords::add);
-        for (File f : txnLogs2.logFiles())
-            Files.lines(f.toPath()).forEach(normalLogRecords::add);
-
-        Assert.assertEquals(readers.size(), normalLogRecords.size());
-        Assert.assertEquals(bulkLogRecords, normalLogRecords);
-
-        txnLogs.finish();
-        txnLogs2.finish();
-    }
-
-    @Test
     public void testObsoletionPerformance()
     {
         ColumnFamilyStore cfs = MockSchema.newCFS();
@@ -251,6 +208,7 @@ public class HelpersTest
 
         Helpers.prepareForObsoletion(readers.subList(0, 500), txnLogs, new ArrayList<>(),null );
         txnLogs.finish();
-        System.out.println(System.currentTimeMillis() - start);
+        long time = System.currentTimeMillis() - start;
+        assertTrue(time < 20000);
     }
 }
