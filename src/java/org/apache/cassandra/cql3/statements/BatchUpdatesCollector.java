@@ -52,7 +52,7 @@ final class BatchUpdatesCollector implements UpdatesCollector
      */
     private final Map<String, Map<ByteBuffer, IMutationBuilder>> mutationBuilders = new HashMap<>();
 
-    public BatchUpdatesCollector(Map<TableId, RegularAndStaticColumns> updatedColumns, int updatedRows)
+    BatchUpdatesCollector(Map<TableId, RegularAndStaticColumns> updatedColumns, int updatedRows)
     {
         super();
         this.updatedColumns = updatedColumns;
@@ -137,14 +137,11 @@ final class BatchUpdatesCollector implements UpdatesCollector
 
         /**
          * Build the immutable mutation
-         * @return
          */
         IMutation build();
 
         /**
-         * Get the builder for the given cfId
-         * @param cfId
-         * @return
+         * Get the builder for the given tableId
          */
         PartitionUpdate.Builder get(TableId tableId);
     }
@@ -156,7 +153,7 @@ final class BatchUpdatesCollector implements UpdatesCollector
         private final String keyspaceName;
         private final long createdAt = System.currentTimeMillis();
 
-        public MutationBuilder(String keyspaceName, DecoratedKey key)
+        private MutationBuilder(String keyspaceName, DecoratedKey key)
         {
             this.keyspaceName = keyspaceName;
             this.key = key;
@@ -205,12 +202,12 @@ final class BatchUpdatesCollector implements UpdatesCollector
         }
     }
 
-    public static class CounterMutationBuilder implements IMutationBuilder
+    private static class CounterMutationBuilder implements IMutationBuilder
     {
         private final MutationBuilder mutationBuilder;
         private final ConsistencyLevel cl;
 
-        public CounterMutationBuilder(MutationBuilder mutationBuilder, ConsistencyLevel cl)
+        private CounterMutationBuilder(MutationBuilder mutationBuilder, ConsistencyLevel cl)
         {
             this.mutationBuilder = mutationBuilder;
             this.cl = cl;

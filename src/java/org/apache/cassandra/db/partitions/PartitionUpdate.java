@@ -20,6 +20,7 @@ package org.apache.cassandra.db.partitions;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -868,6 +869,21 @@ public class PartitionUpdate extends AbstractBTreePartition
             tree = BTree.<Row>transformAndFilter(tree, (x) -> x.updateAllTimestamp(newTimestamp));
             staticRow = this.staticRow.updateAllTimestamp(newTimestamp);
             return this;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "Builder{" +
+                   "metadata=" + metadata +
+                   ", key=" + key +
+                   ", deletionInfo=" + deletionInfo +
+                   ", canHaveShadowedData=" + canHaveShadowedData +
+                   ", createdAtInSec=" + createdAtInSec +
+                   ", staticRow=" + staticRow +
+                   ", columns=" + columns +
+                   ", isBuilt=" + isBuilt +
+                   '}';
         }
     }
 }

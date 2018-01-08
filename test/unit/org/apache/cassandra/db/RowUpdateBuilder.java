@@ -111,8 +111,7 @@ public class RowUpdateBuilder
     {
         for (RangeTombstone rt : rts)
             updateBuilder.addRangeTombstone(rt);
-        PartitionUpdate update = updateBuilder.build();
-        return update;
+        return updateBuilder.build();
     }
 
     private static void deleteRow(PartitionUpdate.Builder updateBuilder, long timestamp, int localDeletionTime, Object... clusteringValues)
