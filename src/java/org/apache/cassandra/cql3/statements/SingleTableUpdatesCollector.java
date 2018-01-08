@@ -97,9 +97,10 @@ final class SingleTableUpdatesCollector implements UpdatesCollector
                 mutation = new CounterMutation(new Mutation(builder.build()), counterConsistencyLevel);
             else
                 mutation = new Mutation(builder.build());
+            mutation.validateIndexedColumns();
             ms.add(mutation);
         }
-        validateIndexedColumns(ms);
+
         return ms;
     }
 }

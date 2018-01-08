@@ -104,7 +104,14 @@ final class BatchUpdatesCollector implements UpdatesCollector
         //TODO: The case where all statement where on the same keyspace is pretty common, optimize for that?
         List<IMutation> ms = new ArrayList<>();
         for (Map<ByteBuffer, IMutationBuilder> ksMap : mutationBuilders.values())
-            ms.addAll(ksMap.values().stream().map(IMutationBuilder::build).collect(Collectors.toList()));
+        {
+            for (IMutationBuilder builder : ksMap.values())
+            {
+                IMutation mutation = builder.build();
+                mutation.validateIndexedColumns();
+                ms.add(mutation);
+            }
+        }
         return ms;
     }
 
@@ -169,14 +176,12 @@ final class BatchUpdatesCollector implements UpdatesCollector
         public Mutation build()
         {
             ImmutableMap.Builder<TableId, PartitionUpdate> updates = new ImmutableMap.Builder<>();
-            boolean cdcEnabled = false;
             for (Map.Entry<TableId, PartitionUpdate.Builder> updateEntry : modifications.entrySet())
             {
                 PartitionUpdate update = updateEntry.getValue().build();
                 updates.put(updateEntry.getKey(), update);
-                cdcEnabled |= update.metadata().params.cdc;
             }
-            return new Mutation(keyspaceName, key, updates.build(), createdAt, cdcEnabled);
+            return new Mutation(keyspaceName, key, updates.build(), createdAt);
         }
 
         public PartitionUpdate.Builder get(TableId tableId)

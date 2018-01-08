@@ -31,11 +31,4 @@ public interface UpdatesCollector
 {
     PartitionUpdate.Builder getPartitionUpdateBuilder(TableMetadata metadata, DecoratedKey dk, ConsistencyLevel consistency);
     Collection<IMutation> toMutations();
-
-    default void validateIndexedColumns(Collection<? extends IMutation> mutations)
-    {
-        for (IMutation m : mutations)
-            for (PartitionUpdate pu : m.getPartitionUpdates())
-                Keyspace.openAndGetStore(pu.metadata()).indexManager.validate(pu);
-    }
 }

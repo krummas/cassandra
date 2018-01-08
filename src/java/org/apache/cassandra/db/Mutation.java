@@ -63,15 +63,19 @@ public class Mutation implements IMutation
 
     public Mutation(PartitionUpdate update)
     {
-        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), System.currentTimeMillis(), update.metadata().params.cdc);
+        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), System.currentTimeMillis());
     }
 
-    public Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long createdAt, boolean cdcEnabled)
+    public Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long createdAt)
     {
         this.keyspaceName = keyspaceName;
         this.key = key;
         this.modifications = modifications;
-        this.cdcEnabled = cdcEnabled;
+
+        boolean cdc = false;
+        for (PartitionUpdate pu : modifications.values())
+            cdc |= pu.metadata().params.cdc;
+        this.cdcEnabled = cdc;
         this.createdAt = createdAt;
     }
 
@@ -80,18 +84,16 @@ public class Mutation implements IMutation
         if (tableIds.isEmpty())
             return this;
 
-        boolean cdcEnabled = false;
         ImmutableMap.Builder<TableId, PartitionUpdate> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<TableId, PartitionUpdate> update : modifications.entrySet())
         {
             if (!tableIds.contains(update.getKey()))
             {
                 builder.put(update);
-                cdcEnabled |= update.getValue().metadata().params.cdc;
             }
         }
 
-        return new Mutation(keyspaceName, key, builder.build(), createdAt, cdcEnabled);
+        return new Mutation(keyspaceName, key, builder.build(), createdAt);
     }
 
     public Mutation without(TableId tableId)
@@ -150,7 +152,6 @@ public class Mutation implements IMutation
         Set<TableId> updatedTables = new HashSet<>();
         String ks = null;
         DecoratedKey key = null;
-        boolean cdcEnabled = false;
         for (Mutation mutation : mutations)
         {
             updatedTables.addAll(mutation.modifications.keySet());
@@ -160,7 +161,6 @@ public class Mutation implements IMutation
                 throw new IllegalArgumentException();
             ks = mutation.keyspaceName;
             key = mutation.key;
-            cdcEnabled |= mutation.cdcEnabled;
         }
 
         List<PartitionUpdate> updates = new ArrayList<>(mutations.size());
@@ -180,7 +180,7 @@ public class Mutation implements IMutation
             modifications.put(table, updates.size() == 1 ? updates.get(0) : PartitionUpdate.merge(updates));
             updates.clear();
         }
-        return new Mutation(ks, key, modifications.build(), System.currentTimeMillis(), cdcEnabled);
+        return new Mutation(ks, key, modifications.build(), System.currentTimeMillis());
     }
 
     public CompletableFuture<?> applyFuture()
@@ -361,14 +361,12 @@ public class Mutation implements IMutation
             DecoratedKey dk = update.partitionKey();
 
             modifications.put(update.metadata().id, update);
-            boolean cdcEnabled = false;
             for (int i = 1; i < size; ++i)
             {
                 update = PartitionUpdate.serializer.deserialize(in, version, flag);
                 modifications.put(update.metadata().id, update);
-                cdcEnabled |= update.metadata().params.cdc;
             }
-            return new Mutation(update.metadata().keyspace, dk, modifications.build(), System.currentTimeMillis(), cdcEnabled);
+            return new Mutation(update.metadata().keyspace, dk, modifications.build(), System.currentTimeMillis());
         }
 
         public Mutation deserialize(DataInputPlus in, int version) throws IOException
@@ -396,7 +394,6 @@ public class Mutation implements IMutation
         private final DecoratedKey key;
         private final long createdAt = System.currentTimeMillis();
         private boolean empty = true;
-        private boolean cdc = false;
 
         public PartitionUpdateCollector(String keyspaceName, DecoratedKey key)
         {
@@ -410,7 +407,6 @@ public class Mutation implements IMutation
             assert partitionUpdate.partitionKey().getPartitioner() == key.getPartitioner();
             // note that ImmutableMap.Builder only allows put:ing the same key once, it will fail during build() below otherwise
             modifications.put(partitionUpdate.metadata().id, partitionUpdate);
-            cdc |= partitionUpdate.metadata().params.cdc;
             empty = false;
             return this;
         }
@@ -432,7 +428,7 @@ public class Mutation implements IMutation
 
         public Mutation build()
         {
-            return new Mutation(keyspaceName, key, modifications.build(), createdAt, cdc);
+            return new Mutation(keyspaceName, key, modifications.build(), createdAt);
         }
     }
 }

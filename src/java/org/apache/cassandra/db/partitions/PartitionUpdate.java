@@ -424,6 +424,11 @@ public class PartitionUpdate extends AbstractBTreePartition
         return new SimpleBuilders.PartitionUpdateBuilder(metadata, partitionKeyValues);
     }
 
+    public void validateIndexedColumns()
+    {
+        Keyspace.openAndGetStore(metadata()).indexManager.validate(this);
+    }
+
     /**
      * Interface for building partition updates geared towards human.
      * <p>
