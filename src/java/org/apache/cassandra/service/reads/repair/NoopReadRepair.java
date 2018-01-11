@@ -22,6 +22,7 @@ import java.net.InetAddress;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
@@ -55,8 +56,32 @@ public class NoopReadRepair implements ReadRepair
 
     }
 
-    public void backgroundDigestRepair(DigestResolver digestResolver, TraceState traceState)
+    public void backgroundDigestRepair(TraceState traceState)
     {
 
+    }
+
+    @Override
+    public PartitionRepair startPartitionRepair()
+    {
+        return new NoopPartitionRepair();
+    }
+
+    @Override
+    public void awaitRepairs(long timeout)
+    {
+    }
+
+    private static class NoopPartitionRepair extends PartitionRepair
+    {
+        @Override
+        public void reportMutation(InetAddress endpoint, Mutation mutation)
+        {
+        }
+
+        @Override
+        public void finish()
+        {
+        }
     }
 }

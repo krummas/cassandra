@@ -431,7 +431,6 @@ public abstract class AbstractReadExecutor
         }
         else
         {
-            Tracing.trace("Digest mismatch: {}");
             readRepair.startForegroundRepair(digestResolver, handler.endpoints, getContactedReplicas(), this::setResult);
         }
     }

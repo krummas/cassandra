@@ -19,17 +19,29 @@
 package org.apache.cassandra.service.reads.repair;
 
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import javax.annotation.Nullable;
+
+import com.google.common.util.concurrent.AbstractFuture;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+
 import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
+import org.apache.cassandra.net.AsyncOneResponse;
+import org.apache.cassandra.net.MessageOut;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.DigestResolver;
 import org.apache.cassandra.service.ResponseResolver;
 import org.apache.cassandra.tracing.TraceState;
+import org.apache.cassandra.tracing.Tracing;
 
 public interface ReadRepair
 {
@@ -63,10 +75,19 @@ public interface ReadRepair
      * If {@link ReadRepair#maybeStartBackgroundRepair} was called with a {@link DigestResolver}, this will
      * be called to perform a repair if there was a digest mismatch
      */
-    public void backgroundDigestRepair(DigestResolver digestResolver, TraceState traceState);
+    public void backgroundDigestRepair(TraceState traceState);
 
     static ReadRepair create(ReadCommand command, List<InetAddress> endpoints, long queryStartNanoTime, ConsistencyLevel consistency)
     {
         return new BlockingReadRepair(command, endpoints, queryStartNanoTime, consistency);
+    }
+
+    PartitionRepair startPartitionRepair();
+    void awaitRepairs(long timeout);
+
+    public abstract class PartitionRepair extends AbstractFuture<Object>
+    {
+        public abstract void reportMutation(InetAddress endpoint, Mutation mutation);
+        public abstract void finish();
     }
 }

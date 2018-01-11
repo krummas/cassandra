@@ -47,16 +47,6 @@ import org.apache.cassandra.service.ReadCallback;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.tracing.Tracing;
 
-/**
-* We have a potential short read if the result from a given node contains the requested number of rows
-* (i.e. it has stopped returning results due to the limit), but some of them haven't
-* made it into the final post-reconciliation result due to other nodes' row, range, and/or partition tombstones.
-*
-* If that is the case, then that node may have more rows that we should fetch, as otherwise we could
-* ultimately return fewer rows than required. Also, those additional rows may contain tombstones which
-* which we also need to fetch as they may shadow rows or partitions from other replicas' results, which we would
-* otherwise return incorrectly.
-*/
 public class ShortReadPartitionsProtection extends Transformation<UnfilteredRowIterator> implements MorePartitions<UnfilteredPartitionIterator>
 {
     private final ReadCommand command;

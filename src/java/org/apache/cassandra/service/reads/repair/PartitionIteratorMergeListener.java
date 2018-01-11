@@ -39,9 +39,9 @@ public class PartitionIteratorMergeListener implements UnfilteredPartitionIterat
 
     private final InetAddress[] sources;
     private final ReadCommand command;
-    private final BlockingReadRepair readRepair;
+    private final ReadRepair readRepair;
 
-    public PartitionIteratorMergeListener(InetAddress[] sources, ReadCommand command, BlockingReadRepair readRepair)
+    public PartitionIteratorMergeListener(InetAddress[] sources, ReadCommand command, ReadRepair readRepair)
     {
         this.sources = sources;
         this.command = command;

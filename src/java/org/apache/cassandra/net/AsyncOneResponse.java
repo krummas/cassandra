@@ -31,7 +31,7 @@ public class AsyncOneResponse<T> extends AbstractFuture<T> implements IAsyncCall
 {
     private final long start = System.nanoTime();
 
-    public synchronized void response(MessageIn<T> response)
+    public void response(MessageIn<T> response)
     {
         set(response.payload);
     }
@@ -41,6 +41,7 @@ public class AsyncOneResponse<T> extends AbstractFuture<T> implements IAsyncCall
         return false;
     }
 
+    @Override
     public T get(long timeout, TimeUnit unit) throws TimeoutException
     {
         long adjustedTimeout = unit.toNanos(timeout) - (System.nanoTime() - start);

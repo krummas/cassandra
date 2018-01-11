@@ -68,9 +68,9 @@ public class RowIteratorMergeListener implements UnfilteredRowIterators.MergeLis
     // For each source, record if there is an open range to send as repair, and from where.
     private final ClusteringBound[] markerToRepair;
 
-    private final BlockingReadRepair readRepair;
+    private final ReadRepair readRepair;
 
-    public RowIteratorMergeListener(DecoratedKey partitionKey, RegularAndStaticColumns columns, boolean isReversed, InetAddress[] sources, ReadCommand command, BlockingReadRepair readRepair)
+    public RowIteratorMergeListener(DecoratedKey partitionKey, RegularAndStaticColumns columns, boolean isReversed, InetAddress[] sources, ReadCommand command, ReadRepair readRepair)
     {
         this.partitionKey = partitionKey;
         this.columns = columns;
@@ -315,7 +315,7 @@ public class RowIteratorMergeListener implements UnfilteredRowIterators.MergeLis
 
     public void close()
     {
-        BlockingReadRepair.PartitionRepair repair = null;
+        ReadRepair.PartitionRepair repair = null;
         for (int i = 0; i < repairs.length; i++)
         {
             if (repairs[i] == null)

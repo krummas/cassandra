@@ -26,6 +26,7 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.tracing.TraceState;
+import org.apache.cassandra.tracing.Tracing;
 
 public class DigestResolver extends ResponseResolver
 {
@@ -44,9 +45,6 @@ public class DigestResolver extends ResponseResolver
             dataResponse = message.payload;
     }
 
-    /**
-     * Special case of resolve() so that CL.ONE reads never throw DigestMismatchException in the foreground
-     */
     public PartitionIterator getData()
     {
         assert isDataPresent();
@@ -57,7 +55,7 @@ public class DigestResolver extends ResponseResolver
     {
         long start = System.nanoTime();
 
-        // validate digests against each other; throw immediately on mismatch.
+        // validate digests against each other; return false immediately on mismatch
         ByteBuffer digest = null;
         for (MessageIn<ReadResponse> message : responses)
         {
@@ -67,12 +65,15 @@ public class DigestResolver extends ResponseResolver
             if (digest == null)
                 digest = newDigest;
             else if (!digest.equals(newDigest))
+            {
                 // rely on the fact that only single partition queries use digests
+                Tracing.trace("Digest mismatch: {}", ((SinglePartitionReadCommand)command).partitionKey());
                 return false;
+            }
         }
 
         if (logger.isTraceEnabled())
-            logger.trace("resolve: {} ms.", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+            logger.trace("responsesMatch: {} ms.", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
         return true;
     }
@@ -81,7 +82,7 @@ public class DigestResolver extends ResponseResolver
     {
         if (!responsesMatch())
         {
-            readRepair.backgroundDigestRepair(this, traceState);
+            readRepair.backgroundDigestRepair(traceState);
         }
     }
 

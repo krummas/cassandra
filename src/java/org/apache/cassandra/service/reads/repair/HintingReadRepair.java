@@ -18,10 +18,54 @@
 
 package org.apache.cassandra.service.reads.repair;
 
+import java.net.InetAddress;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.db.ConsistencyLevel;
+import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.ReadCommand;
+import org.apache.cassandra.hints.Hint;
+import org.apache.cassandra.hints.HintsService;
+import org.apache.cassandra.service.StorageService;
+
 /**
  * Created by blakeeggleston on 11/13/17.
  */
-public class HintingReadRepair
+public class HintingReadRepair extends AbstractReadRepair
 {
-    // TODO: figure out what the creationTime/gcgs implications are
+    private static final Logger logger = LoggerFactory.getLogger(BlockingReadRepair.class);
+
+    public HintingReadRepair(ReadCommand command,
+                              List<InetAddress> endpoints,
+                              long queryStartNanoTime,
+                              ConsistencyLevel consistency)
+    {
+        super(command, endpoints, queryStartNanoTime, consistency);
+    }
+
+
+
+    public static class PartitionRepair extends ReadRepair.PartitionRepair
+    {
+        public void reportMutation(InetAddress endpoint, Mutation mutation)
+        {
+            logger.debug("Writing a hint {} for {}", mutation, endpoint);
+            // todo: actually think about gcgs etc
+            HintsService.instance.write(StorageService.instance.getHostIdForEndpoint(endpoint), Hint.create(mutation, System.currentTimeMillis()));
+        }
+
+        public void finish()
+        {}
+    }
+
+    public void awaitRepairs(long timeout)
+    {
+    }
+
+    public PartitionRepair startPartitionRepair()
+    {
+        return new PartitionRepair();
+    }
 }
