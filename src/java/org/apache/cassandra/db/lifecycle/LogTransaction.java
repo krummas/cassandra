@@ -342,9 +342,15 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
                 File datafile = new File(desc.filenameFor(Component.DATA));
 
                 if (datafile.exists())
+                {
                     delete(datafile);
+                }
                 else if (!wasNew)
-                    logger.error("SSTableTidier ran with no existing data file for an sstable that was not new");
+                {
+                    LogTransaction txn = parentRef.get();
+                    String txnFileContents = txn.txnFile.toString(true);
+                    logger.warn("SSTableTidier for {} ran with no existing data file for an sstable that was not new: {}: {}", desc, txn.type(), txnFileContents);
+                }
 
                 // let the remainder be cleaned up by delete
                 SSTable.delete(desc, SSTable.discoverComponentsFor(desc));
