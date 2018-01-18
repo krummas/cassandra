@@ -349,7 +349,7 @@ class LogTransaction extends Transactional.AbstractTransactional implements Tran
                 {
                     LogTransaction txn = parentRef.get();
                     String txnFileContents = txn.txnFile.toString(true);
-                    logger.warn("SSTableTidier for {} ran with no existing data file for an sstable that was not new: {}: {}", desc, txn.type(), txnFileContents);
+                    logger.error("SSTableTidier for {} ran with no existing data file for an sstable that was not new: {}: {}", desc, txn.type(), txnFileContents);
                 }
 
                 // let the remainder be cleaned up by delete
