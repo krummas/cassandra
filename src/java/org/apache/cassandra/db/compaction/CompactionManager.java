@@ -123,10 +123,11 @@ public class CompactionManager implements CompactionManagerMBean
 
     private final CompactionExecutor executor = new CompactionExecutor();
     private final CompactionExecutor validationExecutor = new ValidationExecutor();
+    private final CompactionExecutor upgradeExecutor = new UpgradeExecutor();
     private final static CompactionExecutor cacheCleanupExecutor = new CacheCleanupExecutor();
     private final CompactionExecutor viewBuildExecutor = new ViewBuildExecutor();
 
-    private final CompactionMetrics metrics = new CompactionMetrics(executor, validationExecutor, viewBuildExecutor);
+    private final CompactionMetrics metrics = new CompactionMetrics(executor, validationExecutor, viewBuildExecutor, upgradeExecutor);
     @VisibleForTesting
     final Multiset<ColumnFamilyStore> compactingCF = ConcurrentHashMultiset.create();
 
@@ -1855,6 +1856,14 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
+    private static class UpgradeExecutor extends CompactionExecutor
+    {
+        public UpgradeExecutor()
+        {
+            super(1, 1, "UpgradeExecutor", new SynchronousQueue<>());
+        }
+    }
+
     private static class ViewBuildExecutor extends CompactionExecutor
     {
         public ViewBuildExecutor()
@@ -2107,6 +2116,65 @@ public class CompactionManager implements CompactionManagerMBean
                 Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
             else
                 break;
+        }
+    }
+
+    public static class UpgradeRunner implements Runnable
+    {
+        private boolean isUpgrading = false;
+        private boolean done = false;
+        @Override
+        public void run()
+        {
+            if (!isUpgrading && !done)
+            {
+                logger.debug("Starting background upgrade sstables");
+                CompactionManager.instance.upgradeExecutor.submitIfRunning(() -> {
+                    boolean noOldSSTables = true;
+                    try
+                    {
+                        // note that UpgradeRunner is scheduled to run every X minutes - there will be no race here:
+                        isUpgrading = true;
+
+                        for (Keyspace ks : Keyspace.all())
+                        {
+                            for (ColumnFamilyStore cfs : ks.getColumnFamilyStores())
+                            {
+                                Set<SSTableReader> toUpgrade = cfs.getLiveSSTables().stream()
+                                                                  .filter((sstable) -> !sstable.descriptor.version.isLatestVersion())
+                                                                  .collect(Collectors.toSet());
+
+                                for (SSTableReader upgrade : toUpgrade)
+                                {
+                                    noOldSSTables = false;
+                                    try (LifecycleTransaction txn = cfs.getTracker().tryModify(upgrade,
+                                                                                               OperationType.UPGRADE_SSTABLES))
+                                    {
+                                        if (txn != null)
+                                        {
+                                            logger.debug("Upgrading sstable {}", upgrade);
+                                            AbstractCompactionTask task = cfs.getCompactionStrategyManager()
+                                                                             .getCompactionTask(txn, NO_GC, Long.MAX_VALUE);
+                                            task.setCompactionType(OperationType.UPGRADE_SSTABLES);
+                                            task.execute(CompactionManager.instance.metrics);
+                                        }
+                                        else
+                                        {
+                                            logger.debug("Skipping upgrade of {} - it is compacting", upgrade);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        logger.debug("Finished background upgrade sstables");
+                    }
+                    finally
+                    {
+                        isUpgrading = false;
+                        done = noOldSSTables;
+                    }
+                }, "Background upgrade sstables");
+            }
         }
     }
 }

@@ -47,6 +47,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.Schema;
@@ -412,7 +414,29 @@ public class CassandraDaemon
         // Native transport
         nativeTransportService = new NativeTransportService();
 
+        if (Boolean.getBoolean("cassandra.automatic_sstable_upgrade") && hasOldSSTables())
+        {
+            // Note that the only reason we schedule this is that we skip trying to upgrade
+            // compacting sstables but if that compaction is cancelled/aborted, the old sstables
+            // are still on disk. If the compaction finishes properly, the new sstable will
+            // be of the latest version
+            logger.debug("Node has old version sstables, scheduling background upgrade sstables");
+            ScheduledExecutors.optionalTasks.scheduleWithFixedDelay(new CompactionManager.UpgradeRunner(), 1, 1, TimeUnit.MINUTES);
+        }
+
         completeSetup();
+    }
+
+    private boolean hasOldSSTables()
+    {
+        for (Keyspace ks : Keyspace.all())
+        {
+            for (ColumnFamilyStore cfs : ks.getColumnFamilyStores())
+                for (SSTableReader sstable : cfs.getLiveSSTables())
+                    if (!sstable.descriptor.version.isLatestVersion())
+                        return true;
+        }
+        return false;
     }
 
     /*

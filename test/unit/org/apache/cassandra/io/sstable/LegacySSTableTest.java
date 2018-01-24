@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -41,6 +42,8 @@ import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -56,6 +59,8 @@ import org.apache.cassandra.streaming.StreamSession;
 import org.apache.cassandra.streaming.StreamOperation;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+
+import static org.junit.Assert.assertFalse;
 
 /**
  * Tests backwards compatibility for SSTables
@@ -191,6 +196,34 @@ public class LegacySSTableTest
         {
             streamLegacyTables(legacyVersion);
             verifyReads(legacyVersion);
+        }
+    }
+
+    @Test
+    public void testAutoUpgrader() throws Exception
+    {
+        for (String legacyVersion : legacyVersions)
+        {
+            loadLegacyTables(legacyVersion);
+            new CompactionManager.UpgradeRunner().run();
+
+            boolean hasOldSSTables = true;
+            long start = System.currentTimeMillis();
+            // wait at most 1 minute for the sstables to get upgraded (UpgradeRunner just puts a new runnable on the upgradeExecutor
+            while (hasOldSSTables && TimeUnit.MINUTES.toMillis(1) > System.currentTimeMillis() - start)
+            {
+                hasOldSSTables = false;
+                for (SSTableReader sstable : Keyspace.open("legacy_tables").getAllSSTables(SSTableSet.LIVE))
+                {
+                    if (!sstable.descriptor.version.isLatestVersion())
+                    {
+                        hasOldSSTables = true;
+                        break;
+                    }
+                }
+                Thread.sleep(100);
+            }
+            assertFalse(hasOldSSTables);
         }
     }
 
