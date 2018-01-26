@@ -58,18 +58,19 @@ public class Verifier implements Closeable
     private final RandomAccessReader indexFile;
     private final VerifyInfo verifyInfo;
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
+    private final boolean checkVersion;
 
     private int goodRows;
 
     private final OutputHandler outputHandler;
     private FileDigestValidator validator;
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline) throws IOException
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline, boolean checkVersion) throws IOException
     {
-        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline);
+        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, checkVersion);
     }
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline) throws IOException
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline, boolean checkVersion) throws IOException
     {
         this.cfs = cfs;
         this.sstable = sstable;
@@ -83,6 +84,7 @@ public class Verifier implements Closeable
                         : sstable.openDataReader(CompactionManager.instance.getRateLimiter());
         this.indexFile = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)));
         this.verifyInfo = new VerifyInfo(dataFile, sstable);
+        this.checkVersion = checkVersion;
     }
 
     public void verify(boolean extended) throws IOException
@@ -90,6 +92,14 @@ public class Verifier implements Closeable
         long rowStart = 0;
 
         outputHandler.output(String.format("Verifying %s (%s bytes)", sstable, dataFile.length()));
+        if (checkVersion && !sstable.descriptor.version.isLatestVersion())
+        {
+            String msg = String.format("%s is not the latest version, run upgradesstables", sstable);
+            outputHandler.output(msg);
+            // don't use markAndThrow here because we don't want a CorruptSSTableException for this.
+            throw new RuntimeException(msg);
+        }
+
         outputHandler.output(String.format("Deserializing sstable metadata for %s ", sstable));
         try
         {

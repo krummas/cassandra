@@ -38,6 +38,11 @@ public class Verify extends NodeToolCmd
         description = "Verify each cell data, beyond simply checking sstable checksums")
     private boolean extendedVerify = false;
 
+    @Option(title = "check_version",
+    name = {"-c", "--check-version"},
+    description = "Also check that all sstables are the latest version")
+    private boolean checkVersion = false;
+
     @Override
     public void execute(NodeProbe probe)
     {
@@ -48,7 +53,7 @@ public class Verify extends NodeToolCmd
         {
             try
             {
-                probe.verify(System.out, extendedVerify, keyspace, tableNames);
+                probe.verify(System.out, extendedVerify, checkVersion, keyspace, tableNames);
             } catch (Exception e)
             {
                 throw new RuntimeException("Error occurred during verifying", e);

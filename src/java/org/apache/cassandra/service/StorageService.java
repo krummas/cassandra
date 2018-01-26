@@ -2727,12 +2727,12 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return status.statusCode;
     }
 
-    public int verify(boolean extendedVerify, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
+    public int verify(boolean extendedVerify, boolean checkVersion, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
     {
         CompactionManager.AllSSTableOpStatus status = CompactionManager.AllSSTableOpStatus.SUCCESSFUL;
         for (ColumnFamilyStore cfStore : getValidColumnFamilies(false, false, keyspaceName, tableNames))
         {
-            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.verify(extendedVerify);
+            CompactionManager.AllSSTableOpStatus oneStatus = cfStore.verify(extendedVerify, checkVersion);
             if (oneStatus != CompactionManager.AllSSTableOpStatus.SUCCESSFUL)
                 status = oneStatus;
         }

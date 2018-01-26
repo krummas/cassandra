@@ -43,6 +43,7 @@ public class StandaloneVerifier
     private static final String EXTENDED_OPTION = "extended";
     private static final String DEBUG_OPTION  = "debug";
     private static final String HELP_OPTION  = "help";
+    private static final String CHECK_VERSION = "check_version";
 
     public static void main(String args[])
     {
@@ -98,7 +99,7 @@ public class StandaloneVerifier
                 try
                 {
 
-                    try (Verifier verifier = new Verifier(cfs, sstable, handler, true))
+                    try (Verifier verifier = new Verifier(cfs, sstable, handler, true, options.checkVersion))
                     {
                         verifier.verify(extended);
                     }
@@ -136,6 +137,7 @@ public class StandaloneVerifier
         public boolean debug;
         public boolean verbose;
         public boolean extended;
+        public boolean checkVersion;
 
         private Options(String keyspaceName, String cfName)
         {
@@ -174,6 +176,7 @@ public class StandaloneVerifier
                 opts.debug = cmd.hasOption(DEBUG_OPTION);
                 opts.verbose = cmd.hasOption(VERBOSE_OPTION);
                 opts.extended = cmd.hasOption(EXTENDED_OPTION);
+                opts.checkVersion = cmd.hasOption(CHECK_VERSION);
 
                 return opts;
             }
@@ -198,6 +201,7 @@ public class StandaloneVerifier
             options.addOption("e",  EXTENDED_OPTION,       "extended verification");
             options.addOption("v",  VERBOSE_OPTION,        "verbose output");
             options.addOption("h",  HELP_OPTION,           "display this help message");
+            options.addOption("c",  CHECK_VERSION,         "make sure sstables are the latest version");
             return options;
         }
 
