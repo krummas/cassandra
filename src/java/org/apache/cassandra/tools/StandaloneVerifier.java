@@ -99,7 +99,7 @@ public class StandaloneVerifier
                 try
                 {
 
-                    try (Verifier verifier = new Verifier(cfs, sstable, handler, true, options.checkVersion))
+                    try (Verifier verifier = new Verifier(cfs, sstable, handler, true, options.checkVersion, false))
                     {
                         verifier.verify(extended);
                     }

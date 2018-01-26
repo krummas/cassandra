@@ -59,18 +59,19 @@ public class Verifier implements Closeable
     private final VerifyInfo verifyInfo;
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
     private final boolean checkVersion;
+    private final boolean invokeDiskFailurePolicy;
 
     private int goodRows;
 
     private final OutputHandler outputHandler;
     private FileDigestValidator validator;
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline, boolean checkVersion) throws IOException
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline, boolean checkVersion, boolean invokeDiskFailurePolicy)
     {
-        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, checkVersion);
+        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, checkVersion, invokeDiskFailurePolicy);
     }
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline, boolean checkVersion) throws IOException
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline, boolean checkVersion, boolean invokeDiskFailurePolicy)
     {
         this.cfs = cfs;
         this.sstable = sstable;
@@ -85,6 +86,7 @@ public class Verifier implements Closeable
         this.indexFile = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)));
         this.verifyInfo = new VerifyInfo(dataFile, sstable);
         this.checkVersion = checkVersion;
+        this.invokeDiskFailurePolicy = invokeDiskFailurePolicy;
     }
 
     public void verify(boolean extended) throws IOException
@@ -97,7 +99,8 @@ public class Verifier implements Closeable
             String msg = String.format("%s is not the latest version, run upgradesstables", sstable);
             outputHandler.output(msg);
             // don't use markAndThrow here because we don't want a CorruptSSTableException for this.
-            throw new RuntimeException(msg);
+//            throw new RuntimeException(msg);
+            markAndThrow(false);
         }
 
         outputHandler.output(String.format("Deserializing sstable metadata for %s ", sstable));
@@ -266,7 +269,11 @@ public class Verifier implements Closeable
     {
         if (mutateRepaired) // if we are able to mutate repaired flag, an incremental repair should be enough
             sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
-        throw new CorruptSSTableException(new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), mutateRepaired ? "" : "a full ")), sstable.getFilename());
+        Exception e = new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), mutateRepaired ? "" : "a full "));
+        if (invokeDiskFailurePolicy)
+            throw new CorruptSSTableException(e, sstable.getFilename());
+        else
+            throw new RuntimeException(e);
     }
 
     public CompactionInfo.Holder getVerifyInfo()

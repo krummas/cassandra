@@ -43,6 +43,11 @@ public class Verify extends NodeToolCmd
     description = "Also check that all sstables are the latest version")
     private boolean checkVersion = false;
 
+    @Option(title = "no_dfp",
+    name = {"-n", "--no_dfp"},
+    description = "Don't invoke the disk failure policy if a corrupt sstable is found")
+    private boolean noDFP = false;
+
     @Override
     public void execute(NodeProbe probe)
     {
@@ -53,7 +58,7 @@ public class Verify extends NodeToolCmd
         {
             try
             {
-                probe.verify(System.out, extendedVerify, checkVersion, keyspace, tableNames);
+                probe.verify(System.out, extendedVerify, checkVersion, noDFP, keyspace, tableNames);
             } catch (Exception e)
             {
                 throw new RuntimeException("Error occurred during verifying", e);

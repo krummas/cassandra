@@ -103,7 +103,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(false);
         }
@@ -124,7 +124,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(false);
         }
@@ -145,7 +145,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(true);
         }
@@ -166,7 +166,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(true);
         }
@@ -187,7 +187,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(false);
         }
@@ -208,7 +208,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(false);
         }
@@ -229,7 +229,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(true);
         }
@@ -250,7 +250,7 @@ public class VerifyTest
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(true);
         }
@@ -281,7 +281,7 @@ public class VerifyTest
 
         writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(false);
             fail("Expected a CorruptSSTableException to be thrown");
@@ -317,7 +317,7 @@ public class VerifyTest
         // Update the Digest to have the right Checksum
         writeChecksum(simpleFullChecksum(sstable.getFilename()), sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             // First a simple verify checking digest, which should succeed
             try
@@ -362,7 +362,7 @@ public class VerifyTest
         file.writeBytes(StringUtils.repeat('z', 2));
         file.close();
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, false, true))
         {
             verifier.verify(false);
         }
