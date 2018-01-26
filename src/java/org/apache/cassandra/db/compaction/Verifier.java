@@ -58,20 +58,19 @@ public class Verifier implements Closeable
     private final RandomAccessReader indexFile;
     private final VerifyInfo verifyInfo;
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
-    private final boolean checkVersion;
-    private final boolean invokeDiskFailurePolicy;
+    private final OptionHolder options;
 
     private int goodRows;
 
     private final OutputHandler outputHandler;
     private FileDigestValidator validator;
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline, boolean checkVersion, boolean invokeDiskFailurePolicy)
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline, OptionHolder options)
     {
-        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, checkVersion, invokeDiskFailurePolicy);
+        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, options);
     }
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline, boolean checkVersion, boolean invokeDiskFailurePolicy)
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline, OptionHolder options)
     {
         this.cfs = cfs;
         this.sstable = sstable;
@@ -85,16 +84,16 @@ public class Verifier implements Closeable
                         : sstable.openDataReader(CompactionManager.instance.getRateLimiter());
         this.indexFile = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)));
         this.verifyInfo = new VerifyInfo(dataFile, sstable);
-        this.checkVersion = checkVersion;
-        this.invokeDiskFailurePolicy = invokeDiskFailurePolicy;
+        this.options = options;
     }
 
-    public void verify(boolean extended) throws IOException
+    public void verify() throws IOException
     {
+        boolean extended = options.extendedVerification;
         long rowStart = 0;
 
         outputHandler.output(String.format("Verifying %s (%s bytes)", sstable, dataFile.length()));
-        if (checkVersion && !sstable.descriptor.version.isLatestVersion())
+        if (options.checkVersion && !sstable.descriptor.version.isLatestVersion())
         {
             String msg = String.format("%s is not the latest version, run upgradesstables", sstable);
             outputHandler.output(msg);
@@ -270,7 +269,7 @@ public class Verifier implements Closeable
         if (mutateRepaired) // if we are able to mutate repaired flag, an incremental repair should be enough
             sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
         Exception e = new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), mutateRepaired ? "" : "a full "));
-        if (invokeDiskFailurePolicy)
+        if (options.invokeDiskFailurePolicy)
             throw new CorruptSSTableException(e, sstable.getFilename());
         else
             throw new RuntimeException(e);
@@ -322,6 +321,20 @@ public class Verifier implements Closeable
         public Predicate<Long> getPurgeEvaluator(DecoratedKey key)
         {
             return time -> false;
+        }
+    }
+
+    public static class OptionHolder
+    {
+        public final boolean invokeDiskFailurePolicy;
+        public final boolean extendedVerification;
+        public final boolean checkVersion;
+
+        public OptionHolder(boolean invokeDiskFailurePolicy, boolean extendedVerification, boolean checkVersion)
+        {
+            this.invokeDiskFailurePolicy = invokeDiskFailurePolicy;
+            this.extendedVerification = extendedVerification;
+            this.checkVersion = checkVersion;
         }
     }
 }

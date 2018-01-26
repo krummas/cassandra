@@ -93,15 +93,15 @@ public class StandaloneVerifier
                         e.printStackTrace(System.err);
                 }
             }
-
+            Verifier.OptionHolder verifyOptions = new Verifier.OptionHolder(false, extended, options.checkVersion);
             for (SSTableReader sstable : sstables)
             {
                 try
                 {
 
-                    try (Verifier verifier = new Verifier(cfs, sstable, handler, true, options.checkVersion, false))
+                    try (Verifier verifier = new Verifier(cfs, sstable, handler, true, verifyOptions))
                     {
-                        verifier.verify(extended);
+                        verifier.verify();
                     }
                     catch (CorruptSSTableException cs)
                     {
