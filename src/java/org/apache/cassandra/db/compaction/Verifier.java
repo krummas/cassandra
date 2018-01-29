@@ -98,8 +98,7 @@ public class Verifier implements Closeable
             String msg = String.format("%s is not the latest version, run upgradesstables", sstable);
             outputHandler.output(msg);
             // don't use markAndThrow here because we don't want a CorruptSSTableException for this.
-//            throw new RuntimeException(msg);
-            markAndThrow(false);
+            throw new RuntimeException(msg);
         }
 
         outputHandler.output(String.format("Deserializing sstable metadata for %s ", sstable));

@@ -287,6 +287,14 @@ public class VerifyTest
             fail("Expected a CorruptSSTableException to be thrown");
         }
         catch (CorruptSSTableException err) {}
+
+        options = new Verifier.OptionHolder(false, false, false);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
+            verifier.verify();
+            fail("Expected a RuntimeException to be thrown");
+        }
+        catch (RuntimeException err) {}
     }
 
 
@@ -346,13 +354,13 @@ public class VerifyTest
         }
     }
 
-    @Test(expected = CorruptSSTableException.class)
+    @Test
     public void testVerifyBrokenSSTableMetadata() throws IOException, WriteTimeoutException
     {
         CompactionManager.instance.disableAutoCompaction();
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF2);
-
+        cfs.truncateBlocking();
         fillCF(cfs, 2);
 
         Util.getAll(Util.cmd(cfs).build());
@@ -368,7 +376,18 @@ public class VerifyTest
         try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
             verifier.verify();
+            fail("Expected a CorruptSSTableException to be thrown");
         }
+        catch (CorruptSSTableException err)
+        {}
+        options = new Verifier.OptionHolder(false, false, false);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
+            verifier.verify();
+            fail("Expected a RuntimeException to be thrown");
+        }
+        catch (RuntimeException err)
+        {}
     }
 
 

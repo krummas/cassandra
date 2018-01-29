@@ -40,6 +40,7 @@ import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.compaction.Verifier;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -54,6 +55,8 @@ import org.apache.cassandra.streaming.StreamPlan;
 import org.apache.cassandra.streaming.StreamSession;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+
+import static org.junit.Assert.fail;
 
 /**
  * Tests backwards compatibility for SSTables
@@ -184,6 +187,40 @@ public class LegacySSTableTest
                                                              "FROM legacy_tables.legacy_ka_indexed_static " +
                                                              "WHERE p=1 ");
         Assert.assertEquals(5000, rs.size());
+    }
+
+    @Test
+    public void testVerifyOldSSTables() throws IOException
+    {
+        for (String legacyVersion : legacyVersions)
+        {
+            ColumnFamilyStore cfs = Keyspace.open("legacy_tables").getColumnFamilyStore(String.format("legacy_%s_simple", legacyVersion));
+            loadLegacyTable("legacy_%s_simple", legacyVersion, "");
+
+            for (SSTableReader sstable : cfs.getLiveSSTables())
+            {
+                try (Verifier verifier = new Verifier(cfs, sstable, false, new Verifier.OptionHolder(false, false, true)))
+                {
+                    verifier.verify();
+                    if (!sstable.descriptor.version.isLatestVersion())
+                        fail("Verify should throw RuntimeException for old sstables "+sstable);
+                }
+                catch (RuntimeException e)
+                {}
+            }
+            // make sure we don't throw any exception if not checking version:
+            for (SSTableReader sstable : cfs.getLiveSSTables())
+            {
+                try (Verifier verifier = new Verifier(cfs, sstable, false, new Verifier.OptionHolder(false, false, false)))
+                {
+                    verifier.verify();
+                }
+                catch (Throwable e)
+                {
+                    fail("Verify should throw RuntimeException for old sstables "+sstable);
+                }
+            }
+        }
     }
 
     private void streamLegacyTables(String legacyVersion) throws Exception
