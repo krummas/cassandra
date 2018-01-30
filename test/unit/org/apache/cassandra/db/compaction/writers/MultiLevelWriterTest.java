@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -34,6 +35,7 @@ import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.dht.Bounds;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
+import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.MockSchema;
@@ -43,6 +45,7 @@ import org.apache.cassandra.utils.Pair;
 import static org.apache.cassandra.db.PartitionPosition.Kind.MAX_BOUND;
 import static org.apache.cassandra.db.PartitionPosition.Kind.MIN_BOUND;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class MultiLevelWriterTest
 {
@@ -134,14 +137,16 @@ public class MultiLevelWriterTest
     }
 
     @Test
-    public void getLevelBoundsTest()
+    public void levelsTest()
     {
-        List<Bounds<PartitionPosition>> bounds = new ArrayList<>();
-        bounds.add(sstableBounds(0, 100));
-        bounds.add(sstableBounds(20, 90));
-        bounds.add(sstableBounds(30, 70));
+        MultiLevelWriter.Levels levels = new MultiLevelWriter.Levels(sstableBounds(0, 100));
+        levels.addToken(0, t(0));
+        levels.addToken(0, t(100));
+        levels.addToken(1, t(20));
+        levels.addToken(1, t(90));
+        levels.addToken(2, t(30));
+        levels.addToken(2, t(70));
 
-        List<Pair<Bounds<PartitionPosition>, Integer>> levels = MultiLevelWriter.getLevelBounds(bounds);
         List<Pair<Long, Integer>> expected = new ArrayList<>();
         expected.add(Pair.create(0L, 0));
         expected.add(Pair.create(19L, 0));
@@ -158,7 +163,11 @@ public class MultiLevelWriterTest
         expected.add(Pair.create(100L, 0));
 
         for (Pair<Long, Integer> expect : expected)
-            assertEquals((int)expect.right, getLevel(expect.left, levels));
+        {
+            long token = expect.left;
+            int level = expect.right;
+            assertTrue(contains(token, levels.getBoundariesForLevel(level)));
+        }
     }
 
     @Test
@@ -178,10 +187,8 @@ public class MultiLevelWriterTest
         sst[6] = MockSchema.sstable(7, 1, false, dk(10), dk(14), 2, cfs);
         sst[7] = MockSchema.sstable(8, 1, false, dk(20), dk(22), 2, cfs);
         sst[8] = MockSchema.sstable(9, 1, false, dk(42), dk(45), 2, cfs);
-        sst[9] = MockSchema.sstable(9, 1, false, dk(77), dk(88), 2, cfs);
-
-        List<Pair<Bounds<PartitionPosition>, Integer>> boundaries = MultiLevelWriter.calculateRangeLevels(Lists.newArrayList(sst), new Bounds<>(t(4).minKeyBound(), t(78).maxKeyBound()));
-
+        sst[9] = MockSchema.sstable(10, 1, false, dk(77), dk(88), 2, cfs);
+        List<Pair<Bounds<PartitionPosition>, Integer>> boundaries = new MultiLevelWriter.RangeLevels(Sets.newHashSet(sst), new Range<>(t(4), t(78))).rangeLevels;
         assertEquals(4, boundaries.size());
 
         assertEquals(0, boundaries.get(0).right.intValue());
@@ -205,20 +212,14 @@ public class MultiLevelWriterTest
         return new BufferDecoratedKey(t(t), ByteBufferUtil.EMPTY_BYTE_BUFFER);
     }
 
-    private static int getLevel(long key, List<Pair<Bounds<PartitionPosition>, Integer>> levels)
+    private static boolean contains(long key, Bounds<PartitionPosition> p)
     {
-        for (Pair<Bounds<PartitionPosition>, Integer> p : levels)
-        {
-            long leftBound = (long) p.left.left.getToken().getTokenValue();
-            long rightBound = (long) p.left.right.getToken().getTokenValue();
-            if (leftBound < key && rightBound > key)
-                return p.right;
-            if (leftBound == key && p.left.left.kind() == MIN_BOUND)
-                return p.right;
-            if (rightBound == key && p.left.right.kind() == MAX_BOUND)
-                return p.right;
-        }
-        throw new AssertionError("could not find level for " + key + " in " + levels);
+
+        long leftBound = (long) p.left.getToken().getTokenValue();
+        long rightBound = (long) p.right.getToken().getTokenValue();
+        return leftBound < key && rightBound > key ||
+               leftBound == key && p.left.kind() == MIN_BOUND ||
+               rightBound == key && p.right.kind() == MAX_BOUND;
     }
 
     private static Bounds<PartitionPosition> sstableBounds(long start, long end)

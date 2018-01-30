@@ -18,6 +18,7 @@
 package org.apache.cassandra.db.compaction.writers;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
@@ -52,10 +54,9 @@ public class MultiLevelWriter extends CompactionAwareWriter
     private final long maxSSTableSize;
     private final long estimatedSSTables;
     private final Set<SSTableReader> allSSTables;
+    private final RangeLevels rangeLevels;
     private Directories.DataDirectory sstableDirectory;
-    private final List<Pair<Bounds<PartitionPosition>, Integer>> rangeLevels;
     private int level = 0;
-    private int currentRange = 0;
 
     public MultiLevelWriter(ColumnFamilyStore cfs,
                             Directories directories,
@@ -68,108 +69,208 @@ public class MultiLevelWriter extends CompactionAwareWriter
         super(cfs, directories, txn, sstables, keepOriginals);
         this.allSSTables = txn.originals();
         this.maxSSTableSize = maxSSTableSize;
-        this.rangeLevels = calculateRangeLevels(nonExpiredSSTables, boundaries != null ? new Bounds<>(boundaries.left.minKeyBound(), boundaries.right.maxKeyBound()) : null);
+        this.rangeLevels = new RangeLevels(nonExpiredSSTables, boundaries);
         // todo: based on the rangeLevels, calculate sstable size for L0 correctly
         long totalSize = getTotalWriteSize(nonExpiredSSTables, estimatedTotalKeys, cfs, txn.opType());
         estimatedSSTables = Math.max(1, totalSize / maxSSTableSize);
     }
 
     /**
-     * Calculate the level for all the ranges we are compacting. Boundaries are based on sstable first/last tokens
-     *
-     * figures out the max/min tokens in each level, then makes sure that we construct the ranges so that
-     * as much data as possible is pushed to the highest possible level without causing overlap
-     *
+     * Gets the estimated total amount of data to write during compaction
      */
-    @VisibleForTesting
-    static List<Pair<Bounds<PartitionPosition>, Integer>> calculateRangeLevels(Iterable<SSTableReader> sstables, Bounds<PartitionPosition> originalBoundaries)
+    private static long getTotalWriteSize(Iterable<SSTableReader> nonExpiredSSTables, long estimatedTotalKeys, ColumnFamilyStore cfs, OperationType compactionType)
     {
-        Token [] perLevelMinTokens = new Token[LeveledManifest.MAX_LEVEL_COUNT + 1];
-        Token [] perLevelMaxTokens = new Token[LeveledManifest.MAX_LEVEL_COUNT + 1];
-        int maxLevel = 0;
-        Token minToken = null, maxToken = null;
-        for (SSTableReader sstable : sstables)
+        long estimatedKeysBeforeCompaction = 0;
+        for (SSTableReader sstable : nonExpiredSSTables)
+            estimatedKeysBeforeCompaction += sstable.estimatedKeys();
+        estimatedKeysBeforeCompaction = Math.max(1, estimatedKeysBeforeCompaction);
+        double estimatedCompactionRatio = (double) estimatedTotalKeys / estimatedKeysBeforeCompaction;
+
+        return Math.round(estimatedCompactionRatio * cfs.getExpectedCompactedFileSize(nonExpiredSSTables, compactionType));
+    }
+
+    protected boolean realAppend(UnfilteredRowIterator partition)
+    {
+        int newLevel = rangeLevels.getLevelFor(partition.partitionKey());
+        if (newLevel != level)
         {
-            int level = sstable.getSSTableLevel();
-            if (perLevelMinTokens[level] == null || perLevelMinTokens[level].compareTo(sstable.first.getToken()) > 0)
-                perLevelMinTokens[level] = sstable.first.getToken();
-            if (perLevelMaxTokens[level] == null || perLevelMaxTokens[level].compareTo(sstable.last.getToken()) < 0)
-                perLevelMaxTokens[level] = sstable.last.getToken();
-            maxLevel = Math.max(maxLevel, level);
-            if (maxToken == null || maxToken.compareTo(sstable.last.getToken()) < 0)
-                maxToken = sstable.last.getToken();
-            if (minToken == null || minToken.compareTo(sstable.first.getToken()) > 0)
-                minToken = sstable.first.getToken();
+            level = newLevel;
+            switchCompactionLocation(sstableDirectory);
         }
-        assert minToken != null && maxToken != null;
-        Bounds<PartitionPosition> origBounds = originalBoundaries == null ? new Bounds<>(minToken.minKeyBound(), maxToken.maxKeyBound()) : originalBoundaries;
-        List<Bounds<PartitionPosition>> perLevelBounds = new ArrayList<>(maxLevel + 1);
-        for (int i = 0; i < maxLevel + 1; i++)
+        RowIndexEntry rie = sstableWriter.append(partition);
+        // for L0 we want to make create 'big' files - otherwise we might start triggering STCS in L0 compactions once
+        // we are done:
+        if (level > 0 && sstableWriter.currentWriter().getEstimatedOnDiskBytesWritten() > maxSSTableSize)
         {
-            if (perLevelMaxTokens[i] == null)
-            {
-                perLevelBounds.add(origBounds);
-                continue;
-            }
-            // we need to make sure we always push at least the original boundaries to the topmost level
-            PartitionPosition min = perLevelMinTokens[i].minKeyBound().compareTo(origBounds.left) < 0 ? perLevelMinTokens[i].minKeyBound() : origBounds.left;
-            PartitionPosition max = perLevelMaxTokens[i].maxKeyBound().compareTo(origBounds.right) > 0 ? perLevelMaxTokens[i].maxKeyBound() : origBounds.right;
-            perLevelBounds.add(new Bounds<>(min, max));
+            switchCompactionLocation(sstableDirectory);
         }
-        return getLevelBounds(perLevelBounds);
+        return rie != null;
+    }
+
+    @Override
+    public void switchCompactionLocation(Directories.DataDirectory location)
+    {
+        sstableDirectory = location;
+        @SuppressWarnings("resource")
+        SSTableWriter writer = SSTableWriter.create(cfs.newSSTableDescriptor(getDirectories().getLocationForDisk(sstableDirectory)),
+                                                    estimatedTotalKeys / estimatedSSTables,
+                                                    minRepairedAt,
+                                                    pendingRepair,
+                                                    cfs.metadata,
+                                                    new MetadataCollector(allSSTables, cfs.metadata().comparator, level),
+                                                    SerializationHeader.make(cfs.metadata(), nonExpiredSSTables),
+                                                    cfs.indexManager.listIndexes(),
+                                                    txn);
+
+        sstableWriter.switchWriter(writer);
     }
 
     @VisibleForTesting
-    static List<Pair<Bounds<PartitionPosition>, Integer>> getLevelBounds(List<Bounds<PartitionPosition>> perLevelBounds)
+    static class RangeLevels
     {
-        int maxLevel = perLevelBounds.size() - 1;
-        Token first = null, last = null;
-        for (Bounds<PartitionPosition> bound : perLevelBounds)
-        {
-            if (first == null || bound.left.getToken().compareTo(first) < 0)
-                first = bound.left.getToken();
-            if (last == null || bound.right.getToken().compareTo(last) > 0)
-                last = bound.right.getToken();
-        }
-        System.out.println("first "+first+" -> last "+last);
-        List<Pair<Bounds<PartitionPosition>, Integer>> bounds = new ArrayList<>();
-        for (int i = maxLevel; i >= 0; i--)
-        {
-            List<Bounds<PartitionPosition>> levelBounds = new ArrayList<>();
-            levelBounds.add(perLevelBounds.get(i));
-            System.out.println("level = "+i);
-            for (int j = maxLevel; j > i; j--)
-            {
-                List<Bounds<PartitionPosition>> newLevelBounds = new ArrayList<>();
-                for (Bounds<PartitionPosition> b : levelBounds)
-                {
-                    System.out.println("subtract "+b+" "+perLevelBounds.get(j) + " = "+subtract(b, perLevelBounds.get(j)));
-                    newLevelBounds.addAll(subtract(b, perLevelBounds.get(j)));
-                }
-                levelBounds = newLevelBounds;
-            }
-            for (Bounds<PartitionPosition> b : levelBounds)
-                bounds.add(Pair.create(b, i));
-        }
-        bounds.sort(Comparator.comparing(o -> o.left.left));
+        private final Set<SSTableReader> sstables;
+        final ImmutableList<Pair<Bounds<PartitionPosition>, Integer>> rangeLevels;
+        private int currentRange = 0;
 
-        // make sure the entire range is covered
-        assert first != null;
-        assert last != null;
-        PartitionPosition start = first.minKeyBound();
-        // the boundaries should be laid out something like this:
-        // [   )[   )[   ](   ](   ]
-   // lvl:   0    1    2    1    0
-        for (Pair<Bounds<PartitionPosition>, Integer> p : bounds)
+        RangeLevels(Set<SSTableReader> nonExpiredSSTables, Range<Token> boundaries)
         {
-            Bounds<PartitionPosition> b = p.left;
-            assert start.getToken().equals(b.left.getToken());
-            assert start.kind() == b.left.kind();
-            start = b.right;
+            sstables = nonExpiredSSTables;
+            rangeLevels = calculate(new Bounds<>(boundaries.left.minKeyBound(), boundaries.right.maxKeyBound()));
         }
-        assert start.getToken().equals(last);
-        assert start.kind() == MAX_BOUND;
-        return bounds;
+
+        int getLevelFor(DecoratedKey key)
+        {
+            while (currentRange < rangeLevels.size() && !rangeLevels.get(currentRange).left.contains(key))
+                currentRange++;
+            if (currentRange == rangeLevels.size())
+                throw new RuntimeException("All tokens should be in a range!");
+            return rangeLevels.get(currentRange).right;
+        }
+
+        /**
+         * Calculate the level for all the ranges we are compacting. Boundaries are based on sstable first/last tokens
+         *
+         * figures out the max/min tokens in each level, then makes sure that we construct the ranges so that
+         * as much data as possible is pushed to the highest possible level without causing overlap
+         *
+         */
+        private ImmutableList<Pair<Bounds<PartitionPosition>, Integer>> calculate(Bounds<PartitionPosition> originalBoundaries)
+        {
+            Levels levels = new Levels(originalBoundaries);
+            for (SSTableReader sstable : sstables)
+                levels.add(sstable);
+
+            List<Pair<Bounds<PartitionPosition>, Integer>> bounds = new ArrayList<>();
+            for (int i = levels.getMaxLevel(); i >= 0; i--)
+            {
+                List<Bounds<PartitionPosition>> levelBounds = new ArrayList<>();
+                levelBounds.add(levels.getBoundariesForLevel(i));
+                for (int j = levels.getMaxLevel(); j > i; j--)
+                {
+                    List<Bounds<PartitionPosition>> newLevelBounds = new ArrayList<>();
+                    for (Bounds<PartitionPosition> b : levelBounds)
+                        newLevelBounds.addAll(subtract(b, levels.getBoundariesForLevel(j)));
+
+                    levelBounds = newLevelBounds;
+                }
+                for (Bounds<PartitionPosition> b : levelBounds)
+                    bounds.add(Pair.create(b, i));
+            }
+            bounds.sort(Comparator.comparing(o -> o.left.left));
+
+            // make sure the entire range is covered
+            PartitionPosition start = levels.minBoundary();
+            // the boundaries should be laid out something like this:
+            // [   )[   )[   ](   ](   ]
+            // lvl:   0    1    2    1    0
+            for (Pair<Bounds<PartitionPosition>, Integer> p : bounds)
+            {
+                Bounds<PartitionPosition> b = p.left;
+                assert start.getToken().equals(b.left.getToken());
+                assert start.kind() == b.left.kind();
+                start = b.right;
+            }
+            assert start.getToken().maxKeyBound().equals(levels.maxBoundary()) : start.getToken().maxKeyBound() + " != " + levels.maxBoundary();
+            assert start.kind() == MAX_BOUND;
+            return ImmutableList.copyOf(bounds);
+        }
+    }
+
+    @VisibleForTesting
+    static class Levels
+    {
+        // index in these arrays is the level, perLevelMinTokens keeps the smallest token for the level, perLevelMaxTokens the biggest
+        private final Token [] perLevelMinTokens = new Token[LeveledManifest.MAX_LEVEL_COUNT + 1];
+        private final Token [] perLevelMaxTokens = new Token[LeveledManifest.MAX_LEVEL_COUNT + 1];
+        private final Bounds<PartitionPosition> boundaries;
+        private int maxLevel;
+        private Token maxToken;
+        private Token minToken;
+
+        public Levels(Bounds<PartitionPosition> originalBoundaries)
+        {
+            this.boundaries = originalBoundaries;
+        }
+
+        public void add(SSTableReader sstable)
+        {
+            int level = sstable.getSSTableLevel();
+            addToken(level, sstable.first.getToken());
+            addToken(level, sstable.last.getToken());
+        }
+
+        public void addToken(int level, Token t)
+        {
+            if (perLevelMinTokens[level] == null || perLevelMinTokens[level].compareTo(t) > 0)
+                perLevelMinTokens[level] = t;
+            if (perLevelMaxTokens[level] == null || perLevelMaxTokens[level].compareTo(t) < 0)
+                perLevelMaxTokens[level] = t;
+            maxLevel = Math.max(maxLevel, level);
+            if (maxToken == null || maxToken.compareTo(t) < 0)
+                maxToken = t;
+            if (minToken == null || minToken.compareTo(t) > 0)
+                minToken = t;
+        }
+
+        public int getMaxLevel()
+        {
+            return maxLevel;
+        }
+
+        public Bounds<PartitionPosition> getBoundariesForLevel(int level)
+        {
+            PartitionPosition min = minBoundForLevel(level);
+            PartitionPosition max = maxBoundForLevel(level);
+            return new Bounds<>(min, max);
+        }
+
+        private PartitionPosition minBoundForLevel(int level)
+        {
+            if (perLevelMinTokens[level] == null)
+                return boundaries.left;
+            return perLevelMinTokens[level].minKeyBound().compareTo(boundaries.left) < 0 ? perLevelMinTokens[level].minKeyBound() : boundaries.left;
+        }
+
+        private PartitionPosition maxBoundForLevel(int level)
+        {
+            if (perLevelMaxTokens[level] == null)
+                return boundaries.right;
+            return perLevelMaxTokens[level].maxKeyBound().compareTo(boundaries.right) > 0 ? perLevelMaxTokens[level].maxKeyBound() : boundaries.right;
+        }
+
+        public PartitionPosition minBoundary()
+        {
+            if (boundaries.left.compareTo(minToken.minKeyBound()) < 0)
+                return boundaries.left;
+            return minToken.minKeyBound();
+        }
+
+        public PartitionPosition maxBoundary()
+        {
+            if (boundaries.right.compareTo(maxToken.maxKeyBound()) > 0)
+                return boundaries.right;
+            return maxToken.maxKeyBound();
+        }
     }
 
     @VisibleForTesting
@@ -190,84 +291,17 @@ public class MultiLevelWriter extends CompactionAwareWriter
     {
         int leftCompareRight = lhs.left.compareTo(rhs.right);
         int rightCompareLeft = lhs.right.compareTo(rhs.left);
-        if (leftCompareRight < 0 && rightCompareLeft > 0)
-            return true;
-        if (leftCompareRight == 0 && lhs.left.kind() == MIN_BOUND && rhs.right.kind() == MAX_BOUND)
-            return true;
-        if (rightCompareLeft == 0 && lhs.right.kind() == MAX_BOUND && rhs.left.kind() == MIN_BOUND)
-            return true;
-
-        return false;
+        return leftCompareRight < 0 && rightCompareLeft > 0 ||
+               leftCompareRight == 0 && lhs.left.kind() == MIN_BOUND && rhs.right.kind() == MAX_BOUND ||
+               rightCompareLeft == 0 && lhs.right.kind() == MAX_BOUND && rhs.left.kind() == MIN_BOUND;
     }
 
     private static boolean contains(Bounds<PartitionPosition> bounds, PartitionPosition pos)
     {
         int compareLeft = pos.compareTo(bounds.left);
         int compareRight = pos.compareTo(bounds.right);
-        if (compareLeft > 0 && compareRight < 0 ||
-            compareLeft == 0 && bounds.left.kind() == MIN_BOUND && pos.kind() == MAX_BOUND ||
-            compareRight == 0 && bounds.right.kind() == MAX_BOUND && pos.kind() == MIN_BOUND)
-            return true;
-
-        return false;
-    }
-
-    /**
-     * Gets the estimated total amount of data to write during compaction
-     */
-    private static long getTotalWriteSize(Iterable<SSTableReader> nonExpiredSSTables, long estimatedTotalKeys, ColumnFamilyStore cfs, OperationType compactionType)
-    {
-        long estimatedKeysBeforeCompaction = 0;
-        for (SSTableReader sstable : nonExpiredSSTables)
-            estimatedKeysBeforeCompaction += sstable.estimatedKeys();
-        estimatedKeysBeforeCompaction = Math.max(1, estimatedKeysBeforeCompaction);
-        double estimatedCompactionRatio = (double) estimatedTotalKeys / estimatedKeysBeforeCompaction;
-
-        return Math.round(estimatedCompactionRatio * cfs.getExpectedCompactedFileSize(nonExpiredSSTables, compactionType));
-    }
-
-    protected boolean realAppend(UnfilteredRowIterator partition)
-    {
-        int newLevel = getLevelFor(partition.partitionKey());
-        if (newLevel != level)
-        {
-            level = newLevel;
-            switchCompactionLocation(sstableDirectory);
-        }
-        RowIndexEntry rie = sstableWriter.append(partition);
-        // for L0 we want to make create 'big' files - otherwise we might start triggering STCS in L0 compactions once
-        // we are done:
-        if (level > 0 && sstableWriter.currentWriter().getEstimatedOnDiskBytesWritten() > maxSSTableSize)
-        {
-            switchCompactionLocation(sstableDirectory);
-        }
-        return rie != null;
-    }
-
-    private int getLevelFor(DecoratedKey key)
-    {
-        while (currentRange < rangeLevels.size() && !rangeLevels.get(currentRange).left.contains(key))
-            currentRange++;
-        if (currentRange == rangeLevels.size())
-            throw new RuntimeException("All tokens should be in a range!");
-        return rangeLevels.get(currentRange).right;
-    }
-
-    @Override
-    public void switchCompactionLocation(Directories.DataDirectory location)
-    {
-        sstableDirectory = location;
-        @SuppressWarnings("resource")
-        SSTableWriter writer = SSTableWriter.create(cfs.newSSTableDescriptor(getDirectories().getLocationForDisk(sstableDirectory)),
-                                                    estimatedTotalKeys / estimatedSSTables,
-                                                    minRepairedAt,
-                                                    pendingRepair,
-                                                    cfs.metadata,
-                                                    new MetadataCollector(allSSTables, cfs.metadata().comparator, level),
-                                                    SerializationHeader.make(cfs.metadata(), nonExpiredSSTables),
-                                                    cfs.indexManager.listIndexes(),
-                                                    txn);
-
-        sstableWriter.switchWriter(writer);
+        return compareLeft > 0 && compareRight < 0 ||
+               compareLeft == 0 && bounds.left.kind() == MIN_BOUND && pos.kind() == MAX_BOUND ||
+               compareRight == 0 && bounds.right.kind() == MAX_BOUND && pos.kind() == MIN_BOUND;
     }
 }
