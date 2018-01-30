@@ -165,6 +165,7 @@ public class MultiLevelWriter extends CompactionAwareWriter
             {
                 List<Bounds<PartitionPosition>> levelBounds = new ArrayList<>();
                 levelBounds.add(levels.getBoundariesForLevel(i));
+                // now we need to subtract the boundaries of all levels higher than the one we just added:
                 for (int j = levels.getMaxLevel(); j > i; j--)
                 {
                     List<Bounds<PartitionPosition>> newLevelBounds = new ArrayList<>();
@@ -236,7 +237,15 @@ public class MultiLevelWriter extends CompactionAwareWriter
         {
             return maxLevel;
         }
-
+        /**
+         * Get the boundaries for the level
+         *
+         * this is either the smallest/largest token for sstables from the level or the given boundary.
+         *
+         * For example, if we request compaction for boundaries [100, 200] but the sstables in the only cover
+         * [140, 150] it means that [100, 140) and (150, 200] are empty in the level and we can add tokens from lower
+         * levels without causing overlap.
+         */
         public Bounds<PartitionPosition> getBoundariesForLevel(int level)
         {
             PartitionPosition min = minBoundForLevel(level);
@@ -258,6 +267,9 @@ public class MultiLevelWriter extends CompactionAwareWriter
             return perLevelMaxTokens[level].maxKeyBound().compareTo(boundaries.right) > 0 ? perLevelMaxTokens[level].maxKeyBound() : boundaries.right;
         }
 
+        /**
+         * global min boundary for the sstables/levels involved
+         */
         public PartitionPosition minBoundary()
         {
             if (boundaries.left.compareTo(minToken.minKeyBound()) < 0)
@@ -265,6 +277,9 @@ public class MultiLevelWriter extends CompactionAwareWriter
             return minToken.minKeyBound();
         }
 
+        /**
+         * global max boundary for the sstables/levels involved
+         */
         public PartitionPosition maxBoundary()
         {
             if (boundaries.right.compareTo(maxToken.maxKeyBound()) > 0)

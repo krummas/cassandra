@@ -19,9 +19,14 @@
 package org.apache.cassandra.db.compaction.writers;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
+import java.util.Set;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -199,6 +204,45 @@ public class MultiLevelWriterTest
         assertEquals(bounds(88, false, 95, true), boundaries.get(2).left);
         assertEquals(0, boundaries.get(3).right.intValue());
         assertEquals(bounds(95, false, 100, true), boundaries.get(3).left);
+    }
+
+    @Test
+    public void calculateRangeLevelsTest2()
+    {
+        DatabaseDescriptor.daemonInitialization();
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        SSTableReader [] sst = new SSTableReader[3];
+        sst[0] = MockSchema.sstable(1, 1, false, dk(0), dk(100), 0, cfs);
+        sst[1] = MockSchema.sstable(2, 1, false, dk(50), dk(60), 1, cfs);
+        sst[2] = MockSchema.sstable(3, 1, false, dk(30), dk(90), 2, cfs);
+        List<Pair<Bounds<PartitionPosition>, Integer>> boundaries = new MultiLevelWriter.RangeLevels(Sets.newHashSet(sst), new Range<>(t(30), t(90))).rangeLevels;
+        // level 0 is 0 -> 30 and 90 -> 100 below
+        assertEquals(bounds(0, true, 30, false), boundaries.get(0).left);
+        assertEquals(0, boundaries.get(0).right.intValue());
+        assertEquals(bounds(30, true, 90, true), boundaries.get(1).left);
+        assertEquals(2, boundaries.get(1).right.intValue());
+        assertEquals(bounds(90, false, 100, true), boundaries.get(2).left);
+        assertEquals(0, boundaries.get(2).right.intValue());
+    }
+
+    @Test
+    public void calculateRangeLevelsEmptyLevel()
+    {
+        DatabaseDescriptor.daemonInitialization();
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        SSTableReader [] sst = new SSTableReader[3];
+        sst[0] = MockSchema.sstable(1, 1, false, dk(0), dk(100), 0, cfs);
+        sst[1] = MockSchema.sstable(2, 1, false, dk(20), dk(90), 2, cfs);
+        sst[2] = MockSchema.sstable(3, 1, false, dk(30), dk(90), 3, cfs);
+        List<Pair<Bounds<PartitionPosition>, Integer>> boundaries = new MultiLevelWriter.RangeLevels(Sets.newHashSet(sst), new Range<>(t(30), t(90))).rangeLevels;
+        assertEquals(bounds(0, true, 20, false), boundaries.get(0).left);
+        assertEquals(0, boundaries.get(0).right.intValue());
+        assertEquals(bounds(20, true, 30, false), boundaries.get(1).left);
+        assertEquals(2, boundaries.get(1).right.intValue());
+        assertEquals(bounds(30, true, 90, true), boundaries.get(2).left);
+        assertEquals(3, boundaries.get(2).right.intValue());
+        assertEquals(bounds(90, false, 100, true), boundaries.get(3).left);
+        assertEquals(0, boundaries.get(3).right.intValue());
 
     }
 
