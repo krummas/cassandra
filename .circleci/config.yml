@@ -43,7 +43,7 @@ with_dtests_jobs: &with_dtest_jobs
                       - build
             - dtests-with-vnodes:
                   requires:
-                      - build
+                      - build 
             - dtests-no-vnodes:
                   requires:
                       - build
@@ -58,16 +58,16 @@ with_dtest_jobs_only: &with_dtest_jobs_only
                       - build
 # Set env_settings, env_vars, and workflows/build_and_run_tests based on environment
 env_settings: &env_settings
-    <<: *default_env_settings
-    #<<: *high_capacity_env_settings
+    # <<: *default_env_settings
+    <<: *high_capacity_env_settings
 env_vars: &env_vars
-    <<: *resource_constrained_env_vars
-    #<<: *high_capacity_env_vars
+    # <<: *resource_constrained_env_vars
+    <<: *high_capacity_env_vars
 workflows:
     version: 2
-    build_and_run_tests: *default_jobs
+    #build_and_run_tests: *default_jobs
     #build_and_run_tests: *with_dtest_jobs_only
-    #build_and_run_tests: *with_dtest_jobs
+    build_and_run_tests: *with_dtest_jobs
 docker_image: &docker_image kjellman/cassandra-test:0.4.3
 version: 2
 jobs:
@@ -327,7 +327,7 @@ jobs:
                 export SPLIT_TESTS=`cat /tmp/split_dtest_tests_without_vnodes_final.txt`
                 #Skip all syncing to disk to avoid performance issues in flaky CI environments
                 export CASSANDRA_SKIP_SYNC=true
-                set -o pipefail && cd ~/cassandra-dtest && pytest --log-level="INFO" --junit-xml=/tmp/results/dtests/pytest_result_novnodes.xml -s --cassandra-dir=/home/cassandra/cassandra --skip-resource-intensive-tests --keep-test-dir $SPLIT_TESTS 2>&1 | tee /tmp/dtest/stdout-novnodes.txt
+            	set -o pipefail && cd ~/cassandra-dtest && pytest --log-level="INFO" --junit-xml=/tmp/results/dtests/pytest_result_novnodes.xml -s --cassandra-dir=/home/cassandra/cassandra --skip-resource-intensive-tests --keep-test-dir $SPLIT_TESTS 2>&1 | tee /tmp/dtest/stdout-novnodes.txt
             fi
       - store_test_results:
           path: /tmp/results
