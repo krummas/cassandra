@@ -34,19 +34,24 @@ public class Verify extends NodeToolCmd
     private List<String> args = new ArrayList<>();
 
     @Option(title = "extended_verify",
-        name = {"-e", "--extended-verify"},
-        description = "Verify each cell data, beyond simply checking sstable checksums")
+            name = {"-e", "--extended-verify"},
+            description = "Verify each cell data, beyond simply checking sstable checksums")
     private boolean extendedVerify = false;
 
     @Option(title = "check_version",
-    name = {"-c", "--check-version"},
-    description = "Also check that all sstables are the latest version")
+            name = {"-c", "--check-version"},
+            description = "Also check that all sstables are the latest version")
     private boolean checkVersion = false;
 
     @Option(title = "no_dfp",
-    name = {"-n", "--no_dfp"},
-    description = "Don't invoke the disk failure policy if a corrupt sstable is found")
+            name = {"-n", "--no-dfp"},
+            description = "Don't invoke the disk failure policy if a corrupt sstable is found")
     private boolean noDFP = false;
+
+    @Option(title = "no_repair_status_change",
+            name = {"-r", "--no-rsc"},
+            description = "Don't mutate the repair status on corrupt sstables")
+    private boolean noRSC = false;
 
     @Override
     public void execute(NodeProbe probe)
@@ -58,7 +63,7 @@ public class Verify extends NodeToolCmd
         {
             try
             {
-                probe.verify(System.out, extendedVerify, checkVersion, noDFP, keyspace, tableNames);
+                probe.verify(System.out, extendedVerify, checkVersion, noDFP, noRSC, keyspace, tableNames);
             } catch (Exception e)
             {
                 throw new RuntimeException("Error occurred during verifying", e);

@@ -44,6 +44,7 @@ public class StandaloneVerifier
     private static final String DEBUG_OPTION  = "debug";
     private static final String HELP_OPTION  = "help";
     private static final String CHECK_VERSION = "check_version";
+    private static final String NO_REPAIR_STATUS_CHANGE = "no_repair_status_change";
 
     public static void main(String args[])
     {
@@ -93,7 +94,7 @@ public class StandaloneVerifier
                         e.printStackTrace(System.err);
                 }
             }
-            Verifier.OptionHolder verifyOptions = new Verifier.OptionHolder(false, extended, options.checkVersion);
+            Verifier.OptionHolder verifyOptions = new Verifier.OptionHolder(false, extended, options.checkVersion, options.mutateRepairStatus);
             for (SSTableReader sstable : sstables)
             {
                 try
@@ -138,6 +139,7 @@ public class StandaloneVerifier
         public boolean verbose;
         public boolean extended;
         public boolean checkVersion;
+        public boolean mutateRepairStatus;
 
         private Options(String keyspaceName, String cfName)
         {
@@ -177,6 +179,7 @@ public class StandaloneVerifier
                 opts.verbose = cmd.hasOption(VERBOSE_OPTION);
                 opts.extended = cmd.hasOption(EXTENDED_OPTION);
                 opts.checkVersion = cmd.hasOption(CHECK_VERSION);
+                opts.mutateRepairStatus = !cmd.hasOption(NO_REPAIR_STATUS_CHANGE);
 
                 return opts;
             }
@@ -202,6 +205,7 @@ public class StandaloneVerifier
             options.addOption("v",  VERBOSE_OPTION,        "verbose output");
             options.addOption("h",  HELP_OPTION,           "display this help message");
             options.addOption("c",  CHECK_VERSION,         "make sure sstables are the latest version");
+            options.addOption("r", NO_REPAIR_STATUS_CHANGE,"don't mutate repair status");
             return options;
         }
 

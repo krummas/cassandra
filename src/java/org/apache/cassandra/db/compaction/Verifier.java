@@ -265,9 +265,13 @@ public class Verifier implements Closeable
 
     private void markAndThrow(boolean mutateRepaired) throws IOException
     {
-        if (mutateRepaired) // if we are able to mutate repaired flag, an incremental repair should be enough
+        if (mutateRepaired && options.mutateRepairStatus) // if we are able to mutate repaired flag, an incremental repair should be enough
+        {
             sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
-        Exception e = new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), mutateRepaired ? "" : "a full "));
+            sstable.reloadSSTableMetadata();
+            cfs.getTracker().notifySSTableRepairedStatusChanged(Collections.singleton(sstable));
+        }
+        Exception e = new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), (mutateRepaired && options.mutateRepairStatus) ? "" : "a full "));
         if (options.invokeDiskFailurePolicy)
             throw new CorruptSSTableException(e, sstable.getFilename());
         else
@@ -328,12 +332,25 @@ public class Verifier implements Closeable
         public final boolean invokeDiskFailurePolicy;
         public final boolean extendedVerification;
         public final boolean checkVersion;
+        private final boolean mutateRepairStatus;
 
-        public OptionHolder(boolean invokeDiskFailurePolicy, boolean extendedVerification, boolean checkVersion)
+        public OptionHolder(boolean invokeDiskFailurePolicy, boolean extendedVerification, boolean checkVersion, boolean mutateRepairStatus)
         {
             this.invokeDiskFailurePolicy = invokeDiskFailurePolicy;
             this.extendedVerification = extendedVerification;
             this.checkVersion = checkVersion;
+            this.mutateRepairStatus = mutateRepairStatus;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "OptionHolder{" +
+                   "invokeDiskFailurePolicy=" + invokeDiskFailurePolicy +
+                   ", extendedVerification=" + extendedVerification +
+                   ", checkVersion=" + checkVersion +
+                   ", mutateRepairStatus=" + mutateRepairStatus +
+                   '}';
         }
     }
 }

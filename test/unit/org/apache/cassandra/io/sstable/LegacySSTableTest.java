@@ -199,7 +199,7 @@ public class LegacySSTableTest
 
             for (SSTableReader sstable : cfs.getLiveSSTables())
             {
-                try (Verifier verifier = new Verifier(cfs, sstable, false, new Verifier.OptionHolder(false, false, true)))
+                try (Verifier verifier = new Verifier(cfs, sstable, false, new Verifier.OptionHolder(false, false, true, true)))
                 {
                     verifier.verify();
                     if (!sstable.descriptor.version.isLatestVersion())
@@ -211,7 +211,7 @@ public class LegacySSTableTest
             // make sure we don't throw any exception if not checking version:
             for (SSTableReader sstable : cfs.getLiveSSTables())
             {
-                try (Verifier verifier = new Verifier(cfs, sstable, false, new Verifier.OptionHolder(false, false, false)))
+                try (Verifier verifier = new Verifier(cfs, sstable, false, new Verifier.OptionHolder(false, false, false, true)))
                 {
                     verifier.verify();
                 }
