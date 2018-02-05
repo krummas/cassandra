@@ -59,18 +59,19 @@ public class Verifier implements Closeable
     private final RandomAccessReader indexFile;
     private final VerifyInfo verifyInfo;
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
+    private final OptionHolder options;
 
     private int goodRows;
 
     private final OutputHandler outputHandler;
     private FileDigestValidator validator;
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline)
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, boolean isOffline, OptionHolder options)
     {
-        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline);
+        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, options);
     }
 
-    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline)
+    public Verifier(ColumnFamilyStore cfs, SSTableReader sstable, OutputHandler outputHandler, boolean isOffline, OptionHolder options)
     {
         this.cfs = cfs;
         this.sstable = sstable;
@@ -84,13 +85,24 @@ public class Verifier implements Closeable
                         : sstable.openDataReader(CompactionManager.instance.getRateLimiter());
         this.indexFile = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)));
         this.verifyInfo = new VerifyInfo(dataFile, sstable);
+        this.options = options;
     }
 
-    public void verify(boolean extended) throws IOException
+    public void verify() throws IOException
     {
+        boolean extended = options.extendedVerification;
         long rowStart = 0;
 
         outputHandler.output(String.format("Verifying %s (%s)", sstable, FBUtilities.prettyPrintMemory(dataFile.length())));
+
+        if (options.checkVersion && !sstable.descriptor.version.isLatestVersion())
+        {
+            String msg = String.format("%s is not the latest version, run upgradesstables", sstable);
+            outputHandler.output(msg);
+            // don't use markAndThrow here because we don't want a CorruptSSTableException for this.
+            throw new RuntimeException(msg);
+        }
+
         outputHandler.output(String.format("Deserializing sstable metadata for %s ", sstable));
         try
         {
@@ -255,9 +267,17 @@ public class Verifier implements Closeable
 
     private void markAndThrow(boolean mutateRepaired) throws IOException
     {
-        if (mutateRepaired) // if we are able to mutate repaired flag, an incremental repair should be enough
+        if (mutateRepaired && options.mutateRepairStatus) // if we are able to mutate repaired flag, an incremental repair should be enough
+        {
             sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
-        throw new CorruptSSTableException(new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), mutateRepaired ? "" : "a full ")), sstable.getFilename());
+            sstable.reloadSSTableMetadata();
+            cfs.getTracker().notifySSTableRepairedStatusChanged(Collections.singleton(sstable));
+        }
+        Exception e = new Exception(String.format("Invalid SSTable %s, please force %srepair", sstable.getFilename(), (mutateRepaired && options.mutateRepairStatus) ? "" : "a full "));
+        if (options.invokeDiskFailurePolicy)
+            throw new CorruptSSTableException(e, sstable.getFilename());
+        else
+            throw new RuntimeException(e);
     }
 
     public CompactionInfo.Holder getVerifyInfo()
@@ -306,6 +326,33 @@ public class Verifier implements Closeable
         public Predicate<Long> getPurgeEvaluator(DecoratedKey key)
         {
             return time -> false;
+        }
+    }
+
+    public static class OptionHolder
+    {
+        public final boolean invokeDiskFailurePolicy;
+        public final boolean extendedVerification;
+        public final boolean checkVersion;
+        private final boolean mutateRepairStatus;
+
+        public OptionHolder(boolean invokeDiskFailurePolicy, boolean extendedVerification, boolean checkVersion, boolean mutateRepairStatus)
+        {
+            this.invokeDiskFailurePolicy = invokeDiskFailurePolicy;
+            this.extendedVerification = extendedVerification;
+            this.checkVersion = checkVersion;
+            this.mutateRepairStatus = mutateRepairStatus;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "OptionHolder{" +
+                   "invokeDiskFailurePolicy=" + invokeDiskFailurePolicy +
+                   ", extendedVerification=" + extendedVerification +
+                   ", checkVersion=" + checkVersion +
+                   ", mutateRepairStatus=" + mutateRepairStatus +
+                   '}';
         }
     }
 }

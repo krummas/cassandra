@@ -48,6 +48,8 @@ import java.nio.file.Files;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @RunWith(OrderedJUnit4ClassRunner.class)
@@ -103,10 +105,10 @@ public class VerifyTest
         fillCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(false);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -124,10 +126,10 @@ public class VerifyTest
         fillCounterCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(false);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -145,10 +147,10 @@ public class VerifyTest
         fillCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, true, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(true);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -166,10 +168,10 @@ public class VerifyTest
         fillCounterCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, true, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(true);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -187,10 +189,10 @@ public class VerifyTest
         fillCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(false);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -208,10 +210,10 @@ public class VerifyTest
         fillCounterCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(false);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -229,10 +231,10 @@ public class VerifyTest
         fillCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, true, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(true);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -250,10 +252,10 @@ public class VerifyTest
         fillCounterCF(cfs, 2);
 
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, true, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(true);
+            verifier.verify();
         }
         catch (CorruptSSTableException err)
         {
@@ -283,12 +285,21 @@ public class VerifyTest
             writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
         }
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(false);
+            verifier.verify();
             fail("Expected a CorruptSSTableException to be thrown");
         }
         catch (CorruptSSTableException err) {}
+
+        options = new Verifier.OptionHolder(false, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
+            verifier.verify();
+            fail("Expected a RuntimeException to be thrown");
+        }
+        catch (RuntimeException err) {}
     }
 
 
@@ -320,23 +331,26 @@ public class VerifyTest
 
         // Update the Digest to have the right Checksum
         writeChecksum(simpleFullChecksum(sstable.getFilename()), sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
             // First a simple verify checking digest, which should succeed
             try
             {
-                verifier.verify(false);
+                verifier.verify();
             }
             catch (CorruptSSTableException err)
             {
                 fail("Simple verify should have succeeded as digest matched");
             }
-
+        }
+        options = new Verifier.OptionHolder(true, true, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
             // Now try extended verify
             try
             {
-                verifier.verify(true);
+                verifier.verify();
 
             }
             catch (CorruptSSTableException err)
@@ -347,13 +361,13 @@ public class VerifyTest
         }
     }
 
-    @Test(expected = CorruptSSTableException.class)
+    @Test
     public void testVerifyBrokenSSTableMetadata() throws IOException, WriteTimeoutException
     {
         CompactionManager.instance.disableAutoCompaction();
         Keyspace keyspace = Keyspace.open(KEYSPACE);
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF2);
-
+        cfs.truncateBlocking();
         fillCF(cfs, 2);
 
         Util.getAll(Util.cmd(cfs).build());
@@ -365,11 +379,68 @@ public class VerifyTest
         file.seek(0);
         file.writeBytes(StringUtils.repeat('z', 2));
         file.close();
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
-            verifier.verify(false);
+            verifier.verify();
+            fail("Expected a CorruptSSTableException to be thrown");
         }
+        catch (CorruptSSTableException err)
+        {}
+        options = new Verifier.OptionHolder(false, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
+            verifier.verify();
+            fail("Expected a RuntimeException to be thrown");
+        }
+        catch (RuntimeException err)
+        {}
+    }
+
+    @Test
+    public void testVerifyMutateRepairStatus() throws IOException, WriteTimeoutException
+    {
+        CompactionManager.instance.disableAutoCompaction();
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF2);
+        cfs.truncateBlocking();
+        fillCF(cfs, 2);
+
+        Util.getAll(Util.cmd(cfs).build());
+
+        // make the sstable repaired:
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
+        sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, System.currentTimeMillis());
+        sstable.reloadSSTableMetadata();
+
+        // break the sstable:
+        Long correctChecksum;
+        try (RandomAccessFile file = new RandomAccessFile(sstable.descriptor.filenameFor(sstable.descriptor.digestComponent), "rw"))
+        {
+            correctChecksum = Long.parseLong(file.readLine());
+        }
+        writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(sstable.descriptor.digestComponent));
+        Verifier.OptionHolder options = new Verifier.OptionHolder(true, false, false, false);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
+            verifier.verify();
+            fail("Expected a CorruptSSTableException to be thrown");
+        }
+        catch (CorruptSSTableException err)
+        {}
+
+        assertTrue(sstable.isRepaired());
+
+        // now the repair status should be changed:
+        options = new Verifier.OptionHolder(true, false, false, true);
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        {
+            verifier.verify();
+            fail("Expected a CorruptSSTableException to be thrown");
+        }
+        catch (CorruptSSTableException err)
+        {}
+        assertFalse(sstable.isRepaired());
     }
 
 
