@@ -398,7 +398,7 @@ public class CompactionManager implements CompactionManagerMBean
         }, jobs, OperationType.SCRUB);
     }
 
-    public AllSSTableOpStatus performVerify(final ColumnFamilyStore cfs, final boolean extendedVerify) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performVerify(ColumnFamilyStore cfs, Verifier.OptionHolder options) throws InterruptedException, ExecutionException
     {
         assert !cfs.isIndex();
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
@@ -412,7 +412,7 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public void execute(LifecycleTransaction input) throws IOException
             {
-                verifyOne(cfs, input.onlyOne(), extendedVerify);
+                verifyOne(cfs, input.onlyOne(), options);
             }
         }, 0, OperationType.VERIFY);
     }
@@ -985,15 +985,15 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    private void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, boolean extendedVerify) throws IOException
+    private void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, Verifier.OptionHolder options) throws IOException
     {
         CompactionInfo.Holder verifyInfo = null;
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false))
+        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
             verifyInfo = verifier.getVerifyInfo();
             metrics.beginCompaction(verifyInfo);
-            verifier.verify(extendedVerify);
+            verifier.verify();
         }
         finally
         {
