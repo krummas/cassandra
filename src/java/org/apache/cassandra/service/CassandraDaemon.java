@@ -421,7 +421,7 @@ public class CassandraDaemon
             // are still on disk. If the compaction finishes properly, the new sstable will
             // be of the latest version
             logger.debug("Node has old version sstables, scheduling background upgrade sstables");
-            ScheduledExecutors.optionalTasks.scheduleWithFixedDelay(new CompactionManager.UpgradeRunner(), 1, 5, TimeUnit.MINUTES);
+            ScheduledExecutors.optionalTasks.scheduleWithFixedDelay(new CompactionManager.UpgradeRunner(), 1, 60, TimeUnit.MINUTES);
         }
 
         completeSetup();

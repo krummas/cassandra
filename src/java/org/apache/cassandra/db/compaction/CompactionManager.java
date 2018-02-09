@@ -1860,7 +1860,7 @@ public class CompactionManager implements CompactionManagerMBean
     {
         public UpgradeExecutor()
         {
-            super(1, 1, "UpgradeExecutor", new SynchronousQueue<>());
+            super(1, 1, "UpgradeExecutor", new LinkedBlockingQueue<>());
         }
     }
 
@@ -2121,21 +2121,18 @@ public class CompactionManager implements CompactionManagerMBean
 
     public static class UpgradeRunner implements Runnable
     {
-        private boolean isUpgrading = false;
-        private boolean done = false;
+        private volatile boolean done = false;
         @Override
         public void run()
         {
-            if (!isUpgrading && !done)
+            // only allow a single task in the upgrade queue
+            if (!done && CompactionManager.instance.upgradeExecutor.getQueue().isEmpty())
             {
                 logger.debug("Starting background upgrade sstables");
                 CompactionManager.instance.upgradeExecutor.submitIfRunning(() -> {
                     boolean noOldSSTables = true;
                     try
                     {
-                        // note that UpgradeRunner is scheduled to run every X minutes - there will be no race here:
-                        isUpgrading = true;
-
                         for (Keyspace ks : Keyspace.all())
                         {
                             for (ColumnFamilyStore cfs : ks.getColumnFamilyStores())
@@ -2170,7 +2167,6 @@ public class CompactionManager implements CompactionManagerMBean
                     }
                     finally
                     {
-                        isUpgrading = false;
                         done = noOldSSTables;
                     }
                 }, "Background upgrade sstables");
