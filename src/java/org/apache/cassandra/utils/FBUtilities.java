@@ -76,7 +76,6 @@ public class FBUtilities
     private static final String OPERATING_SYSTEM = System.getProperty("os.name").toLowerCase();
     public static final boolean isWindows = OPERATING_SYSTEM.contains("windows");
     public static final boolean isLinux = OPERATING_SYSTEM.contains("linux");
-
     private static volatile InetAddress localInetAddress;
     private static volatile InetAddress broadcastInetAddress;
     private static volatile InetAddress broadcastNativeAddress;
@@ -385,7 +384,7 @@ public class FBUtilities
                 if (ms <= 0)
                     results.add(f.get());
                 else
-                    results.add(f.get(ms, TimeUnit.MILLISECONDS));
+                    results.add(f.get(100, TimeUnit.MILLISECONDS));
             }
             catch (Throwable t)
             {
@@ -418,6 +417,34 @@ public class FBUtilities
             result.get(ms, TimeUnit.MILLISECONDS);
     }
 
+    public static <T> Future<? extends T> waitOnFirstFuture(Iterable<? extends Future<? extends T>> futures)
+    {
+        return waitOnFirstFuture(futures, 100);
+    }
+    /**
+     * Only wait for the first future to finish from a list of futures. Will block until at least 1 future finishes.
+     * @param futures The futures to wait on
+     * @return future that completed.
+     */
+    public static <T> Future<? extends T> waitOnFirstFuture(Iterable<? extends Future<? extends T>> futures, long ms)
+    {
+        while (true)
+        {
+            for (Future<? extends T> f : futures)
+            {
+                try
+                {
+                    f.get(ms, TimeUnit.MILLISECONDS);
+                    return f;
+                }
+                catch (TimeoutException to) {}
+                catch (Throwable t)
+                {
+                    Throwables.maybeFail(t);
+                }
+            }
+        }
+    }
     /**
      * Create a new instance of a partitioner defined in an SSTable Descriptor
      * @param desc Descriptor of an sstable
