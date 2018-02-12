@@ -26,6 +26,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.IndexSummary;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
@@ -35,18 +36,25 @@ import org.apache.cassandra.io.util.DataIntegrityMetadata;
 import org.apache.cassandra.io.util.DataIntegrityMetadata.FileDigestValidator;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.BloomFilterSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.UUIDGen;
 
+import java.io.BufferedInputStream;
 import java.io.Closeable;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.LongPredicate;
 import java.util.function.Predicate;
@@ -124,6 +132,41 @@ public class Verifier implements Closeable
         }
         outputHandler.output(String.format("Checking computed hash of %s ", sstable));
 
+        try
+        {
+            deserializeIndex(sstable);
+        }
+        catch (Throwable t)
+        {
+            outputHandler.debug(t.getMessage());
+            markAndThrow();
+        }
+
+        try
+        {
+            deserializeIndexSummary(sstable);
+
+        }
+        catch (Throwable t)
+        {
+            outputHandler.output("Index summary is corrupt - if it is removed it will get rebuilt on startup "+sstable.descriptor.filenameFor(Component.SUMMARY));
+            outputHandler.debug(t.getMessage());
+            markAndThrow(false);
+        }
+
+        try
+        {
+            deserializeBloomFilter(sstable);
+
+        }
+        catch (Throwable t)
+        {
+            outputHandler.debug(t.getMessage());
+            markAndThrow();
+        }
+
+        if (options.quick)
+            return;
 
         // Verify will use the Digest files, which works for both compressed and uncompressed sstables
         try
@@ -264,6 +307,44 @@ public class Verifier implements Closeable
         outputHandler.output("Verify of " + sstable + " succeeded. All " + goodRows + " rows read successfully");
     }
 
+    private void deserializeIndex(SSTableReader sstable) throws IOException
+    {
+        try (RandomAccessReader primaryIndex = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX))))
+        {
+            long indexSize = primaryIndex.length();
+
+            while ((primaryIndex.getFilePointer()) != indexSize)
+            {
+                ByteBuffer key = ByteBufferUtil.readWithShortLength(primaryIndex);
+                RowIndexEntry.Serializer.skip(primaryIndex, sstable.descriptor.version);
+            }
+        }
+    }
+
+    private void deserializeIndexSummary(SSTableReader sstable) throws IOException
+    {
+        File file = new File(sstable.descriptor.filenameFor(Component.SUMMARY));
+        TableMetadata metadata = cfs.metadata();
+        try (DataInputStream iStream = new DataInputStream(Files.newInputStream(file.toPath())))
+        {
+            try (IndexSummary indexSummary = IndexSummary.serializer.deserialize(iStream,
+                                                               cfs.getPartitioner(),
+                                                               metadata.params.minIndexInterval,
+                                                               metadata.params.maxIndexInterval))
+            {
+                ByteBufferUtil.readWithLength(iStream);
+                ByteBufferUtil.readWithLength(iStream);
+            }
+        }
+    }
+
+    private void deserializeBloomFilter(SSTableReader sstable) throws IOException
+    {
+        try (DataInputStream stream = new DataInputStream(new BufferedInputStream(Files.newInputStream(Paths.get(sstable.descriptor.filenameFor(Component.FILTER)))));
+             IFilter bf = BloomFilterSerializer.deserialize(stream, sstable.descriptor.version.hasOldBfFormat()))
+        {}
+    }
+
     public void close()
     {
         FileUtils.closeQuietly(dataFile);
@@ -364,14 +445,16 @@ public class Verifier implements Closeable
         public final boolean checkVersion;
         public final boolean mutateRepairStatus;
         public final boolean checkOwnsTokens;
+        public final boolean quick;
 
-        private Options(boolean invokeDiskFailurePolicy, boolean extendedVerification, boolean checkVersion, boolean mutateRepairStatus, boolean checkOwnsTokens)
+        private Options(boolean invokeDiskFailurePolicy, boolean extendedVerification, boolean checkVersion, boolean mutateRepairStatus, boolean checkOwnsTokens, boolean quick)
         {
             this.invokeDiskFailurePolicy = invokeDiskFailurePolicy;
             this.extendedVerification = extendedVerification;
             this.checkVersion = checkVersion;
             this.mutateRepairStatus = mutateRepairStatus;
             this.checkOwnsTokens = checkOwnsTokens;
+            this.quick = quick;
         }
 
         @Override
@@ -383,6 +466,7 @@ public class Verifier implements Closeable
                    ", checkVersion=" + checkVersion +
                    ", mutateRepairStatus=" + mutateRepairStatus +
                    ", checkOwnsTokens=" + checkOwnsTokens +
+                   ", quick=" + quick +
                    '}';
         }
 
@@ -393,6 +477,7 @@ public class Verifier implements Closeable
             private boolean checkVersion = false;
             private boolean mutateRepairStatus = false; // mutating repair status can be dangerous
             private boolean checkOwnsTokens = false;
+            private boolean quick = false;
 
             public Builder invokeDiskFailurePolicy(boolean param)
             {
@@ -424,9 +509,15 @@ public class Verifier implements Closeable
                 return this;
             }
 
+            public Builder quick(boolean param)
+            {
+                this.quick = param;
+                return this;
+            }
+
             public Options build()
             {
-                return new Options(invokeDiskFailurePolicy, extendedVerification, checkVersion, mutateRepairStatus, checkOwnsTokens);
+                return new Options(invokeDiskFailurePolicy, extendedVerification, checkVersion, mutateRepairStatus, checkOwnsTokens, quick);
             }
 
         }

@@ -45,6 +45,7 @@ public class StandaloneVerifier
     private static final String HELP_OPTION  = "help";
     private static final String CHECK_VERSION = "check_version";
     private static final String MUTATE_REPAIR_STATUS = "mutate_repair_status";
+    private static final String QUICK = "quick";
 
     public static void main(String args[])
     {
@@ -143,6 +144,7 @@ public class StandaloneVerifier
         public boolean extended;
         public boolean checkVersion;
         public boolean mutateRepairStatus;
+        public boolean quick;
 
         private Options(String keyspaceName, String cfName)
         {
@@ -183,6 +185,7 @@ public class StandaloneVerifier
                 opts.extended = cmd.hasOption(EXTENDED_OPTION);
                 opts.checkVersion = cmd.hasOption(CHECK_VERSION);
                 opts.mutateRepairStatus = cmd.hasOption(MUTATE_REPAIR_STATUS);
+                opts.quick = cmd.hasOption(QUICK);
 
                 return opts;
             }
@@ -209,6 +212,7 @@ public class StandaloneVerifier
             options.addOption("h",  HELP_OPTION,           "display this help message");
             options.addOption("c",  CHECK_VERSION,         "make sure sstables are the latest version");
             options.addOption("r",  MUTATE_REPAIR_STATUS,  "don't mutate repair status");
+            options.addOption("q",  QUICK,                 "do a quick check, don't read all data");
             return options;
         }
 

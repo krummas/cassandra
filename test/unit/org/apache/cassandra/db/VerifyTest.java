@@ -291,7 +291,7 @@ public class VerifyTest
         try (RandomAccessFile file = new RandomAccessFile(sstable.descriptor.filenameFor(Component.DIGEST), "rw"))
         {
             Long correctChecksum = Long.valueOf(file.readLine());
-    
+
             writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(Component.DIGEST));
         }
 
@@ -503,6 +503,94 @@ public class VerifyTest
         catch (CorruptSSTableException e)
         {}
         assertFalse(sstable.isRepaired());
+    }
+
+    @Test
+    public void testVerifyIndex() throws IOException
+    {
+        testBrokenComponentHelper(Component.PRIMARY_INDEX);
+    }
+    @Test
+    public void testVerifyBf() throws IOException
+    {
+        testBrokenComponentHelper(Component.FILTER);
+    }
+
+    @Test
+    public void testVerifyIndexSummary() throws IOException
+    {
+        testBrokenComponentHelper(Component.SUMMARY);
+    }
+
+    private void testBrokenComponentHelper(Component componentToBreak) throws IOException
+    {
+        CompactionManager.instance.disableAutoCompaction();
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF2);
+
+        fillCF(cfs, 2);
+
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
+        try (Verifier verifier = new Verifier(cfs, sstable, false, Verifier.options().build()))
+        {
+            verifier.verify(); //still not corrupt, should pass
+        }
+        String filenameToCorrupt = sstable.descriptor.filenameFor(componentToBreak);
+        try (RandomAccessFile file = new RandomAccessFile(filenameToCorrupt, "rw"))
+        {
+            file.setLength(3);
+        }
+
+        try (Verifier verifier = new Verifier(cfs, sstable, false, Verifier.options().invokeDiskFailurePolicy(true).build()))
+        {
+            verifier.verify();
+            fail("should throw exception");
+        }
+        catch(CorruptSSTableException e)
+        {
+            //expected
+        }
+    }
+
+    @Test
+    public void testQuick() throws IOException
+    {
+        CompactionManager.instance.disableAutoCompaction();
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(CORRUPT_CF);
+
+        fillCF(cfs, 2);
+
+        Util.getAll(Util.cmd(cfs).build());
+
+        SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
+
+
+        try (RandomAccessFile file = new RandomAccessFile(sstable.descriptor.filenameFor(Component.DIGEST), "rw"))
+        {
+            Long correctChecksum = Long.valueOf(file.readLine());
+
+            writeChecksum(++correctChecksum, sstable.descriptor.filenameFor(Component.DIGEST));
+        }
+
+        try (Verifier verifier = new Verifier(cfs, sstable, false, Verifier.options().invokeDiskFailurePolicy(true).build()))
+        {
+            verifier.verify();
+            fail("Expected a CorruptSSTableException to be thrown");
+        }
+        catch (CorruptSSTableException err) {}
+
+        try (Verifier verifier = new Verifier(cfs, sstable, false, Verifier.options().invokeDiskFailurePolicy(true).quick(true).build())) // with quick = true we don't verify the digest
+        {
+            verifier.verify();
+        }
+
+        try (Verifier verifier = new Verifier(cfs, sstable, false, Verifier.options().invokeDiskFailurePolicy(true).build()))
+        {
+            verifier.verify();
+            fail("Expected a RuntimeException to be thrown");
+        }
+        catch (CorruptSSTableException err) {}
     }
 
 

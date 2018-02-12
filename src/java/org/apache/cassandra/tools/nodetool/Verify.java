@@ -58,6 +58,11 @@ public class Verify extends NodeToolCmd
             description = "Verify that all tokens in sstables are owned by this node")
     private boolean checkOwnsTokens = false;
 
+    @Option(title = "quick",
+    name = {"-q", "--quick"},
+    description = "Do a quick check - avoid reading all data to verify checksums")
+    private boolean quick = false;
+
     @Override
     public void execute(NodeProbe probe)
     {
@@ -74,7 +79,7 @@ public class Verify extends NodeToolCmd
         {
             try
             {
-                probe.verify(System.out, extendedVerify, checkVersion, diskFailurePolicy, mutateRepairStatus, checkOwnsTokens, keyspace, tableNames);
+                probe.verify(System.out, extendedVerify, checkVersion, diskFailurePolicy, mutateRepairStatus, checkOwnsTokens, quick, keyspace, tableNames);
             } catch (Exception e)
             {
                 throw new RuntimeException("Error occurred during verifying", e);
