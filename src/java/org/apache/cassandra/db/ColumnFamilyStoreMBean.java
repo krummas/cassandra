@@ -142,12 +142,16 @@ public interface ColumnFamilyStoreMBean
      */
     public List<String> getSSTablesForKey(String key, boolean hexFormat);
 
+
+
     /**
      * Scan through Keyspace/ColumnFamily's data directory
      * determine which SSTables should be loaded and load them
      */
-    public void loadNewSSTables();
+    public void loadNewSSTables(String dirPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens);
 
+    @Deprecated
+    public void loadNewSSTables();
     /**
      * @return the number of SSTables in L0.  Always return 0 if Leveled compaction is not enabled.
      */
