@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -37,7 +39,6 @@ import com.google.common.primitives.Ints;
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutor;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.dht.*;
 
@@ -190,15 +191,14 @@ public class FBUtilitiesTest
     public void testWaitFirstFuture() throws ExecutionException, InterruptedException
     {
 
-        JMXEnabledThreadPoolExecutor executor = new JMXEnabledThreadPoolExecutor("testFutures");
+        ExecutorService executor = Executors.newFixedThreadPool(4);
         FBUtilities.reset();
         List<Future<?>> futures = new ArrayList<>();
-        for (int i = 1; i < 5; i++)
+        for (int i = 4; i >= 1; i--)
         {
             final int sleep = i * 10;
             futures.add(executor.submit(() -> { TimeUnit.MILLISECONDS.sleep(sleep); return sleep; }));
         }
-
         Future<?> fut = FBUtilities.waitOnFirstFuture(futures, 3);
         int futSleep = (Integer) fut.get();
         assertEquals(futSleep, 10);

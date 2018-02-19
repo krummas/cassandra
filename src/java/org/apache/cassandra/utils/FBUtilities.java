@@ -33,6 +33,7 @@ import javax.annotation.Nullable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -384,7 +385,7 @@ public class FBUtilities
                 if (ms <= 0)
                     results.add(f.get());
                 else
-                    results.add(f.get(100, TimeUnit.MILLISECONDS));
+                    results.add(f.get(ms, TimeUnit.MILLISECONDS));
             }
             catch (Throwable t)
             {
@@ -426,23 +427,30 @@ public class FBUtilities
      * @param futures The futures to wait on
      * @return future that completed.
      */
-    public static <T> Future<? extends T> waitOnFirstFuture(Iterable<? extends Future<? extends T>> futures, long ms)
+    public static <T> Future<? extends T> waitOnFirstFuture(Iterable<? extends Future<? extends T>> futures, long delay)
     {
         while (true)
         {
             for (Future<? extends T> f : futures)
             {
-                try
+                if (f.isDone())
                 {
-                    f.get(ms, TimeUnit.MILLISECONDS);
+                    try
+                    {
+                        f.get();
+                    }
+                    catch (InterruptedException e)
+                    {
+                        throw new AssertionError(e);
+                    }
+                    catch (ExecutionException e)
+                    {
+                        throw new RuntimeException(e);
+                    }
                     return f;
                 }
-                catch (TimeoutException to) {}
-                catch (Throwable t)
-                {
-                    Throwables.maybeFail(t);
-                }
             }
+            Uninterruptibles.sleepUninterruptibly(delay, TimeUnit.MILLISECONDS);
         }
     }
     /**
