@@ -2544,4 +2544,16 @@ public class DatabaseDescriptor
     {
         return conf.block_for_peers_timeout_in_secs;
     }
+
+    public static boolean automaticSSTableUpgrade()
+    {
+        return conf.automatic_sstable_upgrade;
+    }
+
+    public static void setAutomaticSSTableUpgradeEnabled(boolean enabled)
+    {
+        if (conf.automatic_sstable_upgrade != enabled)
+            logger.debug("Changing automatic_sstable_upgrade to {}", enabled);
+        conf.automatic_sstable_upgrade = enabled;
+    }
 }

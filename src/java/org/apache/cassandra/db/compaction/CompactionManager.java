@@ -1834,6 +1834,16 @@ public class CompactionManager implements CompactionManagerMBean
         viewBuildExecutor.setMaximumPoolSize(number);
     }
 
+    public boolean getAutomaticSSTableUpgradeEnabled()
+    {
+        return DatabaseDescriptor.automaticSSTableUpgrade();
+    }
+
+    public void setAutomaticSSTableUpgradeEnabled(boolean enabled)
+    {
+        DatabaseDescriptor.setAutomaticSSTableUpgradeEnabled(enabled);
+    }
+
     /**
      * Try to stop all of the compactions for given ColumnFamilies.
      *

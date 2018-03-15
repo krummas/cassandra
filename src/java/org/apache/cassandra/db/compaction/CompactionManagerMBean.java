@@ -138,4 +138,13 @@ public interface CompactionManagerMBean
      * @param number New maximum of view build threads
      */
     public void setMaximumViewBuildThreads(int number);
+
+    /**
+     * Get automatic sstable upgrade enabled
+     */
+    public boolean getAutomaticSSTableUpgradeEnabled();
+    /**
+     * Set if automatic sstable upgrade should be enabled
+     */
+    public void setAutomaticSSTableUpgradeEnabled(boolean enabled);
 }
