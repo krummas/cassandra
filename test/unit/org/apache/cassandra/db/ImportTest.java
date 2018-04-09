@@ -32,6 +32,7 @@ import java.util.Random;
 import java.util.Set;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import org.junit.Test;
 
 import org.apache.cassandra.cache.RowCacheKey;
@@ -40,6 +41,7 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.dht.BootStrapper;
+import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -71,7 +73,7 @@ public class ImportTest extends CQLTester
 
         assertEquals(0, execute("select * from %s").size());
 
-        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, false, false);
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, false, false, false, false);
 
         assertEquals(10, execute("select * from %s").size());
     }
@@ -104,7 +106,7 @@ public class ImportTest extends CQLTester
         File backupdir = moveToBackupDir(sstables);
         assertEquals(0, execute("select * from %s").size());
 
-        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, false, false);
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, false, false, false, false);
 
         assertEquals(10, execute("select * from %s").size());
         sstables = getCurrentColumnFamilyStore().getLiveSSTables();
@@ -114,7 +116,7 @@ public class ImportTest extends CQLTester
 
         getCurrentColumnFamilyStore().clearUnsafe();
         backupdir = moveToBackupDir(sstables);
-        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), true, false, false, false);
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), true, false, false, false, false, false);
         sstables = getCurrentColumnFamilyStore().getLiveSSTables();
         assertEquals(1, sstables.size());
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
@@ -138,7 +140,7 @@ public class ImportTest extends CQLTester
 
         assertEquals(0, execute("select * from %s").size());
 
-        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, false, false);
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, false, false, false, false);
 
         assertEquals(10, execute("select * from %s").size());
         sstables = getCurrentColumnFamilyStore().getLiveSSTables();
@@ -148,7 +150,7 @@ public class ImportTest extends CQLTester
 
         getCurrentColumnFamilyStore().clearUnsafe();
         backupdir = moveToBackupDir(sstables);
-        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, true, false, false);
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, true, false, false, false, false);
         sstables = getCurrentColumnFamilyStore().getLiveSSTables();
         assertEquals(1, sstables.size());
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
@@ -159,6 +161,7 @@ public class ImportTest extends CQLTester
     {
         Path temp = Files.createTempDirectory("importtest");
         SSTableReader sst = sstables.iterator().next();
+        System.out.println("DIR: "+sst.descriptor.directory);
         String tabledir = sst.descriptor.directory.getName();
         String ksdir = sst.descriptor.directory.getParentFile().getName();
         Path backupdir = Files.createDirectories(Paths.get(temp.toString(), ksdir, tabledir));
@@ -190,32 +193,59 @@ public class ImportTest extends CQLTester
         MockCFS mock = new MockCFS(getCurrentColumnFamilyStore(), dirs);
 
         int rows = 1000;
-        Random rand = new Random(12345);
+        Random rand = new Random();
         for (int i = 0; i < rows; i++)
             execute("insert into %s (id, d) values (?, ?)", rand.nextInt(), i);
         UntypedResultSet res = execute("SELECT token(id) as t FROM %s");
         long disk1 = 0, disk2 = 0, disk3 = 0;
+        DiskBoundaries boundaries = mock.getDiskBoundaries();
         for (UntypedResultSet.Row r : res)
         {
-            long l = r.getLong("t");
-            if (l <= -3074457345618258603L)
+            Token t = new Murmur3Partitioner.LongToken(r.getLong("t"));
+            if (boundaries.positions.get(0).compareTo(t.minKeyBound()) > 0)
                 disk1++;
-            else if (l <= 3074457345618258602L)
+            else if (boundaries.positions.get(1).compareTo(t.minKeyBound()) > 0)
                 disk2++;
             else
                 disk3++;
         }
         File expected;
-        if (disk1 > disk2 && disk1 > disk3)
+        if (disk1 >= disk2 && disk1 >= disk3)
             expected = new File("/tmp/1");
-        else if (disk2 > disk1 && disk2 > disk3)
+        else if (disk2 >= disk1 && disk2 >= disk3)
             expected = new File("/tmp/2");
         else
             expected = new File("/tmp/3");
 
         getCurrentColumnFamilyStore().forceBlockingFlush();
         SSTableReader sstable = getCurrentColumnFamilyStore().getLiveSSTables().iterator().next();
-        assertEquals(expected, ColumnFamilyStore.findBestDiskAndInvalidateCaches(mock, sstable.descriptor, "/tmp/"));
+        File bestDisk = ColumnFamilyStore.findBestDiskAndInvalidateCaches(mock, sstable.descriptor, "/tmp/", false, true);
+        assertTrue(expected + " : "+ bestDisk, bestDisk.toString().startsWith(expected.toString()));
+    }
+
+    @Test
+    public void testNoCounting() throws Throwable
+    {
+        createTable("create table %s (id int primary key, d int)");
+        Directories dirs = new Directories(getCurrentColumnFamilyStore().metadata(), Lists.newArrayList(new Directories.DataDirectory(new File("/tmp/1")),
+                                                                                                        new Directories.DataDirectory(new File("/tmp/2")),
+                                                                                                        new Directories.DataDirectory(new File("/tmp/3"))));
+        for (int i = 0; i < 10; i++)
+            execute("insert into %s (id, d) values (?, ?)", i, i);
+        getCurrentColumnFamilyStore().forceBlockingFlush();
+        Set<SSTableReader> toMove = getCurrentColumnFamilyStore().getLiveSSTables();
+        getCurrentColumnFamilyStore().clearUnsafe();
+        File dir = moveToBackupDir(toMove);
+
+        MockCFS mock = new MockCFS(getCurrentColumnFamilyStore(), dirs);
+        mock.loadNewSSTables(dir.toString(), false, false, false, false, false, false);
+        assertEquals(1, mock.getLiveSSTables().size());
+        for (SSTableReader sstable : mock.getLiveSSTables())
+        {
+            String expected = new File("/tmp/").getCanonicalPath();
+            assertTrue("dir = "+sstable.descriptor.directory + " : "+expected , sstable.descriptor.directory.toString().startsWith(expected));
+            assertTrue(sstable.descriptor.directory.toString().contains(getCurrentColumnFamilyStore().metadata.id.toHexString()));
+        }
     }
 
     @Test
@@ -242,7 +272,7 @@ public class ImportTest extends CQLTester
         File backupdir = moveToBackupDir(sstables);
         try
         {
-            getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, false);
+            getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, false, false, false);
             fail("loadNewSSTables should fail!");
         }
         catch (Throwable t)
@@ -277,7 +307,7 @@ public class ImportTest extends CQLTester
         File backupdir = moveToBackupDir(sstables);
         try
         {
-            getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, true);
+            getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, true, false, false);
         }
         finally
         {
@@ -315,7 +345,7 @@ public class ImportTest extends CQLTester
             execute("insert into %s (id, d) values (?, ?)", i, i);
         getCurrentColumnFamilyStore().forceBlockingFlush();
 
-        Set<RowCacheKey> allKeys = new HashSet<>();
+        Set<RowCacheKey> allCachedKeys = new HashSet<>();
 
         // populate row cache with sstable we are keeping
         for (int i = 10; i < 20; i++)
@@ -325,20 +355,41 @@ public class ImportTest extends CQLTester
         it = CacheService.instance.rowCache.keyIterator();
         while (it.hasNext())
         {
-            allKeys.add(it.next());
+            allCachedKeys.add(it.next());
         }
-
+        assertEquals(20, CacheService.instance.rowCache.size());
         File backupdir = moveToBackupDir(Collections.singleton(sstableToImport));
-        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, true);
+        // make sure we don't wipe caches with invalidateCaches = false:
+        Set<SSTableReader> beforeFirstImport = getCurrentColumnFamilyStore().getLiveSSTables();
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, true, false, false);
+        assertEquals(20, CacheService.instance.rowCache.size());
+        Set<SSTableReader> toMove = Sets.difference(getCurrentColumnFamilyStore().getLiveSSTables(), beforeFirstImport);
+        getCurrentColumnFamilyStore().clearUnsafe();
+        // move away the sstable we just imported again:
+        backupdir = moveToBackupDir(toMove);
+        getCurrentColumnFamilyStore().loadNewSSTables(backupdir.toString(), false, false, true, true, true, false);
         assertEquals(10, CacheService.instance.rowCache.size());
         it = CacheService.instance.rowCache.keyIterator();
         while (it.hasNext())
         {
             // make sure the keys from the sstable we are importing are invalidated and that the other one is still there
             RowCacheKey rck = it.next();
-            assertTrue(allKeys.contains(rck));
+            assertTrue(allCachedKeys.contains(rck));
             assertFalse(keysToInvalidate.contains(rck));
         }
+    }
+
+    @Test
+    public void testImportCacheEnabledWithoutSrcDir() throws Throwable
+    {
+        createTable("create table %s (id int primary key, d int) WITH caching = { 'keys': 'NONE', 'rows_per_partition': 'ALL' }");
+        for (int i = 0; i < 10; i++)
+            execute("insert into %s (id, d) values (?, ?)", i, i);
+        getCurrentColumnFamilyStore().forceBlockingFlush();
+        CacheService.instance.setRowCacheCapacityInMB(1);
+        getCurrentColumnFamilyStore().clearUnsafe();
+        getCurrentColumnFamilyStore().loadNewSSTables(null, false, false, false, false, true, false);
+        assertEquals(1, getCurrentColumnFamilyStore().getLiveSSTables().size());
     }
 
     private static class MockCFS extends ColumnFamilyStore

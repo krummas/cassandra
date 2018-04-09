@@ -677,36 +677,47 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     }
 
     /**
-     * See #{@code StorageService.loadNewSSTables(String, String)} for more info
+     * See #{@code StorageService.importNewSSTables} for more info
      *
      * @param ksName The keyspace name
      * @param cfName The columnFamily name
      */
-    public static synchronized void loadNewSSTables(String ksName, String cfName, String dirPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens)
+    public static synchronized void loadNewSSTables(String ksName, String cfName, String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck)
     {
         /** ks/cf existence checks will be done by open and getCFS methods for us */
         Keyspace keyspace = Keyspace.open(ksName);
-        keyspace.getColumnFamilyStore(cfName).loadNewSSTables(dirPath, resetLevel, clearRepaired, verifySSTables, verifyTokens);
+        keyspace.getColumnFamilyStore(cfName).loadNewSSTables(srcPath, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, jbodCheck);
     }
 
 
     @Deprecated
     public synchronized void loadNewSSTables()
     {
-        loadNewSSTables(null, true, false, false, false);
+        loadNewSSTables(null, true, false, false, false, false, false);
     }
 
     /**
-     * Iterates over all keys in the sstable (desc) and invalidates the row cache
+     * Iterates over all keys in the sstable index and invalidates the row cache
      *
      * also counts the number of tokens that should be on each disk in JBOD-config to minimize the amount of data compaction
      * needs to move around
      */
     @VisibleForTesting
-    static File findBestDiskAndInvalidateCaches(ColumnFamilyStore cfs, Descriptor desc, String path) throws IOException
+    static File findBestDiskAndInvalidateCaches(ColumnFamilyStore cfs, Descriptor desc, String srcPath, boolean clearCaches, boolean jbodCheck) throws IOException
     {
         int boundaryIndex = 0;
         DiskBoundaries boundaries = cfs.getDiskBoundaries();
+        boolean shouldCountKeys = boundaries.positions != null && jbodCheck;
+        if (!cfs.isRowCacheEnabled() || !clearCaches)
+        {
+            if (srcPath == null) // user has dropped the sstables in the data directory, use it directly
+                return desc.directory;
+            if (boundaries.directories != null && boundaries.directories.size() == 1) // only a single data directory, use it without counting keys
+                return cfs.directories.getLocationForDisk(boundaries.directories.get(0));
+            if (!shouldCountKeys) // for non-random partitioners positions can be null, get the directory with the most space available
+                return cfs.directories.getWriteableLocationToLoadFile(new File(desc.baseFilename()));
+        }
+
         long count = 0;
         int maxIndex = 0;
         long maxCount = 0;
@@ -718,8 +729,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 ByteBuffer key = ByteBufferUtil.readWithShortLength(primaryIndex);
                 RowIndexEntry.Serializer.skip(primaryIndex, desc.version);
                 DecoratedKey decoratedKey = cfs.metadata().partitioner.decorateKey(key);
-                cfs.invalidateCachedPartition(decoratedKey);
-                if (boundaries.positions != null)
+                if (clearCaches)
+                    cfs.invalidateCachedPartition(decoratedKey);
+                if (shouldCountKeys)
                 {
                     while (boundaries.positions.get(boundaryIndex).compareTo(decoratedKey) < 0)
                     {
@@ -735,7 +747,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                     count++;
                 }
             }
-            if (boundaries.positions != null)
+            if (shouldCountKeys)
             {
                 if (count > maxCount)
                     maxIndex = boundaryIndex;
@@ -743,34 +755,34 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             }
         }
         File dir;
-        if (path == null)
+        if (srcPath == null)
             dir = desc.directory;
-        else if (boundaries.positions != null)
-            dir = boundaries.directories.get(maxIndex).location;
+        else if (shouldCountKeys)
+            dir = cfs.directories.getLocationForDisk(boundaries.directories.get(maxIndex));
         else
             dir = cfs.directories.getWriteableLocationToLoadFile(new File(desc.baseFilename()));
-        logger.debug("{} will get copied to {}", desc, dir);
         return dir;
     }
 
     /**
      * #{@inheritDoc}
      */
-    public synchronized void loadNewSSTables(String dirPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens)
+    public synchronized void loadNewSSTables(String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck)
     {
-        logger.info("Loading new SSTables for {}/{} from {}...", keyspace.getName(), name, dirPath);
+        logger.info("Loading new SSTables for {}/{} from {}... (resetLevel = {}, clearRepaired = {}, verifySSTables = {}, verifyTokens = {}, invalidateCaches = {}, jbodCheck = {})",
+                    keyspace.getName(), name, srcPath, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, jbodCheck);
 
         File dir = null;
-        if (dirPath != null && !dirPath.isEmpty())
+        if (srcPath != null && !srcPath.isEmpty())
         {
-            dir = new File(dirPath);
+            dir = new File(srcPath);
             if (!dir.exists())
             {
-                throw new RuntimeException(String.format("Directory %s does not exist", dirPath));
+                throw new RuntimeException(String.format("Directory %s does not exist", srcPath));
             }
-            if (!Directories.verifyFullPermissions(dir, dirPath))
+            if (!Directories.verifyFullPermissions(dir, srcPath))
             {
-                throw new RuntimeException("Insufficient permissions on directory " + dirPath);
+                throw new RuntimeException("Insufficient permissions on directory " + srcPath);
             }
         }
 
@@ -782,8 +794,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 directories.sstableLister(Directories.OnTxnErr.IGNORE).skipTemporary(true) :
                 directories.sstableLister(dir, Directories.OnTxnErr.IGNORE).skipTemporary(true);
 
-        // verify first to avoid starting to copy sstables to the data directories and then have to abort
-        if (verifySSTables)
+        // verify first to avoid starting to copy sstables to the data directories and then have to abort.
+        if (verifySSTables || verifyTokens)
         {
             for (Map.Entry<Descriptor, Set<Component>> entry : lister.list().entrySet())
             {
@@ -841,7 +853,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                           null);
                     }
                 }
-                targetDirectory = findBestDiskAndInvalidateCaches(this, descriptor, dirPath);
+                targetDirectory = findBestDiskAndInvalidateCaches(this, descriptor, srcPath, invalidateCaches, jbodCheck);
+                logger.debug("{} will get copied to {}", descriptor, targetDirectory);
             }
             catch (IOException e)
             {
@@ -849,10 +862,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 throw new RuntimeException(e);
             }
 
-            // Increment the generation until we find a filename that doesn't exist. This is needed because the new
-            // SSTables that are being loaded might already use these generation numbers.
             Descriptor newDescriptor;
-
             do
             {
                 newDescriptor = new Descriptor(descriptor.version,
@@ -861,6 +871,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                targetDirectory,
                                                descriptor.ksname,
                                                descriptor.cfname,
+                                               // Increment the generation until we find a filename that doesn't exist. This is needed because the new
+                                               // SSTables that are being loaded might already use these generation numbers.
                                                fileIndexGenerator.incrementAndGet(),
                                                descriptor.formatType);
             }
@@ -879,7 +891,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 for (SSTableReader sstable : newSSTables)
                     sstable.selfRef().release();
                 // log which sstables we have copied so far, so that the operator can remove them
-                if (dirPath != null)
+                if (srcPath != null)
                     logger.error("Aborting import of sstables. {} copied, {} was corrupt", newSSTables, newDescriptor);
                 throw new RuntimeException(newDescriptor+" is corrupt, can't import", t);
             }

@@ -32,14 +32,8 @@ import org.apache.cassandra.tools.NodeTool.NodeToolCmd;
 @Command(name = "import", description = "Import new SSTables to the system")
 public class Import extends NodeToolCmd
 {
-    @Arguments(usage = "<keyspace> <table>", description = "The keyspace and table name")
+    @Arguments(usage = "<keyspace> <table> <directory>", description = "The keyspace, table name and directory to import sstables from")
     private List<String> args = new ArrayList<>();
-
-    @Option(title = "external_directory",
-            name = {"-d", "--directory"},
-            required = true,
-            description = "Directory to load new SSTables from. SSTables are moved, so original copy is gone after refresh")
-    private String directory = null;
 
     @Option(title = "keep_level",
             name = {"-l", "--keep-level"},
@@ -61,21 +55,40 @@ public class Import extends NodeToolCmd
             description = "Don't verify that all tokens in the new sstable are owned by the current node")
     private boolean noVerifyTokens = false;
 
+    @Option(title = "no_invalidate_caches",
+            name = {"-c", "--no-invalidate-caches"},
+            description = "Don't invalidate the row cache when importing")
+    private boolean noInvalidateCaches = false;
+
+    @Option(title = "no_jbod_check",
+            name = {"-j", "--no-jbod-check"},
+            description = "Don't iterate over keys to check which data directory is best suited")
+    private boolean noJBODCheck = false;
+
+    @Option(title = "quick",
+            name = {"-q", "--quick"},
+            description = "Do a quick import without verifying sstables, clearing row cache or checking in which data directory to put the file")
+    private boolean quick = false;
+
     @Override
     public void execute(NodeProbe probe)
     {
-        checkArgument(args.size() == 2, "import requires keyspace and table name");
-        if (directory == null)
-        {
-            System.out.println("Directory (-d) is required");
-            System.exit(1);
-        }
+        checkArgument(args.size() == 3, "import requires keyspace, table name and directory");
 
         if (!noVerifyTokens && noVerify)
         {
-            System.out.println("Verify tokens requires verify sstables");
-            System.exit(1);
+            noVerifyTokens = true;
+            System.out.println("Not verifying tokens since --no-verify or -v is set");
         }
-        probe.importNewSSTables(args.get(0), args.get(1), directory, !keepLevel, !keepRepaired, !noVerify, !noVerifyTokens);
+
+        if (quick)
+        {
+            System.out.println("Doing a quick import - skipping sstable verification, row cache invalidation and JBOD checking");
+            noVerifyTokens = true;
+            noInvalidateCaches = true;
+            noVerify = true;
+            noJBODCheck = true;
+        }
+        probe.importNewSSTables(args.get(0), args.get(1), args.get(2), !keepLevel, !keepRepaired, !noVerify, !noVerifyTokens, !noInvalidateCaches, !noJBODCheck);
     }
 }

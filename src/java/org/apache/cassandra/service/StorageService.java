@@ -5194,15 +5194,15 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     @Deprecated
     public void loadNewSSTables(String ksName, String cfName)
     {
-        ColumnFamilyStore.loadNewSSTables(ksName, cfName, null, true, false, false, false);
+        ColumnFamilyStore.loadNewSSTables(ksName, cfName, null, true, false, false, false, false, false);
     }
 
     /**
      * #{@inheritDoc}
      */
-    public void importNewSSTables(String ksName, String cfName, String dirPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens)
+    public void importNewSSTables(String ksName, String cfName, String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck)
     {
-        ColumnFamilyStore.loadNewSSTables(ksName, cfName, dirPath, resetLevel, clearRepaired, verifySSTables, verifyTokens);
+        ColumnFamilyStore.loadNewSSTables(ksName, cfName, srcPath, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, jbodCheck);
     }
 
     /**

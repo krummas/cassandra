@@ -1165,9 +1165,9 @@ public class NodeProbe implements AutoCloseable
         ssProxy.loadNewSSTables(ksName, cfName);
     }
 
-    public void importNewSSTables(String ksName, String cfName, String dirPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens)
+    public void importNewSSTables(String ksName, String cfName, String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck)
     {
-        ssProxy.importNewSSTables(ksName, cfName, dirPath, resetLevel, clearRepaired, verifySSTables, verifyTokens);
+        ssProxy.importNewSSTables(ksName, cfName, srcPath, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, jbodCheck);
     }
 
     public void rebuildIndex(String ksName, String cfName, String... idxNames)
