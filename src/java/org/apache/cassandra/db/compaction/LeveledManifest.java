@@ -157,6 +157,7 @@ public class LeveledManifest
             // The add(..):ed sstable will be sent to level 0
             try
             {
+                logger.debug("Could not add sstable {} in level {} - dropping to 0", reader, reader.getSSTableLevel());
                 reader.descriptor.getMetadataSerializer().mutateLevel(reader.descriptor, 0);
                 reader.reloadSSTableMetadata();
             }
@@ -856,6 +857,14 @@ public class LeveledManifest
             sstables.addAll(generation);
         }
         return sstables;
+    }
+
+    public synchronized void newLevel(SSTableReader sstable, int oldLevel)
+    {
+        boolean removed = generations[oldLevel].remove(sstable);
+        assert removed : "Could not remove " + sstable +" from " + oldLevel;
+        add(sstable);
+        lastCompactedKeys[oldLevel] = sstable.last;
     }
 
     public static class CompactionCandidate
