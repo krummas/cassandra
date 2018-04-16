@@ -49,12 +49,6 @@ public class LeveledManifest
     private static final Logger logger = LoggerFactory.getLogger(LeveledManifest.class);
 
     /**
-     * limit the number of L0 sstables we do at once, because compaction bloom filter creation
-     * uses a pessimistic estimate of how many keys overlap (none), so we risk wasting memory
-     * or even OOMing when compacting highly overlapping sstables
-     */
-    private static final int MAX_COMPACTING_L0 = 32;
-    /**
      * If we go this many rounds without compacting
      * in the highest level, we start bringing in sstables from
      * that level into lower level compactions
@@ -163,6 +157,7 @@ public class LeveledManifest
             // The add(..):ed sstable will be sent to level 0
             try
             {
+                logger.debug("Could not add sstable {} in level {} - dropping to 0", reader, reader.getSSTableLevel());
                 reader.descriptor.getMetadataSerializer().mutateLevel(reader.descriptor, 0);
                 reader.reloadSSTableMetadata();
             }
@@ -346,12 +341,12 @@ public class LeveledManifest
         // L2: 12  [ideal: 100]
         //
         // The problem is that L0 has a much higher score (almost 250) than L1 (11), so what we'll
-        // do is compact a batch of MAX_COMPACTING_L0 sstables with all 117 L1 sstables, and put the
-        // result (say, 120 sstables) in L1. Then we'll compact the next batch of MAX_COMPACTING_L0,
+        // do is compact a batch of cfs.getMaximumCompactionThreshold() sstables with all 117 L1 sstables, and put the
+        // result (say, 120 sstables) in L1. Then we'll compact the next batch of cfs.getMaxCompactionThreshold(),
         // and so forth.  So we spend most of our i/o rewriting the L1 data with each batch.
         //
         // If we could just do *all* L0 a single time with L1, that would be ideal.  But we can't
-        // -- see the javadoc for MAX_COMPACTING_L0.
+        // since we might run out of memory
         //
         // LevelDB's way around this is to simply block writes if L0 compaction falls behind.
         // We don't have that luxury.
@@ -420,7 +415,7 @@ public class LeveledManifest
 
     private CompactionCandidate getSTCSInL0CompactionCandidate()
     {
-        if (!DatabaseDescriptor.getDisableSTCSInL0() && getLevel(0).size() > MAX_COMPACTING_L0)
+        if (!DatabaseDescriptor.getDisableSTCSInL0() && getLevel(0).size() > cfs.getMaximumCompactionThreshold())
         {
             List<SSTableReader> mostInteresting = getSSTablesForSTCS(getLevel(0));
             if (!mostInteresting.isEmpty())
@@ -693,10 +688,10 @@ public class LeveledManifest
                     remaining.remove(newCandidate);
                 }
 
-                if (candidates.size() > MAX_COMPACTING_L0)
+                if (candidates.size() > cfs.getMaximumCompactionThreshold())
                 {
                     // limit to only the MAX_COMPACTING_L0 oldest candidates
-                    candidates = new HashSet<>(ageSortedSSTables(candidates).subList(0, MAX_COMPACTING_L0));
+                    candidates = new HashSet<>(ageSortedSSTables(candidates).subList(0, cfs.getMaximumCompactionThreshold()));
                     break;
                 }
             }
@@ -818,9 +813,9 @@ public class LeveledManifest
             tasks += estimated[i];
         }
 
-        if (!DatabaseDescriptor.getDisableSTCSInL0() && getLevel(0).size() > MAX_COMPACTING_L0)
+        if (!DatabaseDescriptor.getDisableSTCSInL0() && getLevel(0).size() > cfs.getMaximumCompactionThreshold())
         {
-            int l0compactions = getLevel(0).size() / MAX_COMPACTING_L0;
+            int l0compactions = getLevel(0).size() / cfs.getMaximumCompactionThreshold();
             tasks += l0compactions;
             estimated[0] += l0compactions;
         }

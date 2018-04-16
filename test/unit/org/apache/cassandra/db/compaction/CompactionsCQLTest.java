@@ -17,14 +17,17 @@
  */
 package org.apache.cassandra.db.compaction;
 
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
@@ -245,6 +248,30 @@ public class CompactionsCQLTest extends CQLTester
         testPerCFSNeverPurgeTombstonesHelper(false);
     }
 
+    @Test
+    public void testLCSThresholdParams() throws Throwable
+    {
+        createTable("create table %s (id int, id2 int, t blob, primary key (id, id2)) with compaction = {'class':'LeveledCompactionStrategy', 'sstable_size_in_mb':'1', 'max_threshold':'1000'}");
+        ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
+        cfs.disableAutoCompaction();
+        byte [] b = new byte[100 * 1024];
+        new Random().nextBytes(b);
+        ByteBuffer value = ByteBuffer.wrap(b);
+        for (int i = 0; i < 50; i++)
+        {
+            for (int j = 0; j < 10; j++)
+            {
+                execute("insert into %s (id, id2, t) values (?, ?, ?)", i, j, value);
+            }
+            cfs.forceBlockingFlush();
+        }
+        assertEquals(50, cfs.getLiveSSTables().size());
+        LeveledCompactionStrategy lcs = (LeveledCompactionStrategy) cfs.getCompactionStrategyManager().getUnrepaired().get(0);
+        AbstractCompactionTask act = lcs.getNextBackgroundTask(0);
+        // we should be compacting all 50 sstables:
+        assertEquals(50, act.transaction.originals().size());
+        act.execute(null);
+    }
 
     public void testPerCFSNeverPurgeTombstonesHelper(boolean deletedCell) throws Throwable
     {
