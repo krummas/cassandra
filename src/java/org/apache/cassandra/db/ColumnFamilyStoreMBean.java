@@ -155,7 +155,14 @@ public interface ColumnFamilyStoreMBean
      * @param jbodCheck if the new sstables should be placed 'optimally' - count tokens and move the sstable to the directory where it has the most keys
      * @param extendedVerify if we should do an extended verify of the sstables
      */
-    public void loadNewSSTables(String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck, boolean extendedVerify);
+    public void importNewSSTables(String srcPath,
+                                  boolean resetLevel,
+                                  boolean clearRepaired,
+                                  boolean verifySSTables,
+                                  boolean verifyTokens,
+                                  boolean invalidateCaches,
+                                  boolean jbodCheck,
+                                  boolean extendedVerify);
 
     @Deprecated
     public void loadNewSSTables();

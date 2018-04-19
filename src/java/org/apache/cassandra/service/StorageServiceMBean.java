@@ -587,19 +587,6 @@ public interface StorageServiceMBean extends NotificationEmitter
     public void loadNewSSTables(String ksName, String tableName);
 
     /**
-     * Import new SSTables to the given keyspace/table
-     *
-     * @param ksName The parent keyspace name
-     * @param tableName The ColumnFamily name where SSTables belong
-     * @param srcPath The path where the SSTables will be loaded from
-     * @param resetLevel reset the level to 0 on the new sstables
-     * @param clearRepaired remove any repaired information from the new sstables
-     * @param verifyTokens verify that all tokens are owned by the node
-     * @param extendedVerify run an extended verify of the sstables to import
-     */
-    public void importNewSSTables(String ksName, String tableName, String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck, boolean extendedVerify);
-
-    /**
      * Return a List of Tokens representing a sample of keys across all ColumnFamilyStores.
      *
      * Note: this should be left as an operation, not an attribute (methods starting with "get")
