@@ -194,8 +194,40 @@ public class Verifier implements Closeable
             FileUtils.closeQuietly(validator);
         }
 
-        if ( !extended )
+        if (!extended)
+        {
+            if (options.checkOwnsTokens && !isOffline)
+            {
+                // not running extended verify,
+                try (RandomAccessReader primaryIndex = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX))))
+                {
+                    long indexSize = primaryIndex.length();
+                    List<Range<Token>> ownedRanges = Range.normalize(StorageService.instance.getLocalAndPendingRanges(cfs.metadata.keyspace));
+                    if (ownedRanges.isEmpty())
+                        return;
+                    RangeOwnHelper rangeOwnHelper = new RangeOwnHelper(ownedRanges);
+
+                    while (primaryIndex.getFilePointer() != indexSize)
+                    {
+                        ByteBuffer key = ByteBufferUtil.readWithShortLength(primaryIndex);
+                        RowIndexEntry.Serializer.skip(primaryIndex, sstable.descriptor.version);
+                        DecoratedKey decoratedKey = cfs.metadata.get().partitioner.decorateKey(key);
+                        if (!rangeOwnHelper.check(decoratedKey))
+                        {
+                            outputHandler.debug(String.format("Key %s in sstable %s not owned by local ranges %s", key, sstable, ownedRanges));
+                            markAndThrow();
+                        }
+                    }
+                }
+                catch (IOException e)
+                {
+                    outputHandler.debug(e.getMessage());
+                    markAndThrow();
+                }
+            }
             return;
+        }
+
 
         outputHandler.output("Extended Verify requested, proceeding to inspect values");
 
@@ -210,7 +242,7 @@ public class Verifier implements Closeable
             }
 
             List<Range<Token>> ownedRanges = isOffline ? Collections.emptyList() : Range.normalize(StorageService.instance.getLocalAndPendingRanges(cfs.metadata().keyspace));
-            int rangeIndex = -1;
+            RangeOwnHelper rangeOwnHelper = new RangeOwnHelper(ownedRanges);
             DecoratedKey prevKey = null;
 
             while (!dataFile.isEOF())
@@ -235,11 +267,10 @@ public class Verifier implements Closeable
 
                 if (options.checkOwnsTokens && ownedRanges.size() > 0)
                 {
-                    while (rangeIndex == -1 || !ownedRanges.get(rangeIndex).contains(key.getToken()))
+                    if (!rangeOwnHelper.check(key))
                     {
-                        rangeIndex++;
-                        if (rangeIndex > ownedRanges.size() - 1)
-                            throw new RuntimeException(String.format("Key %s in sstable %s not owned by local ranges %s", key, sstable, ownedRanges));
+                        outputHandler.debug(String.format("Key %s in sstable %s not owned by local ranges %s", key, sstable, ownedRanges));
+                        markAndThrow();
                     }
                 }
 
@@ -305,6 +336,33 @@ public class Verifier implements Closeable
         }
 
         outputHandler.output("Verify of " + sstable + " succeeded. All " + goodRows + " rows read successfully");
+    }
+
+    /**
+     * Use the fact that check(..) is called with sorted tokens - we keep a pointer in to the normalized ranges
+     * and only bump the pointer if the key given is out of range. This is done to avoid calling .contains(..) many
+     * times for each key (with vnodes for example)
+     */
+    private static class RangeOwnHelper
+    {
+        private final List<Range<Token>> normalizedRanges;
+        private int rangeIndex = -1;
+
+        public RangeOwnHelper(List<Range<Token>> normalizedRanges)
+        {
+            this.normalizedRanges = normalizedRanges;
+        }
+
+        public boolean check(DecoratedKey key)
+        {
+            while (rangeIndex == -1 || !normalizedRanges.get(rangeIndex).contains(key.getToken()))
+            {
+                rangeIndex++;
+                if (rangeIndex > normalizedRanges.size() - 1)
+                    return false;
+            }
+            return true;
+        }
     }
 
     private void deserializeIndex(SSTableReader sstable) throws IOException
