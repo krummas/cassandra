@@ -52,6 +52,7 @@ import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.metrics.CompactionMetrics;
 import org.apache.cassandra.notifications.*;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.TableMetadata;
@@ -197,8 +198,6 @@ public class CompactionStrategyManager implements INotificationConsumer
             }
             while (suppliers.hasNext() && task == null);
 
-            if (task == null)
-                task = findUpgradeSSTableTask();
             return task;
         }
         finally
@@ -211,9 +210,9 @@ public class CompactionStrategyManager implements INotificationConsumer
      * finds the oldest (by modification date) non-latest-version sstable on disk and creates an upgrade task for it
      * @return
      */
-    private AbstractCompactionTask findUpgradeSSTableTask()
+    AbstractCompactionTask findUpgradeSSTableTask()
     {
-        if (!DatabaseDescriptor.automaticSSTableUpgrade())
+        if (!isEnabled() || !DatabaseDescriptor.automaticSSTableUpgrade())
             return null;
         Set<SSTableReader> compacting = cfs.getTracker().getCompacting();
         List<SSTableReader> potentialUpgrade = cfs.getLiveSSTables()

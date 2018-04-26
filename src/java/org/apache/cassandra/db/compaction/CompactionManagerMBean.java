@@ -147,4 +147,16 @@ public interface CompactionManagerMBean
      * Set if automatic sstable upgrade should be enabled
      */
     public void setAutomaticSSTableUpgradeEnabled(boolean enabled);
+
+    /**
+     * Get the number of concurrent sstable upgrade tasks we should run
+     * when automatic sstable upgrades are enabled
+     */
+    public int getMaxConcurrentAutoUpgradeTasks();
+
+    /**
+     * Set the number of concurrent sstable upgrade tasks we should run
+     * when automatic sstable upgrades are enabled
+     */
+    public void setMaxConcurrentAutoUpgradeTasks(int value);
 }
