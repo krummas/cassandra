@@ -2576,5 +2576,7 @@ public class DatabaseDescriptor
     {
         if (value < 0)
             throw new ConfigurationException("max_concurrent_automatic_sstable_upgrades can't be negative");
+        if (value > getConcurrentCompactors())
+            logger.warn("max_concurrent_automatic_sstable_upgrades ({}) is larger than concurrent_compactors ({})", value, getConcurrentCompactors());
     }
 }
