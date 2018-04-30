@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
@@ -96,6 +95,9 @@ public class CompactionManager implements CompactionManagerMBean
     public static final String MBEAN_OBJECT_NAME = "org.apache.cassandra.db:type=CompactionManager";
     private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
     public static final CompactionManager instance;
+
+    @VisibleForTesting
+    public final AtomicInteger currentlyBackgroundUpgrading = new AtomicInteger(0);
 
     public static final int NO_GC = Integer.MIN_VALUE;
     public static final int GC_ALL = Integer.MAX_VALUE;
@@ -256,9 +258,10 @@ public class CompactionManager implements CompactionManagerMBean
         executor.shutdown();
         executor.awaitTermination(timeout, unit);
     }
-    private final AtomicInteger currentlyBackgroundUpgrading = new AtomicInteger(0);
+
     // the actual sstables to compact are not determined until we run the BCT; that way, if new sstables
     // are created between task submission and execution, we execute against the most up-to-date information
+    @VisibleForTesting
     class BackgroundCompactionCandidate implements Runnable
     {
         private final ColumnFamilyStore cfs;
@@ -302,7 +305,7 @@ public class CompactionManager implements CompactionManagerMBean
                 submitBackground(cfs);
         }
 
-        private boolean maybeRunUpgradeTask(CompactionStrategyManager strategy)
+        boolean maybeRunUpgradeTask(CompactionStrategyManager strategy)
         {
             logger.debug("Checking for upgrade tasks {}.{}", cfs.keyspace.getName(), cfs.getTableName());
             try
@@ -312,7 +315,6 @@ public class CompactionManager implements CompactionManagerMBean
                     AbstractCompactionTask upgradeTask = strategy.findUpgradeSSTableTask();
                     if (upgradeTask != null)
                     {
-                        logger.debug("Executing upgrade task {}.{}", cfs.keyspace.getName(), cfs.getTableName());
                         upgradeTask.execute(metrics);
                         return true;
                     }
@@ -325,6 +327,12 @@ public class CompactionManager implements CompactionManagerMBean
             logger.trace("No tasks available");
             return false;
         }
+    }
+
+    @VisibleForTesting
+    public BackgroundCompactionCandidate getBackgroundCompactionCandidate(ColumnFamilyStore cfs)
+    {
+        return new BackgroundCompactionCandidate(cfs);
     }
 
     /**
