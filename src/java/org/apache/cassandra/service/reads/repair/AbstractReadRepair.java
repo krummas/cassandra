@@ -117,6 +117,10 @@ public abstract class AbstractReadRepair implements ReadRepair
 
         digestRepair = new DigestRepair(resolver, readCallback, resultConsumer, contactedEndpoints);
 
+        // if enabled, request additional info about repaired data from the replicas
+        if (DatabaseDescriptor.getRepairedDataTrackingForPartitionReadsEnabled())
+            command.trackRepairedStatus();
+
         for (InetAddressAndPort endpoint : contactedEndpoints)
         {
             Tracing.trace("Enqueuing full data read to {}", endpoint);

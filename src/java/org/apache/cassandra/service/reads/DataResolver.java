@@ -34,6 +34,8 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.*;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
+import org.apache.cassandra.service.reads.repair.RepairedDataTracker;
+import org.apache.cassandra.service.reads.repair.RepairedDataVerifier;
 
 public class DataResolver extends ResponseResolver
 {
@@ -66,11 +68,21 @@ public class DataResolver extends ResponseResolver
         int count = responses.size();
         List<UnfilteredPartitionIterator> iters = new ArrayList<>(count);
         InetAddressAndPort[] sources = new InetAddressAndPort[count];
+
+        RepairedDataTracker repairedDataTracker = new RepairedDataTracker(getRepairedDataVerifier(command));
         for (int i = 0; i < count; i++)
         {
             MessageIn<ReadResponse> msg = responses.get(i);
             iters.add(msg.payload.makeIterator(command));
             sources[i] = msg.from;
+
+            // don't try and inspect repaired status from replicas which definitely didn't send it
+            if (msg.payload.mayIncludeRepairedStatusTracking())
+            {
+                repairedDataTracker.recordDigest(msg.from, msg.payload.repairedDataDigest());
+                if (msg.payload.hasPendingRepairSessions())
+                    repairedDataTracker.recordPendingSessions(msg.from);
+            }
         }
 
         /*
@@ -90,17 +102,24 @@ public class DataResolver extends ResponseResolver
         DataLimits.Counter mergedResultCounter =
             command.limits().newCounter(command.nowInSec(), true, command.selectsFullPartition(), enforceStrictLiveness);
 
-        UnfilteredPartitionIterator merged = mergeWithShortReadProtection(iters, sources, mergedResultCounter);
+        UnfilteredPartitionIterator merged = mergeWithShortReadProtection(iters, sources, mergedResultCounter, repairedDataTracker);
         FilteredPartitions filtered = FilteredPartitions.filter(merged, new Filter(command.nowInSec(), command.metadata().enforceStrictLiveness()));
         PartitionIterator counted = Transformation.apply(filtered, mergedResultCounter);
         return Transformation.apply(counted, new EmptyPartitionsDiscarder());
     }
 
+    protected RepairedDataVerifier getRepairedDataVerifier(ReadCommand command)
+    {
+        return RepairedDataVerifier.simple(command);
+    }
+
     private UnfilteredPartitionIterator mergeWithShortReadProtection(List<UnfilteredPartitionIterator> results,
                                                                      InetAddressAndPort[] sources,
-                                                                     DataLimits.Counter mergedResultCounter)
+                                                                     DataLimits.Counter mergedResultCounter,
+                                                                     RepairedDataTracker repairedDataTracker)
     {
-        // If we have only one results, there is no read repair to do and we can't get short reads
+        // If we have only one results, there is no read repair to do, we can't get short
+        // reads and we can't make a comparison between repaired data sets
         if (results.size() == 1)
             return results.get(0);
 
@@ -112,7 +131,7 @@ public class DataResolver extends ResponseResolver
             for (int i = 0; i < results.size(); i++)
                 results.set(i, ShortReadProtection.extend(sources[i], results.get(i), command, mergedResultCounter, queryStartNanoTime, enforceStrictLiveness));
 
-        return UnfilteredPartitionIterators.merge(results, wrapMergeListener(readRepair.getMergeListener(sources), sources));
+        return UnfilteredPartitionIterators.merge(results, wrapMergeListener(readRepair.getMergeListener(sources), sources, repairedDataTracker));
     }
 
     private String makeResponsesDebugString(DecoratedKey partitionKey)
@@ -120,7 +139,8 @@ public class DataResolver extends ResponseResolver
         return Joiner.on(",\n").join(Iterables.transform(getMessages(), m -> m.from + " => " + m.payload.toDebugString(command, partitionKey)));
     }
 
-    private UnfilteredPartitionIterators.MergeListener wrapMergeListener(UnfilteredPartitionIterators.MergeListener partitionListener, InetAddressAndPort[] sources)
+
+    private UnfilteredPartitionIterators.MergeListener wrapMergeListener(UnfilteredPartitionIterators.MergeListener partitionListener, InetAddressAndPort[] sources, RepairedDataTracker repairedDataDigestTracker)
     {
         return new UnfilteredPartitionIterators.MergeListener()
         {
@@ -209,6 +229,7 @@ public class DataResolver extends ResponseResolver
             public void close()
             {
                 partitionListener.close();
+                repairedDataDigestTracker.verify();
             }
         };
     }
