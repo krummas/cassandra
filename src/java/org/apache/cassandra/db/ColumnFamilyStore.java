@@ -712,7 +712,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     /**
      * #{@inheritDoc}
      */
-    public void importNewSSTables(String srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck, boolean extendedVerify)
+    public List<String> importNewSSTables(Set<String> srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck, boolean extendedVerify)
     {
         SSTableImporter.Options options = SSTableImporter.Options.options(srcPath)
                                                                  .resetLevel(resetLevel)
@@ -723,7 +723,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                  .jbodCheck(jbodCheck)
                                                                  .extendedVerify(extendedVerify).build();
 
-        sstableImporter.importNewSSTables(options);
+        return sstableImporter.importNewSSTables(options);
     }
 
     Descriptor getUniqueDescriptorFor(Descriptor descriptor, File targetDirectory)
