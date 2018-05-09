@@ -132,6 +132,8 @@ public class SSTableImporter
                 try
                 {
                     Descriptor oldDescriptor = entry.getKey();
+                    if (currentDescriptors.contains(oldDescriptor))
+                        continue;
                     File targetDir = findBestDiskAndInvalidateCaches(oldDescriptor, dir, options.invalidateCaches, options.jbodCheck);
                     Descriptor newDescriptor = cfs.getUniqueDescriptorFor(entry.getKey(), targetDir);
                     maybeMutateMetadata(entry.getKey(), options);
@@ -222,6 +224,11 @@ public class SSTableImporter
             this.newDescriptor = newDescriptor;
             this.oldDescriptor = oldDescriptor;
             this.components = components;
+        }
+
+        public String toString()
+        {
+            return String.format("%s moved to %s with components %s", oldDescriptor, newDescriptor, components);
         }
     }
 

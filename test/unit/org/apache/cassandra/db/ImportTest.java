@@ -24,6 +24,7 @@ import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -33,12 +34,14 @@ import java.util.Set;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Test;
 
 import org.apache.cassandra.cache.RowCacheKey;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.UntypedResultSet;
+import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.BootStrapper;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Token;
@@ -75,6 +78,21 @@ public class ImportTest extends CQLTester
         importer.importNewSSTables(options);
 
         assertEquals(10, execute("select * from %s").size());
+
+        removeBackupDir(backupdir);
+    }
+
+    private void removeBackupDir(File backupDir)
+    {
+        try
+        {
+            System.out.println("Removing directory "+backupDir);
+            FileUtils.deleteDirectory(backupDir);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -103,6 +121,8 @@ public class ImportTest extends CQLTester
         importer.importNewSSTables(options);
 
         assertEquals(20, execute("select * from %s").size());
+        removeBackupDir(backupdir);
+        removeBackupDir(backupdir2);
     }
 
 
@@ -156,6 +176,8 @@ public class ImportTest extends CQLTester
         assertEquals(1, sstables.size());
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
             assertEquals(0, sstable.getSSTableLevel());
+
+        removeBackupDir(backupdir);
     }
 
 
@@ -194,6 +216,8 @@ public class ImportTest extends CQLTester
         assertEquals(1, sstables.size());
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
             assertFalse(sstable.isRepaired());
+
+        removeBackupDir(backupdir);
     }
 
     private File moveToBackupDir(Set<SSTableReader> sstables) throws IOException
@@ -290,6 +314,8 @@ public class ImportTest extends CQLTester
         }
         for (SSTableReader sstable : mock.getLiveSSTables())
             sstable.selfRef().release();
+        removeBackupDir(dir);
+
     }
 
     private void testCorruptHelper(boolean verify) throws Throwable
@@ -341,6 +367,8 @@ public class ImportTest extends CQLTester
         assertEquals("Data dir should contain one file", 1, countFiles(getCurrentColumnFamilyStore().getDirectories().getDirectoryForNewSSTables()));
         assertArrayEquals("backupdir contained 2 files before import, should still contain 2 after failing to import it", beforeImport, backupdir.listFiles());
         assertEquals("backupdirCorrect contained 1 file before import, should be empty after import", 0, countFiles(backupdirCorrect));
+        removeBackupDir(backupdir);
+        removeBackupDir(backupdirCorrect);
     }
 
     private int countFiles(File dir)
@@ -399,6 +427,7 @@ public class ImportTest extends CQLTester
         {
             tmd.clearUnsafe();
         }
+        removeBackupDir(backupdir);
     }
 
     @Test
@@ -434,6 +463,7 @@ public class ImportTest extends CQLTester
         {
             tmd.clearUnsafe();
         }
+        removeBackupDir(backupdir);
     }
 
 
@@ -503,6 +533,7 @@ public class ImportTest extends CQLTester
             assertTrue(allCachedKeys.contains(rck));
             assertFalse(keysToInvalidate.contains(rck));
         }
+        removeBackupDir(backupdir);
     }
 
     @Test
@@ -548,6 +579,8 @@ public class ImportTest extends CQLTester
             execute("insert into %s (id, d) values (?, ?)", i, i);
         getCurrentColumnFamilyStore().forceBlockingFlush();
 
+        Set<SSTableReader> expectedFiles = new HashSet<>(getCurrentColumnFamilyStore().getLiveSSTables());
+
         SSTableImporter.Options options = SSTableImporter.Options.options().build();
         SSTableImporter importer = new SSTableImporter(getCurrentColumnFamilyStore());
         boolean gotException = false;
@@ -570,8 +603,15 @@ public class ImportTest extends CQLTester
             int pk = r.getInt("id");
             assertTrue("pk = "+pk, pk >= 10 && pk < 30);
         }
-
         assertEquals(20, rowCount);
+        assertEquals(expectedFiles, getCurrentColumnFamilyStore().getLiveSSTables());
+        for (SSTableReader sstable : expectedFiles)
+            assertTrue(new File(sstable.descriptor.filenameFor(Component.DATA)).exists());
+        getCurrentColumnFamilyStore().truncateBlocking();
+        LifecycleTransaction.waitForDeletions();
+        for (File f : sstableToCorrupt.descriptor.directory.listFiles()) // clean up the corrupt files which truncate does not handle
+            f.delete();
+
     }
 
     /**
@@ -612,6 +652,9 @@ public class ImportTest extends CQLTester
         assertTrue(gotException);
         assertEquals(0, execute("select * from %s").size());
         assertEquals(0, getCurrentColumnFamilyStore().getLiveSSTables().size());
+
+        removeBackupDir(backupdir);
+        removeBackupDir(backupdir2);
     }
     private static class MockCFS extends ColumnFamilyStore
     {
