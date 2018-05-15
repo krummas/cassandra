@@ -31,6 +31,7 @@ import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.OpenDataException;
 import javax.management.openmbean.TabularData;
 
+import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.metrics.TableMetrics.Sampler;
 
@@ -593,6 +594,8 @@ public interface StorageServiceMBean extends NotificationEmitter
      *
      * @param ksName The parent keyspace name
      * @param tableName The ColumnFamily name where SSTables belong
+     *
+     * @see ColumnFamilyStoreMBean#loadNewSSTables()
      */
     @Deprecated
     public void loadNewSSTables(String ksName, String tableName);

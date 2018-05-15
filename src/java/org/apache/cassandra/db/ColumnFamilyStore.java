@@ -698,7 +698,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     }
 
     @Deprecated
-    public synchronized void loadNewSSTables()
+    public void loadNewSSTables()
     {
         ImportOptions options = ImportOptions.options().resetLevel(true).build();
         importNewSSTables(options);
