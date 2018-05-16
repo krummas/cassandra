@@ -753,12 +753,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                     }
                     count++;
                 }
-                if (shouldCountKeys)
-                {
-                    if (count > maxCount)
-                        maxIndex = boundaryIndex;
-                    logger.debug("{} has {} keys in {}", desc, count, boundaries.positions.get(boundaryIndex));
-                }
+            }
+            if (shouldCountKeys)
+            {
+                if (count > maxCount)
+                    maxIndex = boundaryIndex;
+                logger.debug("{} has {} keys in {}", desc, count, boundaries.positions.get(boundaryIndex));
             }
         }
         File dir;
