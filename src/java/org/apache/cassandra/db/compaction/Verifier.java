@@ -214,7 +214,7 @@ public class Verifier implements Closeable
                 }
                 catch (Throwable t)
                 {
-                    outputHandler.debug(t.getMessage());
+                    outputHandler.warn(t.getMessage());
                     markAndThrow();
                 }
             }

@@ -71,6 +71,7 @@ import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.KeyIterator;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
@@ -729,14 +730,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         long count = 0;
         int maxIndex = 0;
         long maxCount = 0;
-        try (RandomAccessReader primaryIndex = RandomAccessReader.open(new File(desc.filenameFor(Component.PRIMARY_INDEX))))
+
+        try (KeyIterator iter = new KeyIterator(desc, cfs.metadata()))
         {
-            long indexSize = primaryIndex.length();
-            while (primaryIndex.getFilePointer() != indexSize)
+            while (iter.hasNext())
             {
-                ByteBuffer key = ByteBufferUtil.readWithShortLength(primaryIndex);
-                RowIndexEntry.Serializer.skip(primaryIndex, desc.version);
-                DecoratedKey decoratedKey = cfs.metadata().partitioner.decorateKey(key);
+                DecoratedKey decoratedKey = iter.next();
                 if (clearCaches)
                     cfs.invalidateCachedPartition(decoratedKey);
                 if (shouldCountKeys)
@@ -754,12 +753,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                     }
                     count++;
                 }
-            }
-            if (shouldCountKeys)
-            {
-                if (count > maxCount)
-                    maxIndex = boundaryIndex;
-                logger.debug("{} has {} keys in {}", desc, count, boundaries.positions.get(boundaryIndex));
+                if (shouldCountKeys)
+                {
+                    if (count > maxCount)
+                        maxIndex = boundaryIndex;
+                    logger.debug("{} has {} keys in {}", desc, count, boundaries.positions.get(boundaryIndex));
+                }
             }
         }
         File dir;
