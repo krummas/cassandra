@@ -927,12 +927,15 @@ public class TokenMetadata
                 {
                     ReplicaSet newReplicas = strategy.getAddressReplicas(allLeftMetadata, address);
                     ReplicaSet oldReplicas = strategy.getAddressReplicas(metadata, address);
-                    //We want to get rid of any ranges which the node is currently getting.
-                    newReplicas.removeReplicas(oldReplicas);
+
+                    //Filter out the things that are already replicated exactly the same
+                    //This does mean a transition like full -> transient will be pending
+                    //This is something we would like to refine later
+                    newReplicas.removeRanges(oldReplicas);
 
                     for(Replica newReplica : newReplicas)
                     {
-                        for (Replica pendingReplica: newReplica.subtractByRange(oldReplicas))
+                        for (Replica pendingReplica : newReplica.subtractByRange(oldReplicas))
                         {
                             newPendingRanges.addPendingRange(pendingReplica.getRange(), pendingReplica);
                         }
