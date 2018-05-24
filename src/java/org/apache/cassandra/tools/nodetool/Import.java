@@ -83,12 +83,6 @@ public class Import extends NodeToolCmd
     {
         checkArgument(args.size() >= 3, "import requires keyspace, table name and directories");
 
-        if (!noVerifyTokens && noVerify)
-        {
-            noVerifyTokens = true;
-            System.out.println("Not verifying tokens since --no-verify or -v is set");
-        }
-
         if (quick)
         {
             System.out.println("Doing a quick import - skipping sstable verification, row cache invalidation and JBOD checking");

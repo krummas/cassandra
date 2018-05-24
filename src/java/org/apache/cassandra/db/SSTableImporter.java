@@ -96,7 +96,7 @@ public class SSTableImporter
                     {
                         try
                         {
-                            verifySSTableForImport(descriptor, entry.getValue(), options.verifyTokens, options.extendedVerify);
+                            verifySSTableForImport(descriptor, entry.getValue(), options.verifyTokens, options.verifySSTables, options.extendedVerify);
                         }
                         catch (Throwable t)
                         {
@@ -318,8 +318,11 @@ public class SSTableImporter
     /**
      * Verify an sstable for import, throws exception if there is a failure verifying.
      *
+     * @param verifyTokens to verify that the tokens are owned by the current node
+     * @param verifySSTables to verify the sstables given. If this is false a "quick" verification will be run, just deserializing metadata
+     * @param extendedVerify to validate the values in the sstables
      */
-    private void verifySSTableForImport(Descriptor descriptor, Set<Component> components, boolean verifyTokens, boolean extendedVerify)
+    private void verifySSTableForImport(Descriptor descriptor, Set<Component> components, boolean verifyTokens, boolean verifySSTables, boolean extendedVerify)
     {
         SSTableReader reader = null;
         try
@@ -328,6 +331,7 @@ public class SSTableImporter
             Verifier.Options verifierOptions = Verifier.options()
                                                        .extendedVerification(extendedVerify)
                                                        .checkOwnsTokens(verifyTokens)
+                                                       .quick(!verifySSTables)
                                                        .invokeDiskFailurePolicy(false)
                                                        .mutateRepairStatus(false).build();
             try (Verifier verifier = new Verifier(cfs, reader, false, verifierOptions))

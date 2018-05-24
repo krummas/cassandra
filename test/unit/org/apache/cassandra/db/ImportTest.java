@@ -412,6 +412,19 @@ public class ImportTest extends CQLTester
             SSTableImporter importer = new SSTableImporter(getCurrentColumnFamilyStore());
             List<String> failed = importer.importNewSSTables(options);
             assertEquals(Collections.singletonList(backupdir.toString()), failed);
+
+            // verify that we check the tokens if verifySSTables == false but verifyTokens == true:
+            options = SSTableImporter.Options.options(backupdir.toString()).verifySSTables(false).verifyTokens(true).build();
+            importer = new SSTableImporter(getCurrentColumnFamilyStore());
+            failed = importer.importNewSSTables(options);
+            assertEquals(Collections.singletonList(backupdir.toString()), failed);
+
+            // and that we can import with it disabled:
+            options = SSTableImporter.Options.options(backupdir.toString()).verifySSTables(true).verifyTokens(false).build();
+            importer = new SSTableImporter(getCurrentColumnFamilyStore());
+            failed = importer.importNewSSTables(options);
+            assertTrue(failed.isEmpty());
+
         }
         finally
         {
