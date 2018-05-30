@@ -70,7 +70,19 @@ public class SingleSSTableLCSTaskTest extends CQLTester
     @Test
     public void compactionTest() throws Throwable
     {
-        createTable("create table %s (id int, id2 int, t blob, primary key (id, id2)) with compaction = {'class':'LeveledCompactionStrategy', 'single_sstable_uplevel':true, 'sstable_size_in_mb':'1', 'max_threshold':'1000'}");
+        compactionTestHelper(true);
+    }
+
+    @Test
+    public void uplevelDisabledTest() throws Throwable
+    {
+        compactionTestHelper(false);
+    }
+
+    private void compactionTestHelper(boolean singleSSTUplevel) throws Throwable
+    {
+        createTable("create table %s (id int, id2 int, t blob, primary key (id, id2))" +
+                    "with compaction = {'class':'LeveledCompactionStrategy', 'single_sstable_uplevel':"+singleSSTUplevel+", 'sstable_size_in_mb':'1', 'max_threshold':'1000'}");
         ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
         cfs.disableAutoCompaction();
         byte [] b = new byte[10 * 1024];
@@ -91,11 +103,11 @@ public class SingleSSTableLCSTaskTest extends CQLTester
         act.execute(null);
 
         // now all sstables are laid out non-overlapping in L1, this means that the rest of the compactions
-        // will be single sstable ones:
+        // will be single sstable ones, make sure that we use SingleSSTableLCSTask if singleSSTUplevel is true:
         while (lcs.getEstimatedRemainingTasks() > 0)
         {
             act = lcs.getNextBackgroundTask(0);
-            assertTrue(act instanceof SingleSSTableLCSTask);
+            assertEquals(singleSSTUplevel, act instanceof SingleSSTableLCSTask);
             act.execute(null);
         }
         assertEquals(0, lcs.getLevelSize(0));

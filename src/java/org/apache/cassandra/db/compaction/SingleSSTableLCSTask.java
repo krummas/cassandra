@@ -32,6 +32,11 @@ import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 
+/**
+ * Special compaction task that does not do any compaction, instead it
+ * just mutates the level metadata on the sstable and notifies the compaction
+ * strategy.
+ */
 public class SingleSSTableLCSTask extends AbstractCompactionTask
 {
     private static final Logger logger = LoggerFactory.getLogger(SingleSSTableLCSTask.class);

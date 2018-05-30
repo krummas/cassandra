@@ -162,7 +162,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
             if (txn != null)
             {
                 AbstractCompactionTask newTask;
-                if (txn.originals().size() > 1 || op == OperationType.TOMBSTONE_COMPACTION || !singleSSTableUplevel)
+                if (!singleSSTableUplevel || op == OperationType.TOMBSTONE_COMPACTION || txn.originals().size() > 1)
                     newTask = new LeveledCompactionTask(cfs, txn, candidate.level, gcBefore, candidate.maxSSTableBytes, false);
                 else
                     newTask = new SingleSSTableLCSTask(cfs, txn, candidate.level);
