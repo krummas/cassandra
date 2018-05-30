@@ -51,6 +51,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -240,71 +241,36 @@ public class ImportTest extends CQLTester
     }
 
     @Test
-    public void testBestDisk() throws Throwable
+    public void testGetCorrectDirectory() throws Throwable
     {
+        TokenMetadata metadata = StorageService.instance.getTokenMetadata();
+        metadata.updateNormalTokens(BootStrapper.getRandomTokens(metadata, 10), FBUtilities.getBroadcastAddressAndPort());
         createTable("create table %s (id int primary key, d int)");
-        TokenMetadata tmd = StorageService.instance.getTokenMetadata();
-        tmd.updateNormalTokens(BootStrapper.getRandomTokens(tmd, 1), InetAddressAndPort.getByName("127.0.0.1"));
-        Directories dirs = new Directories(getCurrentColumnFamilyStore().metadata(), Lists.newArrayList(new Directories.DataDirectory(new File("/tmp/1")),
-                                                                                                        new Directories.DataDirectory(new File("/tmp/2")),
-                                                                                                        new Directories.DataDirectory(new File("/tmp/3"))));
-        MockCFS mock = new MockCFS(getCurrentColumnFamilyStore(), dirs);
+        getCurrentColumnFamilyStore().disableAutoCompaction();
 
-        int rows = 1000;
-        Random rand = new Random();
-        for (int i = 0; i < rows; i++)
-            execute("insert into %s (id, d) values (?, ?)", rand.nextInt(), i);
-        UntypedResultSet res = execute("SELECT token(id) as t FROM %s");
-        long disk1 = 0, disk2 = 0, disk3 = 0;
-        DiskBoundaries boundaries = mock.getDiskBoundaries();
-        for (UntypedResultSet.Row r : res)
-        {
-            Token t = new Murmur3Partitioner.LongToken(r.getLong("t"));
-            if (boundaries.positions.get(0).compareTo(t.minKeyBound()) > 0)
-                disk1++;
-            else if (boundaries.positions.get(1).compareTo(t.minKeyBound()) > 0)
-                disk2++;
-            else
-                disk3++;
-        }
-        File expected;
-        if (disk1 >= disk2 && disk1 >= disk3)
-            expected = new File("/tmp/1");
-        else if (disk2 >= disk1 && disk2 >= disk3)
-            expected = new File("/tmp/2");
-        else
-            expected = new File("/tmp/3");
-
-        getCurrentColumnFamilyStore().forceBlockingFlush();
-        SSTableReader sstable = getCurrentColumnFamilyStore().getLiveSSTables().iterator().next();
-        SSTableImporter importer = new SSTableImporter(mock);
-        File bestDisk = importer.findBestDiskAndInvalidateCaches(sstable.descriptor, "/tmp/", false, true);
-        assertTrue(expected + " : "+ bestDisk, bestDisk.toString().startsWith(expected.toString()));
-    }
-
-    @Test
-    public void testNoCounting() throws Throwable
-    {
-        createTable("create table %s (id int primary key, d int)");
-        Directories dirs = new Directories(getCurrentColumnFamilyStore().metadata(), Lists.newArrayList(new Directories.DataDirectory(new File("/tmp/1")),
-                                                                                                        new Directories.DataDirectory(new File("/tmp/2")),
-                                                                                                        new Directories.DataDirectory(new File("/tmp/3"))));
+        // generate sstables with different first tokens
         for (int i = 0; i < 10; i++)
+        {
             execute("insert into %s (id, d) values (?, ?)", i, i);
-        getCurrentColumnFamilyStore().forceBlockingFlush();
+            getCurrentColumnFamilyStore().forceBlockingFlush();
+        }
+
         Set<SSTableReader> toMove = getCurrentColumnFamilyStore().getLiveSSTables();
         getCurrentColumnFamilyStore().clearUnsafe();
         File dir = moveToBackupDir(toMove);
 
+        Directories dirs = new Directories(getCurrentColumnFamilyStore().metadata(), Lists.newArrayList(new Directories.DataDirectory(new File("/tmp/1")),
+                                                                                                        new Directories.DataDirectory(new File("/tmp/2")),
+                                                                                                        new Directories.DataDirectory(new File("/tmp/3"))));
         MockCFS mock = new MockCFS(getCurrentColumnFamilyStore(), dirs);
         SSTableImporter importer = new SSTableImporter(mock);
+
         importer.importNewSSTables(SSTableImporter.Options.options(dir.toString()).build());
-        assertEquals(1, mock.getLiveSSTables().size());
         for (SSTableReader sstable : mock.getLiveSSTables())
         {
-            String expected = new File("/tmp/").getCanonicalPath();
-            assertTrue("dir = "+sstable.descriptor.directory + " : "+expected , sstable.descriptor.directory.toString().startsWith(expected));
-            assertTrue(sstable.descriptor.directory.toString().contains(getCurrentColumnFamilyStore().metadata.id.toHexString()));
+            File movedDir = sstable.descriptor.directory.getCanonicalFile();
+            File correctDir = mock.getDiskBoundaries().getCorrectDiskForSSTable(sstable).location.getCanonicalFile();
+            assertTrue(movedDir.toString().startsWith(correctDir.toString()));
         }
         for (SSTableReader sstable : mock.getLiveSSTables())
             sstable.selfRef().release();

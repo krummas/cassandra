@@ -134,7 +134,9 @@ public class SSTableImporter
                     Descriptor oldDescriptor = entry.getKey();
                     if (currentDescriptors.contains(oldDescriptor))
                         continue;
-                    File targetDir = findBestDiskAndInvalidateCaches(oldDescriptor, dir, options.invalidateCaches, options.jbodCheck);
+                    if (options.invalidateCaches && cfs.isRowCacheEnabled())
+                        invalidateCachesForSSTable(oldDescriptor);
+                    File targetDir = getTargetDirectory(dir, oldDescriptor, entry.getValue());
                     Descriptor newDescriptor = cfs.getUniqueDescriptorFor(entry.getKey(), targetDir);
                     maybeMutateMetadata(entry.getKey(), options);
                     movedSSTables.add(new MovedSSTable(newDescriptor, entry.getKey(), entry.getValue()));
@@ -178,6 +180,34 @@ public class SSTableImporter
 
         logger.info("Done loading load new SSTables for {}/{}", cfs.keyspace.getName(), cfs.getTableName());
         return failedDirectories;
+    }
+
+    /**
+     * Opens the sstablereader described by descriptor and figures out the correct directory for it based
+     * on the first token
+     *
+     * srcPath == null means that the sstable is in a data directory and we can use that directly.
+     *
+     * If we fail figuring out the directory we will pick the one with the most available disk space.
+     */
+    private File getTargetDirectory(String srcPath, Descriptor descriptor, Set<Component> components)
+    {
+        if (srcPath == null)
+            return descriptor.directory;
+
+        File targetDirectory = null;
+        SSTableReader sstable = null;
+        try
+        {
+            sstable = SSTableReader.open(descriptor, components, cfs.metadata);
+            targetDirectory = cfs.getDirectories().getLocationForDisk(cfs.diskBoundaryManager.getDiskBoundaries(cfs).getCorrectDiskForSSTable(sstable));
+        }
+        finally
+        {
+            if (sstable != null)
+                sstable.selfRef().release();
+        }
+        return targetDirectory == null ? cfs.getDirectories().getWriteableLocationToLoadFile(new File(descriptor.baseFilename())) : targetDirectory;
     }
 
     /**
@@ -251,68 +281,18 @@ public class SSTableImporter
 
     /**
      * Iterates over all keys in the sstable index and invalidates the row cache
-     *
-     * also counts the number of tokens that should be on each disk in JBOD-config to minimize the amount of data compaction
-     * needs to move around
      */
     @VisibleForTesting
-    File findBestDiskAndInvalidateCaches(Descriptor desc, String srcPath, boolean clearCaches, boolean jbodCheck) throws IOException
+    void invalidateCachesForSSTable(Descriptor desc)
     {
-        int boundaryIndex = 0;
-        DiskBoundaries boundaries = cfs.getDiskBoundaries();
-        boolean shouldCountKeys = boundaries.positions != null && jbodCheck;
-        if (!cfs.isRowCacheEnabled() || !clearCaches)
-        {
-            if (srcPath == null) // user has dropped the sstables in the data directory, use it directly
-                return desc.directory;
-            if (boundaries.directories != null && boundaries.directories.size() == 1) // only a single data directory, use it without counting keys
-                return cfs.getDirectories().getLocationForDisk(boundaries.directories.get(0));
-            if (!shouldCountKeys) // for non-random partitioners positions can be null, get the directory with the most space available
-                return cfs.getDirectories().getWriteableLocationToLoadFile(new File(desc.baseFilename()));
-        }
-
-        long count = 0;
-        int maxIndex = 0;
-        long maxCount = 0;
-
         try (KeyIterator iter = new KeyIterator(desc, cfs.metadata()))
         {
             while (iter.hasNext())
             {
                 DecoratedKey decoratedKey = iter.next();
-                if (clearCaches)
-                    cfs.invalidateCachedPartition(decoratedKey);
-                if (shouldCountKeys)
-                {
-                    while (boundaries.positions.get(boundaryIndex).compareTo(decoratedKey) < 0)
-                    {
-                        logger.debug("{} has {} keys in {}", desc, count, boundaries.positions.get(boundaryIndex));
-                        if (count > maxCount)
-                        {
-                            maxIndex = boundaryIndex;
-                            maxCount = count;
-                        }
-                        boundaryIndex++;
-                        count = 0;
-                    }
-                    count++;
-                }
-            }
-            if (shouldCountKeys)
-            {
-                if (count > maxCount)
-                    maxIndex = boundaryIndex;
-                logger.debug("{} has {} keys in {}", desc, count, boundaries.positions.get(boundaryIndex));
+                cfs.invalidateCachedPartition(decoratedKey);
             }
         }
-        File dir;
-        if (srcPath == null)
-            dir = desc.directory;
-        else if (shouldCountKeys)
-            dir = cfs.getDirectories().getLocationForDisk(boundaries.directories.get(maxIndex));
-        else
-            dir = cfs.getDirectories().getWriteableLocationToLoadFile(new File(desc.baseFilename()));
-        return dir;
     }
 
     /**
@@ -409,10 +389,9 @@ public class SSTableImporter
         private final boolean verifySSTables;
         private final boolean verifyTokens;
         private final boolean invalidateCaches;
-        private final boolean jbodCheck;
         private final boolean extendedVerify;
 
-        public Options(Set<String> srcPaths, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck, boolean extendedVerify)
+        public Options(Set<String> srcPaths, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean extendedVerify)
         {
             this.srcPaths = srcPaths;
             this.resetLevel = resetLevel;
@@ -420,7 +399,6 @@ public class SSTableImporter
             this.verifySSTables = verifySSTables;
             this.verifyTokens = verifyTokens;
             this.invalidateCaches = invalidateCaches;
-            this.jbodCheck = jbodCheck;
             this.extendedVerify = extendedVerify;
         }
 
@@ -449,7 +427,6 @@ public class SSTableImporter
                    ", verifySSTables=" + verifySSTables +
                    ", verifyTokens=" + verifyTokens +
                    ", invalidateCaches=" + invalidateCaches +
-                   ", jbodCheck = "+ jbodCheck +
                    ", extendedVerify=" + extendedVerify +
                    '}';
         }
@@ -462,7 +439,6 @@ public class SSTableImporter
             private boolean verifySSTables = false;
             private boolean verifyTokens = false;
             private boolean invalidateCaches = false;
-            private boolean jbodCheck = false;
             private boolean extendedVerify = false;
 
             private Builder(Set<String> srcPath)
@@ -501,12 +477,6 @@ public class SSTableImporter
                 return this;
             }
 
-            public Builder jbodCheck(boolean value)
-            {
-                jbodCheck = value;
-                return this;
-            }
-
             public Builder extendedVerify(boolean value)
             {
                 extendedVerify = value;
@@ -515,7 +485,7 @@ public class SSTableImporter
 
             public Options build()
             {
-                return new Options(srcPaths, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, jbodCheck, extendedVerify);
+                return new Options(srcPaths, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, extendedVerify);
             }
         }
     }

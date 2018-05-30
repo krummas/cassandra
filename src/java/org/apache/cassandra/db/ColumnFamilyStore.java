@@ -712,7 +712,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     /**
      * #{@inheritDoc}
      */
-    public List<String> importNewSSTables(Set<String> srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean jbodCheck, boolean extendedVerify)
+    public List<String> importNewSSTables(Set<String> srcPath, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean extendedVerify)
     {
         SSTableImporter.Options options = SSTableImporter.Options.options(srcPath)
                                                                  .resetLevel(resetLevel)
@@ -720,7 +720,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                  .verifySSTables(verifySSTables)
                                                                  .verifyTokens(verifyTokens)
                                                                  .invalidateCaches(invalidateCaches)
-                                                                 .jbodCheck(jbodCheck)
                                                                  .extendedVerify(extendedVerify).build();
 
         return sstableImporter.importNewSSTables(options);

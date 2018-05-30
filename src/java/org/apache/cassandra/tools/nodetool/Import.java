@@ -63,11 +63,6 @@ public class Import extends NodeToolCmd
             description = "Don't invalidate the row cache when importing")
     private boolean noInvalidateCaches = false;
 
-    @Option(title = "no_jbod_check",
-            name = {"-j", "--no-jbod-check"},
-            description = "Don't iterate over keys to check which data directory is best suited")
-    private boolean noJBODCheck = false;
-
     @Option(title = "quick",
             name = {"-q", "--quick"},
             description = "Do a quick import without verifying sstables, clearing row cache or checking in which data directory to put the file")
@@ -85,15 +80,14 @@ public class Import extends NodeToolCmd
 
         if (quick)
         {
-            System.out.println("Doing a quick import - skipping sstable verification, row cache invalidation and JBOD checking");
+            System.out.println("Doing a quick import - skipping sstable verification and row cache invalidation");
             noVerifyTokens = true;
             noInvalidateCaches = true;
             noVerify = true;
-            noJBODCheck = true;
             extendedVerify = false;
         }
         List<String> srcPaths = Lists.newArrayList(args.subList(2, args.size()));
-        List<String> failedDirs = probe.importNewSSTables(args.get(0), args.get(1), new HashSet<>(srcPaths), !keepLevel, !keepRepaired, !noVerify, !noVerifyTokens, !noInvalidateCaches, !noJBODCheck, extendedVerify);
+        List<String> failedDirs = probe.importNewSSTables(args.get(0), args.get(1), new HashSet<>(srcPaths), !keepLevel, !keepRepaired, !noVerify, !noVerifyTokens, !noInvalidateCaches, extendedVerify);
         if (!failedDirs.isEmpty())
         {
             System.err.println("Some directories failed to import, check server logs for details:");

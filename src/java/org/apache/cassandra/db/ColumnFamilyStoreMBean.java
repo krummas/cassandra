@@ -163,7 +163,6 @@ public interface ColumnFamilyStoreMBean
                                           boolean verifySSTables,
                                           boolean verifyTokens,
                                           boolean invalidateCaches,
-                                          boolean jbodCheck,
                                           boolean extendedVerify);
 
     @Deprecated
