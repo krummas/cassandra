@@ -140,7 +140,7 @@ public class SSTableImporter
                     Descriptor newDescriptor = cfs.getUniqueDescriptorFor(entry.getKey(), targetDir);
                     maybeMutateMetadata(entry.getKey(), options);
                     movedSSTables.add(new MovedSSTable(newDescriptor, entry.getKey(), entry.getValue()));
-                    SSTableReader sstable = moveAndOpenSSTable(entry.getKey(), newDescriptor, entry.getValue());
+                    SSTableReader sstable = SSTableReader.moveAndOpenSSTable(cfs, entry.getKey(), newDescriptor, entry.getValue());
                     newSSTablesPerDirectory.add(sstable);
                 }
                 catch (Throwable t)
@@ -350,36 +350,6 @@ public class SSTableImporter
             }
         }
     }
-
-    /**
-     * Moves the sstable in oldDescriptor to its new place (with generation etc) in newDescriptor.
-     *
-     * All components given will be moved/renamed
-     */
-    private SSTableReader moveAndOpenSSTable(Descriptor oldDescriptor, Descriptor newDescriptor, Set<Component> components)
-    {
-        if (!oldDescriptor.isCompatible())
-            throw new RuntimeException(String.format("Can't open incompatible SSTable! Current version %s, found file: %s",
-                                                     oldDescriptor.getFormat().getLatestVersion(),
-                                                     oldDescriptor));
-
-        logger.info("Renaming new SSTable {} to {}", oldDescriptor, newDescriptor);
-        SSTableWriter.rename(oldDescriptor, newDescriptor, components);
-
-        SSTableReader reader;
-        try
-        {
-            reader = SSTableReader.open(newDescriptor, components, cfs.metadata);
-        }
-        catch (Throwable t)
-        {
-            logger.error("Aborting import of sstables. {} was corrupt", newDescriptor);
-            throw new RuntimeException(newDescriptor + " is corrupt, can't import", t);
-        }
-        return reader;
-    }
-
-
 
     public static class Options
     {

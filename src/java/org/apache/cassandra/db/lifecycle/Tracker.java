@@ -240,7 +240,6 @@ public class Tracker
             });
 
             Set<SSTableReader> removed = Sets.difference(result.left.sstables, result.right.sstables);
-
             assert Iterables.all(removed, remove);
 
             // It is important that any method accepting/returning a Throwable never throws an exception, and does its best
