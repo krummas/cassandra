@@ -2433,8 +2433,9 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
                                                      oldDescriptor.getFormat().getLatestVersion(),
                                                      oldDescriptor));
 
-        Set<Descriptor> currentDescriptors = cfs.getLiveSSTables().stream().map(s -> s.descriptor).collect(Collectors.toSet());
-        if (currentDescriptors.contains(oldDescriptor) || currentDescriptors.contains(newDescriptor))
+        boolean isLive = cfs.getLiveSSTables().stream().anyMatch(r -> r.descriptor.equals(newDescriptor)
+                                                                      || r.descriptor.equals(oldDescriptor));
+        if (isLive)
         {
             String message = String.format("Can't move and open a file that is already in use in the table %s -> %s", oldDescriptor, newDescriptor);
             logger.error(message);
