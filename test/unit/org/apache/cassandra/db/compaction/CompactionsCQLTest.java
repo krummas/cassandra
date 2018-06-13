@@ -494,51 +494,6 @@ public class CompactionsCQLTest extends CQLTester
         assertTombstones(getCurrentColumnFamilyStore().getLiveSSTables().iterator().next(), false);
         getCurrentColumnFamilyStore().truncateBlocking();
     }
-    @Test
-    public void testAbortWidePartitions() throws Throwable
-    {
-        createTable("create table %s (id int, id2 int, t text, primary key (id, id2))");
-        for (int i = 0; i < 10000; i++)
-        {
-            execute("insert into %s (id, id2, t) values (?,?,?)", 1, i, "hello");
-        }
-        getCurrentColumnFamilyStore().forceBlockingFlush();
-        // measure the expected compaction time to be able to abort before it finishes below;
-        getCurrentColumnFamilyStore().forceMajorCompaction();
-        long start = System.currentTimeMillis();
-        getCurrentColumnFamilyStore().forceMajorCompaction();
-        long compactionTime = System.currentTimeMillis() - start;
-        AtomicBoolean gotCIE = new AtomicBoolean(false);
-        Thread t = new Thread(() -> {
-            try
-            {
-                getCurrentColumnFamilyStore().forceMajorCompaction();
-            }
-            catch (Throwable th)
-            {
-                Throwable cause = th.getCause();
-                while (cause != null)
-                {
-                    if (cause instanceof CompactionInterruptedException)
-                    {
-                        gotCIE.set(true);
-                        break;
-                    }
-                    cause = cause.getCause();
-                }
-            }
-        });
-        t.start();
-        long timeToAbort = compactionTime / 4;
-        start = System.currentTimeMillis();
-        Thread.sleep(timeToAbort);
-        CompactionManager.instance.stopCompaction("COMPACTION");
-        t.join();
-        long abortedTimeElapsed = System.currentTimeMillis() - start;
-        // shitty assert begging to be flaky due to gc pauses etc:
-        assertTrue(abortedTimeElapsed + " < " + (timeToAbort * 3), abortedTimeElapsed < (timeToAbort * 3));
-        assertTrue(gotCIE.get());
-    }
 
     private void assertSuspectAndReset(Collection<SSTableReader> sstables)
     {
