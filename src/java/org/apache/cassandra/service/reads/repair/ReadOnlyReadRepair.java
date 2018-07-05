@@ -27,7 +27,10 @@ import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.locator.Replica;
+import org.apache.cassandra.locator.ReplicaList;
 import org.apache.cassandra.metrics.ReadRepairMetrics;
+import org.apache.cassandra.service.ReplicaPlan;
 
 /**
  * Only performs the collection of data responses and reconciliation of them, doesn't send repair mutations
@@ -35,13 +38,13 @@ import org.apache.cassandra.metrics.ReadRepairMetrics;
  */
 public class ReadOnlyReadRepair extends AbstractReadRepair
 {
-    public ReadOnlyReadRepair(ReadCommand command, long queryStartNanoTime, ConsistencyLevel consistency)
+    public ReadOnlyReadRepair(ReadCommand command, ReplicaPlan replicaPlan, long queryStartNanoTime)
     {
-        super(command, queryStartNanoTime, consistency);
+        super(command, replicaPlan, queryStartNanoTime);
     }
 
     @Override
-    public UnfilteredPartitionIterators.MergeListener getMergeListener(InetAddressAndPort[] endpoints)
+    public UnfilteredPartitionIterators.MergeListener getMergeListener(ReplicaList replicas)
     {
         return UnfilteredPartitionIterators.MergeListener.NOOP;
     }
@@ -59,7 +62,7 @@ public class ReadOnlyReadRepair extends AbstractReadRepair
     }
 
     @Override
-    public void repairPartition(DecoratedKey key, Map<InetAddressAndPort, Mutation> mutations, InetAddressAndPort[] destinations)
+    public void repairPartition(Map<Replica, Mutation> mutations, ReplicaList targets)
     {
         throw new UnsupportedOperationException("ReadOnlyReadRepair shouldn't be trying to repair partitions");
     }

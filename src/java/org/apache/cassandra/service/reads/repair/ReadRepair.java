@@ -17,44 +17,38 @@
  */
 package org.apache.cassandra.service.reads.repair;
 
-import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import org.apache.cassandra.db.ConsistencyLevel;
-import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
-import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.locator.Replica;
+import org.apache.cassandra.locator.ReplicaList;
+import org.apache.cassandra.service.ReplicaPlan;
 import org.apache.cassandra.service.reads.DigestResolver;
 
 public interface ReadRepair
 {
     public interface Factory
     {
-        ReadRepair create(ReadCommand command, long queryStartNanoTime, ConsistencyLevel consistency);
+        ReadRepair create(ReadCommand command, ReplicaPlan replicaPlan, long queryStartNanoTime);
     }
 
     /**
      * Used by DataResolver to generate corrections as the partition iterator is consumed
      */
-    UnfilteredPartitionIterators.MergeListener getMergeListener(InetAddressAndPort[] endpoints);
+    UnfilteredPartitionIterators.MergeListener getMergeListener(ReplicaList replicas);
 
     /**
      * Called when the digests from the initial read don't match. Reads may block on the
      * repair started by this method.
      * @param digestResolver supplied so we can get the original data response
-     * @param allEndpoints all available replicas for this read
-     * @param contactedEndpoints the replicas we actually sent requests to
      * @param resultConsumer hook for the repair to set it's result on completion
      */
-    public void startRepair(DigestResolver digestResolver,
-                            List<InetAddressAndPort> allEndpoints,
-                            List<InetAddressAndPort> contactedEndpoints,
-                            Consumer<PartitionIterator> resultConsumer);
+    public void startRepair(DigestResolver digestResolver, Consumer<PartitionIterator> resultConsumer);
 
     /**
      * Block on the reads (or timeout) sent out in {@link ReadRepair#startRepair}
@@ -81,17 +75,18 @@ public interface ReadRepair
     public void maybeSendAdditionalWrites();
 
     /**
-     * Hook for the merge listener to start repairs on individual partitions.
-     */
-    void repairPartition(DecoratedKey key, Map<InetAddressAndPort, Mutation> mutations, InetAddressAndPort[] destinations);
-
-    /**
      * Block on any mutations (or timeout) we sent out to repair replicas in {@link ReadRepair#repairPartition}
      */
     public void awaitWrites();
 
-    static ReadRepair create(ReadCommand command, long queryStartNanoTime, ConsistencyLevel consistency)
+    /**
+     * Repairs a partition _after_ receiving data responses. This method receives replica list, since
+     * we will block repair only on the replicas that have responded.
+     */
+    void repairPartition(Map<Replica, Mutation> mutations, ReplicaList targets);
+
+    static ReadRepair create(ReadCommand command, ReplicaPlan replicaPlan, long queryStartNanoTime)
     {
-        return command.metadata().params.readRepair.create(command, queryStartNanoTime, consistency);
+        return command.metadata().params.readRepair.create(command, replicaPlan, queryStartNanoTime);
     }
 }

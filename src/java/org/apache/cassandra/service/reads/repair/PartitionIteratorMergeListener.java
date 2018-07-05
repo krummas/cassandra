@@ -28,16 +28,16 @@ import org.apache.cassandra.db.RegularAndStaticColumns;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
-import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.locator.ReplicaList;
 
 public class PartitionIteratorMergeListener implements UnfilteredPartitionIterators.MergeListener
 {
-    private final InetAddressAndPort[] sources;
+    private final ReplicaList sources;
     private final ReadCommand command;
     private final ConsistencyLevel consistency;
     private final ReadRepair readRepair;
 
-    public PartitionIteratorMergeListener(InetAddressAndPort[] sources, ReadCommand command, ConsistencyLevel consistency, ReadRepair readRepair)
+    public PartitionIteratorMergeListener(ReplicaList sources, ReadCommand command, ConsistencyLevel consistency, ReadRepair readRepair)
     {
         this.sources = sources;
         this.command = command;
@@ -50,7 +50,7 @@ public class PartitionIteratorMergeListener implements UnfilteredPartitionIterat
         return new RowIteratorMergeListener(partitionKey, columns(versions), isReversed(versions), sources, command, consistency, readRepair);
     }
 
-    private RegularAndStaticColumns columns(List<UnfilteredRowIterator> versions)
+    protected RegularAndStaticColumns columns(List<UnfilteredRowIterator> versions)
     {
         Columns statics = Columns.NONE;
         Columns regulars = Columns.NONE;
@@ -66,7 +66,7 @@ public class PartitionIteratorMergeListener implements UnfilteredPartitionIterat
         return new RegularAndStaticColumns(statics, regulars);
     }
 
-    private boolean isReversed(List<UnfilteredRowIterator> versions)
+    protected boolean isReversed(List<UnfilteredRowIterator> versions)
     {
         for (UnfilteredRowIterator iter : versions)
         {
