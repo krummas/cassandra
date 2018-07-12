@@ -236,7 +236,7 @@ public class StorageProxy implements StorageProxyMBean
                                   long queryStartNanoTime)
     throws UnavailableException, IsBootstrappingException, RequestFailureException, RequestTimeoutException, InvalidRequestException
     {
-        final long startTimeForMetrics = System.nanoTime();
+        final long startTimeForMetrics = Clock.instance.nanoTime();
         int contentions = 0;
         try
         {
@@ -1211,7 +1211,7 @@ public class StorageProxy implements StorageProxyMBean
         Token tk = mutation.key().getToken();
         Collection<InetAddressAndPort> pendingEndpoints = StorageService.instance.getTokenMetadata().pendingEndpointsFor(tk, keyspaceName);
         AbstractWriteResponseHandler<IMutation> writeHandler = rs.getWriteResponseHandler(naturalEndpoints, pendingEndpoints, consistency_level, () -> {
-            long delay = Math.max(0, System.currentTimeMillis() - baseComplete.get());
+            long delay = Math.max(0, Clock.instance.currentTimeMillis() - baseComplete.get());
             viewWriteMetrics.viewWriteLatency.update(delay, TimeUnit.MILLISECONDS);
         }, writeType, queryStartNanoTime);
         BatchlogResponseHandler<IMutation> batchHandler = new ViewWriteMetricsWrapped(writeHandler, batchConsistencyLevel.blockFor(keyspace), cleanup, queryStartNanoTime);
@@ -1855,7 +1855,7 @@ public class StorageProxy implements StorageProxyMBean
                 }
                 else
                 {
-                    MessagingService.instance().incrementDroppedMessages(verb, System.currentTimeMillis() - constructionTime);
+                    MessagingService.instance().incrementDroppedMessages(verb, Clock.instance.currentTimeMillis() - constructionTime);
                     handler.onFailure(FBUtilities.getBroadcastAddressAndPort(), RequestFailureReason.UNKNOWN);
                 }
 
@@ -2542,13 +2542,13 @@ public class StorageProxy implements StorageProxyMBean
 
         public DroppableRunnable(MessagingService.Verb verb)
         {
-            this.constructionTime = System.currentTimeMillis();
+            this.constructionTime = Clock.instance.currentTimeMillis();
             this.verb = verb;
         }
 
         public final void run()
         {
-            long timeTaken = System.currentTimeMillis() - constructionTime;
+            long timeTaken = Clock.instance.currentTimeMillis() - constructionTime;
             if (timeTaken > verb.getTimeout())
             {
                 MessagingService.instance().incrementDroppedMessages(verb, timeTaken);
@@ -2573,7 +2573,7 @@ public class StorageProxy implements StorageProxyMBean
      */
     private static abstract class LocalMutationRunnable implements Runnable
     {
-        private final long constructionTime = System.currentTimeMillis();
+        private final long constructionTime = Clock.instance.currentTimeMillis();
 
         private final Optional<IMutation> mutationOpt;
 
@@ -2591,7 +2591,7 @@ public class StorageProxy implements StorageProxyMBean
         {
             final MessagingService.Verb verb = verb();
             long mutationTimeout = verb.getTimeout();
-            long timeTaken = System.currentTimeMillis() - constructionTime;
+            long timeTaken = Clock.instance.currentTimeMillis() - constructionTime;
             if (timeTaken > mutationTimeout)
             {
                 if (MessagingService.DROPPABLE_VERBS.contains(verb))
@@ -2720,7 +2720,7 @@ public class StorageProxy implements StorageProxyMBean
                         logger.debug("Discarding hint for endpoint not part of ring: {}", target);
                 }
                 logger.trace("Adding hints for {}", validTargets);
-                HintsService.instance.write(hostIds, Hint.create(mutation, System.currentTimeMillis()));
+                HintsService.instance.write(hostIds, Hint.create(mutation, Clock.instance.currentTimeMillis()));
                 validTargets.forEach(HintsService.instance.metrics::incrCreatedHints);
                 // Notify the handler only for CL == ANY
                 if (responseHandler != null && responseHandler.consistencyLevel == ConsistencyLevel.ANY)

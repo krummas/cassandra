@@ -48,6 +48,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.Tables;
 import org.apache.cassandra.schema.MigrationManager;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import com.google.common.util.concurrent.Futures;
 
@@ -75,7 +76,7 @@ public class PerSSTableIndexWriterTest extends SchemaLoader
     {
         final int maxKeys = 100000, numParts = 4, partSize = maxKeys / numParts;
         final String keyFormat = "key%06d";
-        final long timestamp = System.currentTimeMillis();
+        final long timestamp = Clock.instance.currentTimeMillis();
 
         ColumnFamilyStore cfs = Keyspace.open(KS_NAME).getColumnFamilyStore(CF_NAME);
         ColumnMetadata column = cfs.metadata().getColumn(UTF8Type.instance.decompose("age"));
@@ -178,7 +179,7 @@ public class PerSSTableIndexWriterTest extends SchemaLoader
         Descriptor descriptor = cfs.newSSTableDescriptor(directory);
         PerSSTableIndexWriter indexWriter = (PerSSTableIndexWriter) sasi.getFlushObserver(descriptor, OperationType.FLUSH);
 
-        final long now = System.currentTimeMillis();
+        final long now = Clock.instance.currentTimeMillis();
 
         indexWriter.begin();
         indexWriter.indexes.put(column, indexWriter.newIndex(sasi.getIndex()));

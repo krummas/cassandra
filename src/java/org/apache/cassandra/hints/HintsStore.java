@@ -33,6 +33,7 @@ import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.SyncUtil;
 
 /**
@@ -188,7 +189,7 @@ final class HintsStore
 
     private HintsWriter openWriter()
     {
-        lastUsedTimestamp = Math.max(System.currentTimeMillis(), lastUsedTimestamp + 1);
+        lastUsedTimestamp = Math.max(Clock.instance.currentTimeMillis(), lastUsedTimestamp + 1);
         HintsDescriptor descriptor = new HintsDescriptor(hostId, lastUsedTimestamp, writerParams);
 
         try

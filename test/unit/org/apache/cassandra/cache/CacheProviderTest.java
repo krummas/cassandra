@@ -44,6 +44,7 @@ import org.apache.cassandra.schema.Indexes;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.HashingUtils;
 
@@ -81,7 +82,7 @@ public class CacheProviderTest
 
     private CachedBTreePartition createPartition()
     {
-        PartitionUpdate update = new RowUpdateBuilder(cfm, System.currentTimeMillis(), "key1")
+        PartitionUpdate update = new RowUpdateBuilder(cfm, Clock.instance.currentTimeMillis(), "key1")
                                  .add("col1", "val1")
                                  .buildUpdate();
 
@@ -114,12 +115,12 @@ public class CacheProviderTest
 
     private void concurrentCase(final CachedBTreePartition partition, final ICache<MeasureableString, IRowCacheEntry> cache) throws InterruptedException
     {
-        final long startTime = System.currentTimeMillis() + 500;
+        final long startTime = Clock.instance.currentTimeMillis() + 500;
         Runnable runnable = new Runnable()
         {
             public void run()
             {
-                while (System.currentTimeMillis() < startTime) {}
+                while (Clock.instance.currentTimeMillis() < startTime) {}
                 for (int j = 0; j < 1000; j++)
                 {
                     cache.put(key1, partition);

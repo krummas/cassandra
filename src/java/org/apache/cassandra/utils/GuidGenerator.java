@@ -92,7 +92,7 @@ public class GuidGenerator
 
     public static ByteBuffer guidAsBytes()
     {
-        return guidAsBytes(myRand, s_id, System.currentTimeMillis());
+        return guidAsBytes(myRand, s_id, Clock.instance.currentTimeMillis());
     }
 
     /*

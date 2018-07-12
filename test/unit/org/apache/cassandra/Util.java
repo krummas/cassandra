@@ -68,6 +68,7 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.pager.PagingState;
 import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.CounterId;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -553,9 +554,9 @@ public class Util
 
     public static void spinAssertEquals(Object expected, Supplier<Object> s, int timeoutInSeconds)
     {
-        long start = System.currentTimeMillis();
+        long start = Clock.instance.currentTimeMillis();
         Object lastValue = null;
-        while (System.currentTimeMillis() < start + (1000 * timeoutInSeconds))
+        while (Clock.instance.currentTimeMillis() < start + (1000 * timeoutInSeconds))
         {
             lastValue = s.get();
             if (lastValue.equals(expected))

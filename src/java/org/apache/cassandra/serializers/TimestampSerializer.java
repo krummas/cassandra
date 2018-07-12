@@ -19,6 +19,7 @@ package org.apache.cassandra.serializers;
 
 import io.netty.util.concurrent.FastThreadLocal;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
@@ -138,7 +139,7 @@ public class TimestampSerializer implements TypeSerializer<Date>
     public static long dateStringToTimestamp(String source) throws MarshalException
     {
         if (source.equalsIgnoreCase("now"))
-            return System.currentTimeMillis();
+            return Clock.instance.currentTimeMillis();
 
         // Milliseconds since epoch?
         if (timestampPattern.matcher(source).matches())

@@ -34,6 +34,7 @@ import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.schema.TableId;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.vint.VIntCoding;
 
 import static org.apache.cassandra.db.TypeSizes.sizeof;
@@ -134,7 +135,7 @@ public final class Hint
      */
     boolean isLive()
     {
-        return isLive(creationTime, System.currentTimeMillis(), ttl());
+        return isLive(creationTime, Clock.instance.currentTimeMillis(), ttl());
     }
 
     static boolean isLive(long creationTime, long now, int hintTTL)

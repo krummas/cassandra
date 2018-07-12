@@ -40,6 +40,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.SeedProvider;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 
@@ -95,7 +96,7 @@ public class GossiperTest
         assertEquals(proposedRemoteHeartBeat.getGeneration(), actualRemoteHeartBeat.getGeneration());
 
         //Propose a generation 10 years in the future - this should be rejected.
-        HeartBeatState badProposedRemoteHeartBeat = new HeartBeatState((int) (System.currentTimeMillis()/1000) + Gossiper.MAX_GENERATION_DIFFERENCE * 10);
+        HeartBeatState badProposedRemoteHeartBeat = new HeartBeatState((int) (Clock.instance.currentTimeMillis() / 1000) + Gossiper.MAX_GENERATION_DIFFERENCE * 10);
         EndpointState badProposedRemoteState = new EndpointState(badProposedRemoteHeartBeat);
 
         Gossiper.instance.applyStateLocally(ImmutableMap.of(remoteHostAddress, badProposedRemoteState));

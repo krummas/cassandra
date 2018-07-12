@@ -34,6 +34,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 
 import static org.junit.Assert.assertTrue;
@@ -85,13 +86,13 @@ public class LongOpOrderTest
         @Override
         public void run()
         {
-            final long until = System.currentTimeMillis() + RUNTIME;
-            long lastReport = System.currentTimeMillis();
+            final long until = Clock.instance.currentTimeMillis() + RUNTIME;
+            long lastReport = Clock.instance.currentTimeMillis();
             long count = 0;
             long opCount = 0;
             while (true)
             {
-                long now = System.currentTimeMillis();
+                long now = Clock.instance.currentTimeMillis();
                 if (now > until)
                     break;
                 if (now > lastReport + REPORT_INTERVAL)

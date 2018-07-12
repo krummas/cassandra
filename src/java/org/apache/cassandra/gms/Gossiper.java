@@ -38,6 +38,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.utils.CassandraVersion;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,7 +134,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
     // endpoint states as gathered during shadow round
     private final Map<InetAddressAndPort, EndpointState> endpointShadowStateMap = new ConcurrentHashMap<>();
 
-    private volatile long lastProcessedMessageAt = System.currentTimeMillis();
+    private volatile long lastProcessedMessageAt = Clock.instance.currentTimeMillis();
 
     private class GossipTask implements Runnable
     {
@@ -324,7 +325,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
     {
         Long downtime = unreachableEndpoints.get(ep);
         if (downtime != null)
-            return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - downtime);
+            return TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - downtime);
         else
             return 0L;
     }
@@ -461,7 +462,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
      */
     private void quarantineEndpoint(InetAddressAndPort endpoint)
     {
-        quarantineEndpoint(endpoint, System.currentTimeMillis());
+        quarantineEndpoint(endpoint, Clock.instance.currentTimeMillis());
     }
 
     /**
@@ -483,7 +484,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
     {
         // remember, quarantineEndpoint will effectively already add QUARANTINE_DELAY, so this is 2x
         logger.debug("");
-        quarantineEndpoint(endpoint, System.currentTimeMillis() + QUARANTINE_DELAY);
+        quarantineEndpoint(endpoint, Clock.instance.currentTimeMillis() + QUARANTINE_DELAY);
     }
 
     /**
@@ -614,7 +615,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
 
         if (epState == null)
         {
-            epState = new EndpointState(new HeartBeatState((int) ((System.currentTimeMillis() + 60000) / 1000), 9999));
+            epState = new EndpointState(new HeartBeatState((int) ((Clock.instance.currentTimeMillis() + 60000) / 1000), 9999));
         }
         else
         {
@@ -685,7 +686,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
         if (logger.isTraceEnabled())
             logger.trace("Sending a GossipDigestSyn to {} ...", to);
         if (firstSynSendAt == 0)
-            firstSynSendAt = System.nanoTime();
+            firstSynSendAt = Clock.instance.nanoTime();
         MessagingService.instance().sendOneWay(message, to);
         return seeds.contains(to);
     }
@@ -800,8 +801,8 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
         if (logger.isTraceEnabled())
             logger.trace("Performing status check ...");
 
-        long now = System.currentTimeMillis();
-        long nowNano = System.nanoTime();
+        long now = Clock.instance.currentTimeMillis();
+        long nowNano = Clock.instance.nanoTime();
 
         long pending = ((JMXEnabledThreadPoolExecutor) StageManager.getStage(Stage.GOSSIP)).metrics.pendingTasks.getValue();
         if (pending > 0 && lastProcessedMessageAt < now - 1000)
@@ -1054,7 +1055,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
             logger.trace("marking as down {}", addr);
         localState.markDead();
         liveEndpoints.remove(addr);
-        unreachableEndpoints.put(addr, System.nanoTime());
+        unreachableEndpoints.put(addr, Clock.instance.nanoTime());
         logger.info("InetAddress {} is now DOWN", addr);
         for (IEndpointStateChangeSubscriber subscriber : subscribers)
             subscriber.onDead(addr, localState);
@@ -1176,7 +1177,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
             {
                 int localGeneration = localEpStatePtr.getHeartBeatState().getGeneration();
                 int remoteGeneration = remoteState.getHeartBeatState().getGeneration();
-                long localTime = System.currentTimeMillis()/1000;
+                long localTime = Clock.instance.currentTimeMillis()/1000;
                 if (logger.isTraceEnabled())
                     logger.trace("{} local generation {}, remote generation {}", ep, localGeneration, remoteGeneration);
 
@@ -1600,7 +1601,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
 
         epState.markDead();
         endpointStateMap.put(ep, epState);
-        unreachableEndpoints.put(ep, System.nanoTime());
+        unreachableEndpoints.put(ep, Clock.instance.nanoTime());
         if (logger.isTraceEnabled())
             logger.trace("Adding saved endpoint {} {}", ep, epState.getHeartBeatState().getGeneration());
     }
@@ -1750,7 +1751,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
 
     public static long computeExpireTime()
     {
-        return System.currentTimeMillis() + Gossiper.aVeryLongTime;
+        return Clock.instance.currentTimeMillis() + Gossiper.aVeryLongTime;
     }
 
     @Nullable

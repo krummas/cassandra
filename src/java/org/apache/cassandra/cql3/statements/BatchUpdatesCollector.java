@@ -27,6 +27,7 @@ import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Utility class to collect updates.
@@ -156,7 +157,7 @@ final class BatchUpdatesCollector implements UpdatesCollector
         private final HashMap<TableId, PartitionUpdate.Builder> modifications = new HashMap<>();
         private final DecoratedKey key;
         private final String keyspaceName;
-        private final long createdAt = System.currentTimeMillis();
+        private final long createdAt = Clock.instance.currentTimeMillis();
 
         private MutationBuilder(String keyspaceName, DecoratedKey key)
         {

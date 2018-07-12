@@ -37,6 +37,7 @@ import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
 
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.vint.VIntCoding;
 import org.junit.Test;
 
@@ -166,7 +167,7 @@ public class BufferedDataOutputStreamTest
 
     static Field baos_bytes;
     static {
-        long seed = System.nanoTime();
+        long seed = Clock.instance.nanoTime();
         //seed = 210187780999648L;
         System.out.println("Seed " + seed);
         r = new Random(seed);

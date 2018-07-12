@@ -30,6 +30,7 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.schema.Functions;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.transport.ProtocolVersion;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Base class for user-defined-aggregates.
@@ -163,7 +164,7 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
             {
                 maybeInit(protocolVersion);
 
-                long startTime = System.nanoTime();
+                long startTime = Clock.instance.nanoTime();
                 stateFunctionCount++;
                 if (stateFunction instanceof UDFunction)
                 {
@@ -175,7 +176,7 @@ public class UDAggregate extends AbstractFunction implements AggregateFunction
                 {
                     throw new UnsupportedOperationException("UDAs only support UDFs");
                 }
-                stateFunctionDuration += (System.nanoTime() - startTime) / 1000;
+                stateFunctionDuration += (Clock.instance.nanoTime() - startTime) / 1000;
             }
 
             private void maybeInit(ProtocolVersion protocolVersion)

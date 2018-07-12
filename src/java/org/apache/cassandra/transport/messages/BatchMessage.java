@@ -44,6 +44,7 @@ import org.apache.cassandra.transport.CBUtil;
 import org.apache.cassandra.transport.Message;
 import org.apache.cassandra.transport.ProtocolException;
 import org.apache.cassandra.transport.ProtocolVersion;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.MD5Digest;
 import org.apache.cassandra.utils.UUIDGen;
@@ -225,7 +226,7 @@ public class BatchMessage extends Message.Request
             // (and no value would be really correct, so we prefer passing a clearly wrong one).
             BatchStatement batch = new BatchStatement(-1, batchType, statements, Attributes.none());
 
-            long fqlTime = isLoggingEnabled ? System.currentTimeMillis() : 0;
+            long fqlTime = isLoggingEnabled ? Clock.instance.currentTimeMillis() : 0;
             Message.Response response = handler.processBatch(batch, state, batchOptions, getCustomPayload(), queryStartNanoTime);
 
             if (isLoggingEnabled)

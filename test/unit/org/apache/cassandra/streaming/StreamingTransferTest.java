@@ -51,6 +51,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -189,7 +190,7 @@ public class StreamingTransferTest
         }
         else
         {
-            long beforeStreaming = System.currentTimeMillis();
+            long beforeStreaming = Clock.instance.currentTimeMillis();
             transferRanges(cfs);
             cfs.discardSSTables(beforeStreaming);
             offs = new int[]{2, 3};
@@ -477,10 +478,10 @@ public class StreamingTransferTest
         assert rows.get(1).cf.getColumnCount() == 1;
 
         // these keys fall outside of the ranges and should not be transferred
-        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("transfer1"), "Standard1", System.currentTimeMillis())) == null;
-        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("transfer2"), "Standard1", System.currentTimeMillis())) == null;
-        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("test2"), "Standard1", System.currentTimeMillis())) == null;
-        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("test3"), "Standard1", System.currentTimeMillis())) == null;
+        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("transfer1"), "Standard1", Clock.instance.currentTimeMillis())) == null;
+        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("transfer2"), "Standard1", Clock.instance.currentTimeMillis())) == null;
+        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("test2"), "Standard1", Clock.instance.currentTimeMillis())) == null;
+        assert cfstore.getColumnFamily(QueryFilter.getIdentityFilter(Util.dk("test3"), "Standard1", Clock.instance.currentTimeMillis())) == null;
     }
 
     @Test
@@ -551,7 +552,7 @@ public class StreamingTransferTest
         };
         // write a lot more data so the data is spread in more than 1 chunk.
         for (int i = 1; i <= 6000; i++)
-            mutator.mutate("key" + i, "col" + i, System.currentTimeMillis());
+            mutator.mutate("key" + i, "col" + i, Clock.instance.currentTimeMillis());
         cfs.forceBlockingFlush();
         Util.compactAll(cfs, Integer.MAX_VALUE).get();
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();

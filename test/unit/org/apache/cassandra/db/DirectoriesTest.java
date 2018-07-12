@@ -46,6 +46,7 @@ import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.DefaultFSErrorHandler;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -353,7 +354,7 @@ public class DirectoriesTest
         {
             final Directories directories = new Directories(cfm);
             assertEquals(cfDir(cfm), directories.getDirectoryForNewSSTables());
-            final String n = Long.toString(System.nanoTime());
+            final String n = Long.toString(Clock.instance.nanoTime());
             Callable<File> directoryGetter = new Callable<File>() {
                 public File call() throws Exception {
                     Descriptor desc = new Descriptor(cfDir(cfm), KS, cfm.name, 1, SSTableFormat.Type.BIG);

@@ -89,7 +89,7 @@ public class UUIDTests
     @Test
     public void testUUIDTimestamp()
     {
-        long now = System.currentTimeMillis();
+        long now = Clock.instance.currentTimeMillis();
         UUID uuid = UUIDGen.getTimeUUID();
         long tstamp = UUIDGen.getAdjustedTimestamp(uuid);
 

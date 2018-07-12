@@ -65,6 +65,7 @@ import org.apache.cassandra.schema.Types;
 import org.apache.cassandra.schema.Views;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Pair;
 
 /**
@@ -252,7 +253,7 @@ public class CQLSSTableWriter implements Closeable
         List<ByteBuffer> keys = insert.buildPartitionKeyNames(options);
         SortedSet<Clustering> clusterings = insert.createClustering(options);
 
-        long now = System.currentTimeMillis() * 1000;
+        long now = Clock.instance.currentTimeMillis() * 1000;
         // Note that we asks indexes to not validate values (the last 'false' arg below) because that triggers a 'Keyspace.open'
         // and that forces a lot of initialization that we don't want.
         UpdateParameters params = new UpdateParameters(insert.metadata,

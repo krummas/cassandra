@@ -40,6 +40,7 @@ import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.reads.AbstractReadExecutor;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -78,7 +79,7 @@ public class ReadExecutorTest
     {
         assertEquals(0, cfs.metric.speculativeInsufficientReplicas.getCount());
         assertEquals(0, ks.metric.speculativeInsufficientReplicas.getCount());
-        AbstractReadExecutor executor = new AbstractReadExecutor.NeverSpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(), ConsistencyLevel.LOCAL_QUORUM, targets, System.nanoTime(), true);
+        AbstractReadExecutor executor = new AbstractReadExecutor.NeverSpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(), ConsistencyLevel.LOCAL_QUORUM, targets, Clock.instance.nanoTime(), true);
         executor.maybeTryAdditionalReplicas();
         try
         {
@@ -93,7 +94,7 @@ public class ReadExecutorTest
         assertEquals(1, ks.metric.speculativeInsufficientReplicas.getCount());
 
         //Shouldn't increment
-        executor = new AbstractReadExecutor.NeverSpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(), ConsistencyLevel.LOCAL_QUORUM, targets, System.nanoTime(), false);
+        executor = new AbstractReadExecutor.NeverSpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(), ConsistencyLevel.LOCAL_QUORUM, targets, Clock.instance.nanoTime(), false);
         executor.maybeTryAdditionalReplicas();
         try
         {
@@ -119,7 +120,7 @@ public class ReadExecutorTest
         assertEquals(0, cfs.metric.speculativeFailedRetries.getCount());
         assertEquals(0, ks.metric.speculativeRetries.getCount());
         assertEquals(0, ks.metric.speculativeFailedRetries.getCount());
-        AbstractReadExecutor executor = new AbstractReadExecutor.SpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(TimeUnit.DAYS.toMillis(365)), ConsistencyLevel.LOCAL_QUORUM, targets, System.nanoTime());
+        AbstractReadExecutor executor = new AbstractReadExecutor.SpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(TimeUnit.DAYS.toMillis(365)), ConsistencyLevel.LOCAL_QUORUM, targets, Clock.instance.nanoTime());
         executor.maybeTryAdditionalReplicas();
         new Thread()
         {
@@ -160,7 +161,7 @@ public class ReadExecutorTest
         assertEquals(0, cfs.metric.speculativeFailedRetries.getCount());
         assertEquals(0, ks.metric.speculativeRetries.getCount());
         assertEquals(0, ks.metric.speculativeFailedRetries.getCount());
-        AbstractReadExecutor executor = new AbstractReadExecutor.SpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(), ConsistencyLevel.LOCAL_QUORUM, targets, System.nanoTime());
+        AbstractReadExecutor executor = new AbstractReadExecutor.SpeculatingReadExecutor(ks, cfs, new MockSinglePartitionReadCommand(), ConsistencyLevel.LOCAL_QUORUM, targets, Clock.instance.nanoTime());
         executor.maybeTryAdditionalReplicas();
         try
         {

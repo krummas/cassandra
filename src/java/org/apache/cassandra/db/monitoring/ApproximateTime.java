@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.Config;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * This is an approximation of System.currentTimeInMillis(). It updates its
@@ -38,11 +39,11 @@ public class ApproximateTime
     private static final Logger logger = LoggerFactory.getLogger(ApproximateTime.class);
     private static final int CHECK_INTERVAL_MS = Math.max(5, Integer.parseInt(System.getProperty(Config.PROPERTY_PREFIX + "approximate_time_precision_ms", "10")));
 
-    private static volatile long time = System.currentTimeMillis();
+    private static volatile long time = Clock.instance.currentTimeMillis();
     static
     {
         logger.info("Scheduling approximate time-check task with a precision of {} milliseconds", CHECK_INTERVAL_MS);
-        ScheduledExecutors.scheduledFastTasks.scheduleWithFixedDelay(() -> time = System.currentTimeMillis(),
+        ScheduledExecutors.scheduledFastTasks.scheduleWithFixedDelay(() -> time = Clock.instance.currentTimeMillis(),
                                                                      CHECK_INTERVAL_MS,
                                                                      CHECK_INTERVAL_MS,
                                                                      TimeUnit.MILLISECONDS);

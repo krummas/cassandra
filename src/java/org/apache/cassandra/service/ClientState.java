@@ -44,6 +44,7 @@ import org.apache.cassandra.exceptions.AuthenticationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.UnauthorizedException;
 import org.apache.cassandra.schema.SchemaKeyspace;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.CassandraVersion;
@@ -190,7 +191,7 @@ public class ClientState
     {
         while (true)
         {
-            long current = System.currentTimeMillis() * 1000;
+            long current = Clock.instance.currentTimeMillis() * 1000;
             long last = lastTimestampMicros.get();
             long tstamp = last >= current ? last + 1 : current;
             if (lastTimestampMicros.compareAndSet(last, tstamp))
@@ -244,7 +245,7 @@ public class ClientState
     {
         while (true)
         {
-            long current = Math.max(System.currentTimeMillis() * 1000, minTimestampToUse);
+            long current = Math.max(Clock.instance.currentTimeMillis() * 1000, minTimestampToUse);
             long last = lastTimestampMicros.get();
             long tstamp = last >= current ? last + 1 : current;
             // Note that if we ended up picking minTimestampMicrosToUse (it was "in the future"), we don't

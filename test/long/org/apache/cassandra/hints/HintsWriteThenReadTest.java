@@ -39,6 +39,7 @@ import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static junit.framework.Assert.assertEquals;
@@ -61,7 +62,7 @@ public class HintsWriteThenReadTest
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE, KeyspaceParams.simple(1), SchemaLoader.standardCFMD(KEYSPACE, TABLE));
 
-        HintsDescriptor descriptor = new HintsDescriptor(UUID.randomUUID(), System.currentTimeMillis());
+        HintsDescriptor descriptor = new HintsDescriptor(UUID.randomUUID(), Clock.instance.currentTimeMillis());
 
         File directory = Files.createTempDirectory(null).toFile();
         try

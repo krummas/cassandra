@@ -290,7 +290,7 @@ public class ColumnFamilyStoreTest
 //                                             new BufferCell(cellname("b"), ByteBufferUtil.bytes("B"), 1));
 //
 //        // Get the entire supercolumn like normal
-//        ColumnFamily cfGet = cfs.getColumnFamily(QueryFilter.getIdentityFilter(key, cfName, System.currentTimeMillis()));
+//        ColumnFamily cfGet = cfs.getColumnFamily(QueryFilter.getIdentityFilter(key, cfName, Clock.instance.currentTimeMillis()));
 //        assertEquals(ByteBufferUtil.bytes("A"), cfGet.getColumn(CellNames.compositeDense(superColName, ByteBufferUtil.bytes("a"))).value());
 //        assertEquals(ByteBufferUtil.bytes("B"), cfGet.getColumn(CellNames.compositeDense(superColName, ByteBufferUtil.bytes("b"))).value());
 //
@@ -298,7 +298,7 @@ public class ColumnFamilyStoreTest
 //        SortedSet<CellName> sliceColNames = new TreeSet<CellName>(cfs.metadata.comparator);
 //        sliceColNames.add(CellNames.compositeDense(superColName, ByteBufferUtil.bytes("a")));
 //        sliceColNames.add(CellNames.compositeDense(superColName, ByteBufferUtil.bytes("b")));
-//        SliceByNamesReadCommand cmd = new SliceByNamesReadCommand(keyspaceName, key.getKey(), cfName, System.currentTimeMillis(), new NamesQueryFilter(sliceColNames));
+//        SliceByNamesReadCommand cmd = new SliceByNamesReadCommand(keyspaceName, key.getKey(), cfName, Clock.instance.currentTimeMillis(), new NamesQueryFilter(sliceColNames));
 //        ColumnFamily cfSliced = cmd.getRow(keyspace).cf;
 //
 //        // Make sure the slice returns the same as the straight get

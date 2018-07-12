@@ -23,6 +23,8 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
+import org.apache.cassandra.utils.Clock;
+
 import static org.junit.Assert.assertEquals;
 
 public class SSTableMetadataTrackingTest extends CQLTester
@@ -93,7 +95,7 @@ public class SSTableMetadataTrackingTest extends CQLTester
         StatsMetadata metadata = cfs.getLiveSSTables().iterator().next().getSSTableMetadata();
         assertEquals(9999, metadata.minTimestamp);
         assertEquals(9999, metadata.maxTimestamp);
-        assertEquals(System.currentTimeMillis()/1000, metadata.maxLocalDeletionTime, 5);
+        assertEquals(Clock.instance.currentTimeMillis()/1000, metadata.maxLocalDeletionTime, 5);
         cfs.forceMajorCompaction();
         StatsMetadata metadata2 = cfs.getLiveSSTables().iterator().next().getSSTableMetadata();
         assertEquals(metadata.maxLocalDeletionTime, metadata2.maxLocalDeletionTime);
@@ -113,7 +115,7 @@ public class SSTableMetadataTrackingTest extends CQLTester
         StatsMetadata metadata = cfs.getLiveSSTables().iterator().next().getSSTableMetadata();
         assertEquals(9999, metadata.minTimestamp);
         assertEquals(9999, metadata.maxTimestamp);
-        assertEquals(System.currentTimeMillis()/1000, metadata.maxLocalDeletionTime, 5);
+        assertEquals(Clock.instance.currentTimeMillis() / 1000, metadata.maxLocalDeletionTime, 5);
         cfs.forceMajorCompaction();
         StatsMetadata metadata2 = cfs.getLiveSSTables().iterator().next().getSSTableMetadata();
         assertEquals(metadata.maxLocalDeletionTime, metadata2.maxLocalDeletionTime);
@@ -152,7 +154,7 @@ public class SSTableMetadataTrackingTest extends CQLTester
         StatsMetadata metadata = cfs.getLiveSSTables().iterator().next().getSSTableMetadata();
         assertEquals(9999, metadata.minTimestamp);
         assertEquals(9999, metadata.maxTimestamp);
-        assertEquals(System.currentTimeMillis()/1000, metadata.maxLocalDeletionTime, 5);
+        assertEquals(Clock.instance.currentTimeMillis()/1000, metadata.maxLocalDeletionTime, 5);
         cfs.forceMajorCompaction();
         StatsMetadata metadata2 = cfs.getLiveSSTables().iterator().next().getSSTableMetadata();
         assertEquals(metadata.maxLocalDeletionTime, metadata2.maxLocalDeletionTime);

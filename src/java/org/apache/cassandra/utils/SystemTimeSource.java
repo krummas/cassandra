@@ -29,13 +29,13 @@ public class SystemTimeSource implements TimeSource
     @Override
     public long currentTimeMillis()
     {
-        return System.currentTimeMillis();
+        return Clock.instance.currentTimeMillis();
     }
 
     @Override
     public long nanoTime()
     {
-        return System.nanoTime();
+        return Clock.instance.nanoTime();
     }
 
     @Override

@@ -489,11 +489,11 @@ public class MergeIteratorComparisonTest
     public <T> void benchmarkIterator(IMergeIterator<T, ?> it, CountingComparator<T> comparator)
     {
         System.out.format("Testing %30s... ", it.getClass().getSimpleName());
-        long time = System.currentTimeMillis();
+        long time = Clock.instance.currentTimeMillis();
         Object value = null;
         while (it.hasNext())
             value = it.next();
-        time = System.currentTimeMillis() - time;
+        time = Clock.instance.currentTimeMillis() - time;
         String type = "";
         if (value instanceof Counted<?>)
         {

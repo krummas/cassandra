@@ -28,6 +28,7 @@ import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.tracing.TraceState;
+import org.apache.cassandra.utils.Clock;
 
 public class DigestResolver extends ResponseResolver
 {
@@ -56,7 +57,7 @@ public class DigestResolver extends ResponseResolver
 
     public boolean responsesMatch()
     {
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
 
         // validate digests against each other; return false immediately on mismatch.
         ByteBuffer digest = null;
@@ -73,7 +74,7 @@ public class DigestResolver extends ResponseResolver
         }
 
         if (logger.isTraceEnabled())
-            logger.trace("responsesMatch: {} ms.", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+            logger.trace("responsesMatch: {} ms.", TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - start));
 
         return true;
     }

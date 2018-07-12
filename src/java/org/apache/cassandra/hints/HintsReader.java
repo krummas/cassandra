@@ -35,6 +35,7 @@ import org.apache.cassandra.exceptions.UnknownTableException;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.AbstractIterator;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * A paged non-compressed hints reader that provides two iterators:
@@ -164,7 +165,7 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
     final class HintsIterator extends AbstractIterator<Hint>
     {
         private final InputPosition offset;
-        private final long now = System.currentTimeMillis();
+        private final long now = Clock.instance.currentTimeMillis();
 
         HintsIterator(InputPosition offset)
         {
@@ -262,7 +263,7 @@ class HintsReader implements AutoCloseable, Iterable<HintsReader.Page>
     final class BuffersIterator extends AbstractIterator<ByteBuffer>
     {
         private final InputPosition offset;
-        private final long now = System.currentTimeMillis();
+        private final long now = Clock.instance.currentTimeMillis();
 
         BuffersIterator(InputPosition offset)
         {

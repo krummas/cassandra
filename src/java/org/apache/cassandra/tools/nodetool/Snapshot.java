@@ -31,6 +31,7 @@ import java.util.Map;
 
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tools.NodeTool.NodeToolCmd;
+import org.apache.cassandra.utils.Clock;
 
 @Command(name = "snapshot", description = "Take a snapshot of specified keyspaces or a snapshot of the specified table")
 public class Snapshot extends NodeToolCmd
@@ -42,7 +43,7 @@ public class Snapshot extends NodeToolCmd
     private String table = null;
 
     @Option(title = "tag", name = {"-t", "--tag"}, description = "The name of the snapshot")
-    private String snapshotName = Long.toString(System.currentTimeMillis());
+    private String snapshotName = Long.toString(Clock.instance.currentTimeMillis());
 
     @Option(title = "ktlist", name = { "-kt", "--kt-list", "-kc", "--kc.list" }, description = "The list of Keyspace.table to take snapshot.(you must not specify only keyspace)")
     private String ktList = null;

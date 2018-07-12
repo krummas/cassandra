@@ -35,6 +35,7 @@ import org.apache.cassandra.schema.SchemaKeyspace;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.MD5Digest;
 
 import static org.junit.Assert.*;
@@ -130,7 +131,7 @@ public class PstmtPersistenceTest extends CQLTester
     {
         ParsedStatement.Prepared prepared = handler.getPrepared(stmtId);
         assertNotNull(prepared);
-        handler.processPrepared(prepared.statement, QueryState.forInternalCalls(), options, Collections.emptyMap(), System.nanoTime());
+        handler.processPrepared(prepared.statement, QueryState.forInternalCalls(), options, Collections.emptyMap(), Clock.instance.nanoTime());
     }
 
     @Test

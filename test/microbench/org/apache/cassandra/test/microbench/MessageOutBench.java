@@ -43,6 +43,7 @@ import org.apache.cassandra.net.async.BaseMessageInHandler;
 import org.apache.cassandra.net.async.ByteBufDataOutputPlus;
 import org.apache.cassandra.net.async.MessageInHandler;
 import org.apache.cassandra.net.async.MessageInHandlerPre40;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.NanoTimeToCurrentTimeMillis;
 import org.apache.cassandra.utils.UUIDGen;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -110,7 +111,7 @@ public class MessageOutBench
         buf.resetWriterIndex();
         buf.writeInt(MessagingService.PROTOCOL_MAGIC);
         buf.writeInt(42); // this is the id
-        buf.writeInt((int) NanoTimeToCurrentTimeMillis.convert(System.nanoTime()));
+        buf.writeInt((int) NanoTimeToCurrentTimeMillis.convert(Clock.instance.nanoTime()));
 
         msgOut.serialize(new ByteBufDataOutputPlus(buf), messagingVersion);
         handler.decode(null, buf, Collections.emptyList());

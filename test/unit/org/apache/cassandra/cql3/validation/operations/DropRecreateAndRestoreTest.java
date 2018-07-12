@@ -30,6 +30,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.TableId;
+import org.apache.cassandra.utils.Clock;
 
 public class DropRecreateAndRestoreTest extends CQLTester
 {
@@ -42,7 +43,7 @@ public class DropRecreateAndRestoreTest extends CQLTester
         execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", 0, 1, 1);
 
 
-        long time = System.currentTimeMillis();
+        long time = Clock.instance.currentTimeMillis();
         TableId id = currentTableMetadata().id;
         assertRows(execute("SELECT * FROM %s"), row(0, 0, 0), row(0, 1, 1));
         Thread.sleep(5);

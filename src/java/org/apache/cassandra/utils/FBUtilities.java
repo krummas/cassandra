@@ -361,12 +361,12 @@ public class FBUtilities
     {
         // we use microsecond resolution for compatibility with other client libraries, even though
         // we can't actually get microsecond precision.
-        return System.currentTimeMillis() * 1000;
+        return Clock.instance.currentTimeMillis() * 1000;
     }
 
     public static int nowInSeconds()
     {
-        return (int) (System.currentTimeMillis() / 1000);
+        return (int) (Clock.instance.currentTimeMillis() / 1000);
     }
 
     public static <T> List<T> waitOnFutures(Iterable<? extends Future<? extends T>> futures)

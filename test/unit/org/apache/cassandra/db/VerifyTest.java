@@ -46,6 +46,8 @@ import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
+
 import org.apache.commons.lang3.StringUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -421,7 +423,7 @@ public class VerifyTest
 
         // make the sstable repaired:
         SSTableReader sstable = cfs.getLiveSSTables().iterator().next();
-        sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, System.currentTimeMillis(), sstable.getSSTableMetadata().pendingRepair);
+        sstable.descriptor.getMetadataSerializer().mutateRepaired(sstable.descriptor, Clock.instance.currentTimeMillis(), sstable.getSSTableMetadata().pendingRepair);
         sstable.reloadSSTableMetadata();
 
         // break the sstable:

@@ -94,7 +94,7 @@ public class DecayingEstimatedHistogramReservoir implements Reservoir
     private final AtomicBoolean rescaling = new AtomicBoolean(false);
     private volatile long decayLandmark;
 
-    // Wrapper around System.nanoTime() to simplify unit testing.
+    // Wrapper around Clock.instance.nanoTime() to simplify unit testing.
     private final Clock clock;
 
 

@@ -29,6 +29,7 @@ import org.apache.cassandra.db.partitions.*;
 import org.apache.cassandra.exceptions.RequestValidationException;
 import org.apache.cassandra.exceptions.RequestExecutionException;
 import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Pager over a list of SinglePartitionReadQuery.
@@ -158,7 +159,7 @@ public class MultiPartitionPager<T extends SinglePartitionReadQuery> implements 
     public PartitionIterator fetchPageInternal(int pageSize, ReadExecutionController executionController) throws RequestValidationException, RequestExecutionException
     {
         int toQuery = Math.min(remaining, pageSize);
-        return new PagersIterator(toQuery, null, null, executionController, System.nanoTime());
+        return new PagersIterator(toQuery, null, null, executionController, Clock.instance.nanoTime());
     }
 
     private class PagersIterator extends AbstractIterator<RowIterator> implements PartitionIterator

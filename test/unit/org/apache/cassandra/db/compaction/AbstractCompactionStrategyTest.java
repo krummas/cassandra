@@ -37,6 +37,7 @@ import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class AbstractCompactionStrategyTest
@@ -131,7 +132,7 @@ public class AbstractCompactionStrategyTest
 
     private static void insertKeyAndFlush(String table, int key)
     {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         DecoratedKey dk = Util.dk(String.format("%03d", key));
         ColumnFamilyStore cfs = Keyspace.open(KEYSPACE1).getColumnFamilyStore(table);
         new RowUpdateBuilder(cfs.metadata(), timestamp, dk.getKey())

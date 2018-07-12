@@ -37,6 +37,7 @@ import org.apache.cassandra.db.marshal.IntegerType;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import static org.apache.cassandra.Util.getBytes;
 import static org.junit.Assert.assertEquals;
@@ -73,7 +74,7 @@ public class SSTableMetadataTest
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore store = keyspace.getColumnFamilyStore("Standard1");
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         for(int i = 0; i < 10; i++)
         {
             DecoratedKey key = Util.dk(Integer.toString(i));
@@ -95,7 +96,7 @@ public class SSTableMetadataTest
 
         store.forceBlockingFlush();
         assertEquals(1, store.getLiveSSTables().size());
-        int ttltimestamp = (int)(System.currentTimeMillis()/1000);
+        int ttltimestamp = (int)(Clock.instance.currentTimeMillis() / 1000);
         int firstDelTime = 0;
         for(SSTableReader sstable : store.getLiveSSTables())
         {
@@ -111,7 +112,7 @@ public class SSTableMetadataTest
         .applyUnsafe();
 
 
-        ttltimestamp = (int) (System.currentTimeMillis()/1000);
+        ttltimestamp = (int) (Clock.instance.currentTimeMillis()/1000);
         store.forceBlockingFlush();
         assertEquals(2, store.getLiveSSTables().size());
         List<SSTableReader> sstables = new ArrayList<>(store.getLiveSSTables());
@@ -150,7 +151,7 @@ public class SSTableMetadataTest
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore store = keyspace.getColumnFamilyStore("Standard2");
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         DecoratedKey key = Util.dk("deletetest");
         for (int i = 0; i<5; i++)
             new RowUpdateBuilder(store.metadata(), timestamp, 100, "deletetest")
@@ -168,7 +169,7 @@ public class SSTableMetadataTest
 
         store.forceBlockingFlush();
         assertEquals(1,store.getLiveSSTables().size());
-        int ttltimestamp = (int) (System.currentTimeMillis()/1000);
+        int ttltimestamp = (int) (Clock.instance.currentTimeMillis()/1000);
         int firstMaxDelTime = 0;
         for(SSTableReader sstable : store.getLiveSSTables())
         {
@@ -208,7 +209,7 @@ public class SSTableMetadataTest
             String key = "row" + j;
             for (int i = 100; i<150; i++)
             {
-                new RowUpdateBuilder(store.metadata(), System.currentTimeMillis(), key)
+                new RowUpdateBuilder(store.metadata(), Clock.instance.currentTimeMillis(), key)
                     .clustering(j + "col" + i)
                     .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
                     .build()
@@ -226,7 +227,7 @@ public class SSTableMetadataTest
 
         for (int i = 101; i<299; i++)
         {
-            new RowUpdateBuilder(store.metadata(), System.currentTimeMillis(), key)
+            new RowUpdateBuilder(store.metadata(), Clock.instance.currentTimeMillis(), key)
             .clustering(9 + "col" + i)
             .add("val", ByteBufferUtil.EMPTY_BYTE_BUFFER)
             .build()

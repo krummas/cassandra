@@ -971,13 +971,13 @@ public final class SystemKeyspace
             // seconds-since-epoch isn't a foolproof new generation
             // (where foolproof is "guaranteed to be larger than the last one seen at this ip address"),
             // but it's as close as sanely possible
-            generation = (int) (System.currentTimeMillis() / 1000);
+            generation = (int) (Clock.instance.currentTimeMillis() / 1000);
         }
         else
         {
             // Other nodes will ignore gossip messages about a node that have a lower generation than previously seen.
             final int storedGeneration = result.one().getInt("gossip_generation") + 1;
-            final int now = (int) (System.currentTimeMillis() / 1000);
+            final int now = (int) (Clock.instance.currentTimeMillis() / 1000);
             if (storedGeneration >= now)
             {
                 logger.warn("Using stored Gossip Generation {} as it is greater than current system time {}.  See CASSANDRA-3654 if you experience problems",
@@ -1126,7 +1126,7 @@ public final class SystemKeyspace
     public static PaxosState loadPaxosState(DecoratedKey key, TableMetadata metadata, int nowInSec)
     {
         String req = "SELECT * FROM system.%s WHERE row_key = ? AND cf_id = ?";
-        UntypedResultSet results = QueryProcessor.executeInternalWithNow(nowInSec, System.nanoTime(), format(req, PAXOS), key.getKey(), metadata.id.asUUID());
+        UntypedResultSet results = QueryProcessor.executeInternalWithNow(nowInSec, Clock.instance.nanoTime(), format(req, PAXOS), key.getKey(), metadata.id.asUUID());
         if (results.isEmpty())
             return new PaxosState(key, metadata);
         UntypedResultSet.Row row = results.one();

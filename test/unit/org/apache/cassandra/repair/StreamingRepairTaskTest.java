@@ -35,6 +35,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.streaming.StreamPlan;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 public class StreamingRepairTaskTest extends AbstractRepairTest
@@ -53,7 +54,7 @@ public class StreamingRepairTaskTest extends AbstractRepairTest
     @Before
     public void setup()
     {
-        ks = "ks_" + System.currentTimeMillis();
+        ks = "ks_" + Clock.instance.currentTimeMillis();
         cfm = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl), ks).build();
         SchemaLoader.createKeyspace(ks, KeyspaceParams.simple(1), cfm);
         cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.id);

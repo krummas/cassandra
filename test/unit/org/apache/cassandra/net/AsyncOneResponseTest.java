@@ -23,6 +23,8 @@ import java.util.concurrent.TimeoutException;
 
 import org.junit.Test;
 
+import org.apache.cassandra.utils.Clock;
+
 import static org.junit.Assert.assertTrue;
 
 public class AsyncOneResponseTest
@@ -44,7 +46,7 @@ public class AsyncOneResponseTest
         final long schedulingError = 10; // Scheduling is imperfect
         boolean hitException = false; // Ensure we actually hit the TimeoutException
 
-        long startTime = System.currentTimeMillis();
+        long startTime = Clock.instance.currentTimeMillis();
 
         try
         {
@@ -55,7 +57,7 @@ public class AsyncOneResponseTest
             hitException = true;
         }
 
-        long endTime = System.currentTimeMillis();
+        long endTime = Clock.instance.currentTimeMillis();
 
         assertTrue(hitException);
         assertTrue(endTime - startTime > (expectedTimeoutMillis - schedulingError));

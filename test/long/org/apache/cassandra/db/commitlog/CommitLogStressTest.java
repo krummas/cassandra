@@ -57,6 +57,7 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.security.EncryptionContext;
 import org.apache.cassandra.security.EncryptionContextGenerator;
+import org.apache.cassandra.utils.Clock;
 
 
 @Ignore
@@ -310,7 +311,7 @@ public abstract class CommitLogStressTest
             t.start();
         }
 
-        final long start = System.currentTimeMillis();
+        final long start = Clock.instance.currentTimeMillis();
         Runnable printRunnable = new Runnable()
         {
             long lastUpdate = 0;
@@ -328,11 +329,11 @@ public abstract class CommitLogStressTest
                     temp += clt.counter.get();
                     sz += clt.dataSize;
                 }
-                double time = (System.currentTimeMillis() - start) / 1000.0;
+                double time = (Clock.instance.currentTimeMillis() - start) / 1000.0;
                 double avg = (temp / time);
                 System.out.println(
                         String.format("second %d mem max %.0fmb allocated %.0fmb free %.0fmb mutations %d since start %d avg %.3f content %.1fmb ondisk %.1fmb transfer %.3fmb",
-                                      ((System.currentTimeMillis() - start) / 1000),
+                                      ((Clock.instance.currentTimeMillis() - start) / 1000),
                                       mb(maxMemory),
                                       mb(allocatedMemory),
                                       mb(freeMemory),

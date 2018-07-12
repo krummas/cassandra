@@ -319,7 +319,7 @@ public class BigTableWriter extends SSTableWriter
     private SSTableReader openFinal(SSTableReader.OpenReason openReason)
     {
         if (maxDataAge < 0)
-            maxDataAge = System.currentTimeMillis();
+            maxDataAge = Clock.instance.currentTimeMillis();
 
         StatsMetadata stats = statsMetadata();
         // finalize in-memory state for the reader

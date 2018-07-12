@@ -30,6 +30,7 @@ import org.junit.Test;
 import org.apache.cassandra.io.compress.LZ4Compressor;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.utils.Clock;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotSame;
@@ -43,7 +44,7 @@ public class HintsDescriptorTest
     {
         UUID hostId = UUID.randomUUID();
         int version = HintsDescriptor.CURRENT_VERSION;
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         ImmutableMap<String, Object> parameters =
                 ImmutableMap.of("compression", (Object) ImmutableMap.of("class_name", LZ4Compressor.class.getName()));
         HintsDescriptor descriptor = new HintsDescriptor(hostId, version, timestamp, parameters);
@@ -56,7 +57,7 @@ public class HintsDescriptorTest
     {
         UUID hostId = UUID.randomUUID();
         int version = HintsDescriptor.CURRENT_VERSION;
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         ImmutableMap<String, Object> parameters = ImmutableMap.of();
         HintsDescriptor descriptor = new HintsDescriptor(hostId, version, timestamp, parameters);
 
@@ -68,7 +69,7 @@ public class HintsDescriptorTest
     {
         UUID hostId = UUID.randomUUID();
         int version = HintsDescriptor.CURRENT_VERSION;
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         ImmutableMap<String, Object> parameters = ImmutableMap.of();
         HintsDescriptor descriptor = new HintsDescriptor(hostId, version, timestamp, parameters);
 
@@ -98,7 +99,7 @@ public class HintsDescriptorTest
     {
         UUID hostId = UUID.randomUUID();
         int version = HintsDescriptor.CURRENT_VERSION;
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         ImmutableMap<String, Object> parameters = ImmutableMap.of();
         HintsDescriptor expected = new HintsDescriptor(hostId, version, timestamp, parameters);
 
@@ -124,7 +125,7 @@ public class HintsDescriptorTest
         int messageVersion = HintsDescriptor.messagingVersion(HintsDescriptor.CURRENT_VERSION);
         assertEquals(errorMsg, messageVersion, MessagingService.current_version);
 
-        HintsDescriptor descriptor = new HintsDescriptor(UUID.randomUUID(), HintsDescriptor.CURRENT_VERSION, System.currentTimeMillis(), ImmutableMap.of());
+        HintsDescriptor descriptor = new HintsDescriptor(UUID.randomUUID(), HintsDescriptor.CURRENT_VERSION, Clock.instance.currentTimeMillis(), ImmutableMap.of());
         assertEquals(errorMsg, descriptor.messagingVersion(), MessagingService.current_version);
     }
 

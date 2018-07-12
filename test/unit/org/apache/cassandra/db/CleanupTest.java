@@ -53,6 +53,7 @@ import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -152,8 +153,8 @@ public class CleanupTest
 
         ColumnMetadata cdef = cfs.metadata().getColumn(COLUMN);
         String indexName = "birthdate_key_index";
-        long start = System.nanoTime();
-        while (!cfs.getBuiltIndexes().contains(indexName) && System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10))
+        long start = Clock.instance.nanoTime();
+        while (!cfs.getBuiltIndexes().contains(indexName) && Clock.instance.nanoTime() - start < TimeUnit.SECONDS.toNanos(10))
             Thread.sleep(10);
 
         RowFilter cf = RowFilter.create();
@@ -360,7 +361,7 @@ public class CleanupTest
         {
             String key = String.valueOf(i);
             // create a row and update the birthdate value, test that the index query fetches the new version
-            new RowUpdateBuilder(cfs.metadata(), System.currentTimeMillis(), ByteBufferUtil.bytes(key))
+            new RowUpdateBuilder(cfs.metadata(), Clock.instance.currentTimeMillis(), ByteBufferUtil.bytes(key))
                     .clustering(COLUMN)
                     .add(colName, VALUE)
                     .build()

@@ -34,6 +34,7 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.serializers.TimeUUIDSerializer;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 import static org.junit.Assert.assertFalse;
@@ -60,7 +61,7 @@ public class ColumnConditionTest
     {
         Row.Builder builder = BTreeRow.sortedBuilder();
         builder.newRow(Clustering.EMPTY);
-        long now = System.currentTimeMillis();
+        long now = Clock.instance.currentTimeMillis();
         if (values != null)
         {
             for (int i = 0, m = values.size(); i < m; i++)

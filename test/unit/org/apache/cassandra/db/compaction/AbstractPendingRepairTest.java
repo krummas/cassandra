@@ -44,6 +44,7 @@ import org.apache.cassandra.repair.AbstractRepairTest;
 import org.apache.cassandra.repair.consistent.LocalSessionAccessor;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Clock;
 
 @Ignore
 public class AbstractPendingRepairTest extends AbstractRepairTest
@@ -82,7 +83,7 @@ public class AbstractPendingRepairTest extends AbstractRepairTest
     @Before
     public void setup()
     {
-        ks = "ks_" + System.currentTimeMillis();
+        ks = "ks_" + Clock.instance.currentTimeMillis();
         cfm = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl), ks).build();
         SchemaLoader.createKeyspace(ks, KeyspaceParams.simple(1), cfm);
         cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.id);

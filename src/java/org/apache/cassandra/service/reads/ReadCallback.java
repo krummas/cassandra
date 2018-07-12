@@ -42,6 +42,7 @@ import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.SimpleCondition;
 
@@ -102,7 +103,7 @@ public class ReadCallback implements IAsyncCallbackWithFailure<ReadResponse>
 
     public boolean await(long timePastStart, TimeUnit unit)
     {
-        long time = unit.toNanos(timePastStart) - (System.nanoTime() - queryStartNanoTime);
+        long time = unit.toNanos(timePastStart) - (Clock.instance.nanoTime() - queryStartNanoTime);
         try
         {
             return condition.await(time, TimeUnit.NANOSECONDS);

@@ -54,6 +54,7 @@ import org.apache.cassandra.schema.CachingParams;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FilterFactory;
 import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 
@@ -286,7 +287,7 @@ public class SSTableReaderTest
         ColumnFamilyStore store = keyspace.getColumnFamilyStore(CF_INDEXED);
         partitioner = store.getPartitioner();
 
-        new RowUpdateBuilder(store.metadata(), System.currentTimeMillis(), "k1")
+        new RowUpdateBuilder(store.metadata(), Clock.instance.currentTimeMillis(), "k1")
             .clustering("0")
             .add("birthdate", 1L)
             .build()
@@ -344,7 +345,7 @@ public class SSTableReaderTest
         store.disableAutoCompaction();
 
         DecoratedKey firstKey = null, lastKey = null;
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         for (int i = 0; i < store.metadata().params.minIndexInterval; i++)
         {
             DecoratedKey key = Util.dk(String.valueOf(i));
@@ -458,7 +459,7 @@ public class SSTableReaderTest
         Keyspace keyspace = Keyspace.open(KEYSPACE1);
         ColumnFamilyStore store = keyspace.getColumnFamilyStore("Indexed1");
 
-        new RowUpdateBuilder(store.metadata(), System.currentTimeMillis(), "k1")
+        new RowUpdateBuilder(store.metadata(), Clock.instance.currentTimeMillis(), "k1")
         .clustering("0")
         .add("birthdate", 1L)
         .build()

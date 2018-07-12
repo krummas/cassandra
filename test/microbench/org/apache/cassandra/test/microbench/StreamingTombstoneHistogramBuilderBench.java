@@ -22,6 +22,7 @@ package org.apache.cassandra.test.microbench;
 import java.util.concurrent.TimeUnit;
 import java.util.Random;
 
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.streamhist.StreamingTombstoneHistogramBuilder;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.profile.*;
@@ -45,7 +46,7 @@ public class StreamingTombstoneHistogramBuilderBench
 
     static
     {
-        final int now = (int) (System.currentTimeMillis() / 1000L);
+        final int now = (int) (Clock.instance.currentTimeMillis() / 1000L);
         Random random = new Random();
         for(int i = 0 ; i < 10000000; i++)
         {

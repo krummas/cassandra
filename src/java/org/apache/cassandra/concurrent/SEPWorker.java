@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.util.concurrent.FastThreadLocalThread;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 final class SEPWorker extends AtomicReference<SEPWorker.Work> implements Runnable
@@ -234,7 +235,7 @@ final class SEPWorker extends AtomicReference<SEPWorker.Work> implements Runnabl
         sleep *= ThreadLocalRandom.current().nextDouble();
         sleep = Math.max(10000, sleep);
 
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
 
         // place ourselves in the spinning collection; if we clash with another thread just exit
         Long target = start + sleep;
@@ -246,7 +247,7 @@ final class SEPWorker extends AtomicReference<SEPWorker.Work> implements Runnabl
         pool.spinning.remove(target, this);
 
         // finish timing and grab spinningTime (before we finish timing so it is under rather than overestimated)
-        long end = System.nanoTime();
+        long end = Clock.instance.nanoTime();
         long spin = end - start;
         long stopCheck = pool.stopCheck.addAndGet(spin);
         maybeStop(stopCheck, end);

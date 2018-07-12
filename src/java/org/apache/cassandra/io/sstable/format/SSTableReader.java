@@ -434,7 +434,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         SSTableReader sstable = internalOpen(descriptor,
                                              components,
                                              metadata,
-                                             System.currentTimeMillis(),
+                                             Clock.instance.currentTimeMillis(),
                                              statsMetadata,
                                              OpenReason.NORMAL,
                                              header.toHeader(metadata.get()));
@@ -525,7 +525,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
         SSTableReader sstable = internalOpen(descriptor,
                                              components,
                                              metadata,
-                                             System.currentTimeMillis(),
+                                             Clock.instance.currentTimeMillis(),
                                              statsMetadata,
                                              OpenReason.NORMAL,
                                              header.toHeader(metadata.get()));

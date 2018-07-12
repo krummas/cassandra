@@ -41,6 +41,7 @@ import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.apache.cassandra.Util.throwAssert;
@@ -805,11 +806,11 @@ public class CassandraIndexTest extends CQLTester
         {
             ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
             long maxWaitMillis = 10000;
-            long startTime = System.currentTimeMillis();
+            long startTime = Clock.instance.currentTimeMillis();
             while (! cfs.indexManager.getBuiltIndexNames().contains(indexName))
             {
                 Thread.sleep(100);
-                long wait = System.currentTimeMillis() - startTime;
+                long wait = Clock.instance.currentTimeMillis() - startTime;
                 if (wait > maxWaitMillis)
                     fail(String.format("Timed out waiting for index %s to build (%s)ms", indexName, wait));
             }

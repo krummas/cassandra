@@ -39,6 +39,7 @@ import org.apache.cassandra.db.lifecycle.LogRecord.Type;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Throwables;
 
 import static org.apache.cassandra.utils.Throwables.merge;
@@ -248,13 +249,13 @@ final class LogFile implements AutoCloseable
     void commit()
     {
         assert !completed() : "Already completed!";
-        addRecord(LogRecord.makeCommit(System.currentTimeMillis()));
+        addRecord(LogRecord.makeCommit(Clock.instance.currentTimeMillis()));
     }
 
     void abort()
     {
         assert !completed() : "Already completed!";
-        addRecord(LogRecord.makeAbort(System.currentTimeMillis()));
+        addRecord(LogRecord.makeAbort(Clock.instance.currentTimeMillis()));
     }
 
     private boolean isLastRecordValidWithType(Type type)

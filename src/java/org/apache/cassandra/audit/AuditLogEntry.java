@@ -30,6 +30,7 @@ import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.QueryState;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class AuditLogEntry
@@ -193,7 +194,7 @@ public class AuditLogEntry
                 user = AuthenticatedUser.SYSTEM_USER.getName();
             }
 
-            timestamp = System.currentTimeMillis();
+            timestamp = Clock.instance.currentTimeMillis();
         }
 
         public Builder(AuditLogEntry entry)
@@ -290,7 +291,7 @@ public class AuditLogEntry
 
         public AuditLogEntry build()
         {
-            timestamp = timestamp > 0 ? timestamp : System.currentTimeMillis();
+            timestamp = timestamp > 0 ? timestamp : Clock.instance.currentTimeMillis();
             return new AuditLogEntry(type, source, user, timestamp, batch, keyspace, scope, operation, options);
         }
     }

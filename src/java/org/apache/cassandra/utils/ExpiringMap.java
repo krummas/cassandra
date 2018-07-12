@@ -156,7 +156,7 @@ public class ExpiringMap<K, V>
     }
 
     /**
-     * @return System.nanoTime() when key was put into the map.
+     * @return Clock.instance.nanoTime() when key was put into the map.
      */
     public long getAge(K key)
     {

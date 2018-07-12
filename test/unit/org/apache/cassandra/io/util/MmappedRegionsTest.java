@@ -37,6 +37,7 @@ import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.schema.CompressionParams;
+import org.apache.cassandra.utils.Clock;
 
 import static junit.framework.Assert.assertNull;
 import static org.junit.Assert.assertEquals;
@@ -57,7 +58,7 @@ public class MmappedRegionsTest
     private static ByteBuffer allocateBuffer(int size)
     {
         ByteBuffer ret = ByteBuffer.allocate(Ints.checkedCast(size));
-        long seed = System.nanoTime();
+        long seed = Clock.instance.nanoTime();
         //seed = 365238103404423L;
         logger.info("Seed {}", seed);
 

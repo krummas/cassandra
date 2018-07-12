@@ -53,6 +53,7 @@ import org.apache.cassandra.notifications.SSTableDeletingNotification;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 import static org.junit.Assert.assertEquals;
@@ -108,7 +109,7 @@ public class CompactionStrategyManagerTest
             if (i % 3 == 0)
             {
                 //make 1 third of sstables repaired
-                cfs.getCompactionStrategyManager().mutateRepaired(newSSTables, System.currentTimeMillis(), null);
+                cfs.getCompactionStrategyManager().mutateRepaired(newSSTables, Clock.instance.currentTimeMillis(), null);
             }
             else if (i % 3 == 1)
             {
@@ -364,7 +365,7 @@ public class CompactionStrategyManagerTest
 
     private static void createSSTableWithKey(String keyspace, String table, int key)
     {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         DecoratedKey dk = Util.dk(String.format("%04d", key));
         ColumnFamilyStore cfs = Keyspace.open(keyspace).getColumnFamilyStore(table);
         new RowUpdateBuilder(cfs.metadata(), timestamp, dk.getKey())

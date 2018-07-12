@@ -38,6 +38,7 @@ import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.MurmurHash;
 import org.apache.cassandra.utils.Pair;
 
@@ -311,7 +312,7 @@ public class OnDiskIndexTest
     {
         OnDiskIndexBuilder builder = new OnDiskIndexBuilder(UTF8Type.instance, LongType.instance, OnDiskIndexBuilder.Mode.SPARSE);
 
-        final long start = System.currentTimeMillis();
+        final long start = Clock.instance.currentTimeMillis();
         final int numIterations = 100000;
 
         for (long i = 0; i < numIterations; i++)

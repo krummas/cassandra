@@ -25,6 +25,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 
 import com.codahale.metrics.Timer;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * <p>A relatively easy to use utility for general purpose thread signalling.</p>
@@ -258,7 +259,7 @@ public final class WaitQueue
          * isSignalled() will be true on exit, and the method will return true; if timedout, the method will return
          * false and isCancelled() will be true; if interrupted an InterruptedException will be thrown and isCancelled()
          * will be true.
-         * @param nanos System.nanoTime() to wait until
+         * @param nanos Clock.instance.nanoTime() to wait until
          * @return true if signalled, false if timed out
          * @throws InterruptedException
          */
@@ -297,7 +298,7 @@ public final class WaitQueue
         public boolean awaitUntil(long until) throws InterruptedException
         {
             long now;
-            while (until > (now = System.nanoTime()) && !isSignalled())
+            while (until > (now = Clock.instance.nanoTime()) && !isSignalled())
             {
                 checkInterrupted();
                 long delta = until - now;

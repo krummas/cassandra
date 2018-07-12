@@ -47,6 +47,7 @@ import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Pair;
 
 import com.google.common.collect.ArrayListMultimap;
@@ -107,7 +108,7 @@ public class SSTableFlushObserverTest
 
         try
         {
-            final long now = System.currentTimeMillis();
+            final long now = Clock.instance.currentTimeMillis();
 
             ByteBuffer key = UTF8Type.instance.fromString("key1");
             expected.putAll(key, Arrays.asList(BufferCell.live(getColumn(cfm, "age"), now, Int32Type.instance.decompose(27)),

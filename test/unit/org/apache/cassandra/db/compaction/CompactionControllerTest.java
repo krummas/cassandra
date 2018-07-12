@@ -41,6 +41,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertEquals;
@@ -169,7 +170,7 @@ public class CompactionControllerTest extends SchemaLoader
         Set<SSTableReader> overlapping = Sets.difference(Sets.newHashSet(cfs.getLiveSSTables()), compacting);
 
         // the first sstable should be expired because the overlapping sstable is newer and the gc period is later
-        int gcBefore = (int) (System.currentTimeMillis() / 1000) + 5;
+        int gcBefore = (int) (Clock.instance.currentTimeMillis() / 1000) + 5;
         Set<SSTableReader> expired = CompactionController.getFullyExpiredSSTables(cfs, compacting, overlapping, gcBefore);
         assertNotNull(expired);
         assertEquals(1, expired.size());

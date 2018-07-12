@@ -29,6 +29,7 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.WriteType;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.net.IAsyncCallback;
+import org.apache.cassandra.utils.Clock;
 
 public abstract class AbstractPaxosCallback<T> implements IAsyncCallback<T>
 {
@@ -59,7 +60,7 @@ public abstract class AbstractPaxosCallback<T> implements IAsyncCallback<T>
     {
         try
         {
-            long timeout = TimeUnit.MILLISECONDS.toNanos(DatabaseDescriptor.getWriteRpcTimeout()) - (System.nanoTime() - queryStartNanoTime);
+            long timeout = TimeUnit.MILLISECONDS.toNanos(DatabaseDescriptor.getWriteRpcTimeout()) - (Clock.instance.nanoTime() - queryStartNanoTime);
             if (!latch.await(timeout, TimeUnit.NANOSECONDS))
                 throw new WriteTimeoutException(WriteType.CAS, consistency, getResponseCount(), targets);
         }

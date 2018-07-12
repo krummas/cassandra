@@ -43,6 +43,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.NoSpamLogger;
 
 public class CompactionLogger
@@ -220,7 +221,7 @@ public class CompactionLogger
             return;
         node.put("keyspace", cfs.keyspace.getName());
         node.put("table", cfs.getTableName());
-        node.put("time", System.currentTimeMillis());
+        node.put("time", Clock.instance.currentTimeMillis());
     }
 
     private JsonNode startStrategies()

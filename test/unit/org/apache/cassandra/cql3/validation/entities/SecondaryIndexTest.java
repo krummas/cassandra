@@ -49,6 +49,7 @@ import org.apache.cassandra.schema.IndexMetadata;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.MD5Digest;
 import org.apache.cassandra.utils.Pair;
 
@@ -110,7 +111,7 @@ public class SecondaryIndexTest extends CQLTester
                              "CREATE INDEX " + indexName + " ON %s(b)");
 
         // IF NOT EXISTS should apply in cases where the new index differs from an existing one in name only
-        String otherIndexName = "index_" + System.nanoTime();
+        String otherIndexName = "index_" + Clock.instance.nanoTime();
         assertEquals(1, getCurrentColumnFamilyStore().metadata().indexes.size());
         createIndex("CREATE INDEX IF NOT EXISTS " + otherIndexName + " ON %s(b)");
         assertEquals(1, getCurrentColumnFamilyStore().metadata().indexes.size());

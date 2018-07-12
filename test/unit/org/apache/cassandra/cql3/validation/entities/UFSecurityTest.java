@@ -222,7 +222,7 @@ public class UFSecurityTest extends CQLTester
                                               "RETURNS NULL ON NULL INPUT " +
                                               "RETURNS double " +
                                               "LANGUAGE JAVA\n" +
-                                              "AS 'long t=System.currentTimeMillis()+110; while (t>System.currentTimeMillis()) { }; return 0d;'");
+                                              "AS 'long t=Clock.instance.currentTimeMillis()+110; while (t>Clock.instance.currentTimeMillis()) { }; return 0d;'");
                 execute("SELECT " + fName + "(dval) FROM %s WHERE key=1");
                 List<String> warnings = ClientWarn.instance.getWarnings();
                 Assert.assertNotNull(warnings);
@@ -236,7 +236,7 @@ public class UFSecurityTest extends CQLTester
                                        "RETURNS NULL ON NULL INPUT " +
                                        "RETURNS double " +
                                        "LANGUAGE JAVA\n" +
-                                       "AS 'long t=System.currentTimeMillis()+500; while (t>System.currentTimeMillis()) { }; return 0d;';");
+                                       "AS 'long t=Clock.instance.currentTimeMillis()+500; while (t>Clock.instance.currentTimeMillis()) { }; return 0d;';");
                 assertInvalidMessage("ran longer than 250ms", "SELECT " + fName + "(dval) FROM %s WHERE key=1");
 
                 // Javascript UDF
@@ -246,7 +246,7 @@ public class UFSecurityTest extends CQLTester
                                        "RETURNS NULL ON NULL INPUT " +
                                        "RETURNS double " +
                                        "LANGUAGE JAVASCRIPT\n" +
-                                       "AS 'var t=java.lang.System.currentTimeMillis()+500; while (t>java.lang.System.currentTimeMillis()) { }; 0;';");
+                                       "AS 'var t=java.lang.Clock.instance.currentTimeMillis()+500; while (t>java.lang.Clock.instance.currentTimeMillis()) { }; 0;';");
                 assertInvalidMessage("ran longer than 250ms", "SELECT " + fName + "(dval) FROM %s WHERE key=1");
 
                 return;

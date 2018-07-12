@@ -45,6 +45,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.*;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertTrue;
 
@@ -71,7 +72,7 @@ public class BlacklistingCompactionsTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
-        long seed = System.nanoTime();
+        long seed = Clock.instance.nanoTime();
         //long seed = 754271160974509L; // CASSANDRA-9530: use this seed to reproduce compaction failures if reading empty rows
         //long seed = 2080431860597L; // CASSANDRA-12359: use this seed to reproduce undetected corruptions
         logger.info("Seed {}", seed);

@@ -48,6 +48,7 @@ import org.apache.cassandra.repair.messages.FinalizePropose;
 import org.apache.cassandra.repair.messages.PrepareConsistentRequest;
 import org.apache.cassandra.repair.messages.RepairMessage;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Coordinator side logic and state of a consistent repair session. Like {@link ActiveRepairService.ParentRepairSession},
@@ -264,7 +265,7 @@ public class CoordinatorSession extends ConsistentSession
     {
         logger.info("Beginning coordination of incremental repair session {}", sessionID);
 
-        sessionStart = System.currentTimeMillis();
+        sessionStart = Clock.instance.currentTimeMillis();
         ListenableFuture<Boolean> prepareResult = prepare();
 
         // run repair sessions normally
@@ -274,7 +275,7 @@ public class CoordinatorSession extends ConsistentSession
             {
                 if (success)
                 {
-                    repairStart = System.currentTimeMillis();
+                    repairStart = Clock.instance.currentTimeMillis();
                     if (logger.isDebugEnabled())
                     {
                         logger.debug("Incremental repair {} prepare phase completed in {}", sessionID, formatDuration(sessionStart, repairStart));
@@ -297,7 +298,7 @@ public class CoordinatorSession extends ConsistentSession
             {
                 if (results == null || results.isEmpty() || Iterables.any(results, r -> r == null))
                 {
-                    finalizeStart = System.currentTimeMillis();
+                    finalizeStart = Clock.instance.currentTimeMillis();
                     if (logger.isDebugEnabled())
                     {
                         logger.debug("Incremental repair {} validation/stream phase completed in {}", sessionID, formatDuration(repairStart, finalizeStart));
@@ -321,12 +322,12 @@ public class CoordinatorSession extends ConsistentSession
                 {
                     if (logger.isDebugEnabled())
                     {
-                        logger.debug("Incremental repair {} finalization phase completed in {}", sessionID, formatDuration(finalizeStart, System.currentTimeMillis()));
+                        logger.debug("Incremental repair {} finalization phase completed in {}", sessionID, formatDuration(finalizeStart, Clock.instance.currentTimeMillis()));
                     }
                     finalizeCommit();
                     if (logger.isDebugEnabled())
                     {
-                        logger.debug("Incremental repair {} phase completed in {}", sessionID, formatDuration(sessionStart, System.currentTimeMillis()));
+                        logger.debug("Incremental repair {} phase completed in {}", sessionID, formatDuration(sessionStart, Clock.instance.currentTimeMillis()));
                     }
                 }
                 else
@@ -340,7 +341,7 @@ public class CoordinatorSession extends ConsistentSession
             {
                 if (logger.isDebugEnabled())
                 {
-                    logger.debug("Incremental repair {} phase failed in {}", sessionID, formatDuration(sessionStart, System.currentTimeMillis()));
+                    logger.debug("Incremental repair {} phase failed in {}", sessionID, formatDuration(sessionStart, Clock.instance.currentTimeMillis()));
                 }
                 hasFailure.set(true);
                 fail();

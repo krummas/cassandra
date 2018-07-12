@@ -72,6 +72,7 @@ import org.apache.cassandra.tracing.TraceState;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
@@ -205,7 +206,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
             return;
         }
 
-        final long startTime = System.currentTimeMillis();
+        final long startTime = Clock.instance.currentTimeMillis();
         String message = String.format("Starting repair command #%d (%s), repairing keyspace %s with %s", cmd, parentSession, keyspace,
                                        options);
         logger.info(message);
@@ -492,7 +493,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
             {
                 logger.debug("Preview repair {} completed", parentSession);
 
-                String duration = DurationFormatUtils.formatDurationWords(System.currentTimeMillis() - startTime,
+                String duration = DurationFormatUtils.formatDurationWords(Clock.instance.currentTimeMillis() - startTime,
                                                                           true, true);
                 String message = String.format("Repair preview #%d finished in %s", cmd, duration);
                 fireProgressEvent(new ProgressEvent(ProgressEventType.COMPLETE, progress.get(), totalProgress, message));
@@ -651,7 +652,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
         private String repairComplete()
         {
             ActiveRepairService.instance.removeParentRepairSession(parentSession);
-            long durationMillis = System.currentTimeMillis() - startTime;
+            long durationMillis = Clock.instance.currentTimeMillis() - startTime;
             String duration = DurationFormatUtils.formatDurationWords(durationMillis,true, true);
             String message = String.format("Repair command #%d finished in %s", cmd, duration);
             fireProgressEvent(new ProgressEvent(ProgressEventType.COMPLETE, progress.get(), totalProgress, message));
@@ -724,7 +725,7 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
                 int si = 0;
                 UUID uuid;
 
-                long tlast = System.currentTimeMillis(), tcur;
+                long tlast = Clock.instance.currentTimeMillis(), tcur;
 
                 TraceState.Status status;
                 long minWaitMillis = 125;
@@ -745,11 +746,11 @@ public class RepairRunnable extends WrappedRunnable implements ProgressEventNoti
                         shouldDouble = false;
                     }
                     ByteBuffer tminBytes = ByteBufferUtil.bytes(UUIDGen.minTimeUUID(tlast - 1000));
-                    ByteBuffer tmaxBytes = ByteBufferUtil.bytes(UUIDGen.maxTimeUUID(tcur = System.currentTimeMillis()));
+                    ByteBuffer tmaxBytes = ByteBufferUtil.bytes(UUIDGen.maxTimeUUID(tcur = Clock.instance.currentTimeMillis()));
                     QueryOptions options = QueryOptions.forInternalCalls(ConsistencyLevel.ONE, Lists.newArrayList(sessionIdBytes,
                                                                                                                   tminBytes,
                                                                                                                   tmaxBytes));
-                    ResultMessage.Rows rows = statement.execute(QueryState.forInternalCalls(), options, System.nanoTime());
+                    ResultMessage.Rows rows = statement.execute(QueryState.forInternalCalls(), options, Clock.instance.nanoTime());
                     UntypedResultSet result = UntypedResultSet.create(rows.result);
 
                     for (UntypedResultSet.Row r : result)

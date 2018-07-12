@@ -40,6 +40,7 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.MigrationManager;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.Clock;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
@@ -60,7 +61,7 @@ public class HintsReaderTest
     {
         SchemaLoader.prepareServer();
 
-        descriptor = new HintsDescriptor(UUID.randomUUID(), System.currentTimeMillis());
+        descriptor = new HintsDescriptor(UUID.randomUUID(), Clock.instance.currentTimeMillis());
     }
 
     private static Mutation createMutation(int index, long timestamp, String ks, String tb)

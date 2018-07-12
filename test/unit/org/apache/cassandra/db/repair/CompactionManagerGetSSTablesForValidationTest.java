@@ -47,6 +47,7 @@ import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.Validator;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -83,7 +84,7 @@ public class CompactionManagerGetSSTablesForValidationTest
     @Before
     public void setup() throws Exception
     {
-        ks = "ks_" + System.currentTimeMillis();
+        ks = "ks_" + Clock.instance.currentTimeMillis();
         TableMetadata cfm = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl), ks).build();
         SchemaLoader.createKeyspace(ks, KeyspaceParams.simple(1), cfm);
         cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.id);
@@ -109,7 +110,7 @@ public class CompactionManagerGetSSTablesForValidationTest
                                                                  Lists.newArrayList(cfs),
                                                                  Sets.newHashSet(range),
                                                                  incremental,
-                                                                 incremental ? System.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                 incremental ? Clock.instance.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE,
                                                                  true,
                                                                  PreviewKind.NONE);
         desc = new RepairJobDesc(sessionID, UUIDGen.getTimeUUID(), ks, tbl, Collections.singleton(range));
@@ -120,7 +121,7 @@ public class CompactionManagerGetSSTablesForValidationTest
         Iterator<SSTableReader> iter = cfs.getLiveSSTables().iterator();
 
         repaired = iter.next();
-        repaired.descriptor.getMetadataSerializer().mutateRepaired(repaired.descriptor, System.currentTimeMillis(), null);
+        repaired.descriptor.getMetadataSerializer().mutateRepaired(repaired.descriptor, Clock.instance.currentTimeMillis(), null);
         repaired.reloadSSTableMetadata();
 
         pendingRepair = iter.next();

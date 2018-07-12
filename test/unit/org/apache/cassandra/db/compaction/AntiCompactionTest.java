@@ -58,6 +58,7 @@ import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.Refs;
 import org.apache.cassandra.UpdateBuilder;
@@ -230,7 +231,7 @@ public class AntiCompactionTest
         for (int i = 0; i < 10; i++)
         {
             String localSuffix = Integer.toString(i);
-            new RowUpdateBuilder(metadata, System.currentTimeMillis(), localSuffix + "-" + Suffix)
+            new RowUpdateBuilder(metadata, Clock.instance.currentTimeMillis(), localSuffix + "-" + Suffix)
                     .clustering("c")
                     .add("val", "val" + localSuffix)
                     .build()
@@ -378,7 +379,7 @@ public class AntiCompactionTest
         store.disableAutoCompaction();
         for (int i = 0; i < 10; i++)
         {
-            new RowUpdateBuilder(metadata, System.currentTimeMillis(), Integer.toString(i))
+            new RowUpdateBuilder(metadata, Clock.instance.currentTimeMillis(), Integer.toString(i))
                 .clustering("c")
                 .add("val", "val")
                 .build()

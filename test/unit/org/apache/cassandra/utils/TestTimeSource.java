@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class TestTimeSource implements TimeSource
 {
-    private final AtomicLong timeInMillis = new AtomicLong(System.currentTimeMillis());
+    private final AtomicLong timeInMillis = new AtomicLong(Clock.instance.currentTimeMillis());
 
     @Override
     public long currentTimeMillis()

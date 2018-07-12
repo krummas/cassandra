@@ -36,6 +36,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import junit.framework.AssertionFailedError;
 import junit.framework.Test;
 
+import org.apache.cassandra.utils.Clock;
 import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.taskdefs.optional.junit.IgnoredTestListener;
 import org.apache.tools.ant.taskdefs.optional.junit.JUnitResultFormatter;
@@ -240,7 +241,7 @@ public class CassandraXMLJUnitResultFormatter implements JUnitResultFormatter, X
      * @param t the test.
      */
     public void startTest(final Test t) {
-        testStarts.put(createDescription(t), System.currentTimeMillis());
+        testStarts.put(createDescription(t), Clock.instance.currentTimeMillis());
     }
 
     private static String createDescription(final Test test) throws BuildException {
@@ -284,7 +285,7 @@ public class CassandraXMLJUnitResultFormatter implements JUnitResultFormatter, X
 
         final Long l = testStarts.get(createDescription(test));
         currentTest.setAttribute(ATTR_TIME,
-            "" + ((System.currentTimeMillis() - l) / ONE_SECOND));
+            "" + ((Clock.instance.currentTimeMillis() - l) / ONE_SECOND));
     }
 
     /**

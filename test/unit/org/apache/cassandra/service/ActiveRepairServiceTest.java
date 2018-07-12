@@ -47,6 +47,7 @@ import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.repair.messages.RepairOption;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -266,14 +267,14 @@ public class ActiveRepairServiceTest
         Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
         Collection<Range<Token>> ranges = Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken()));
         ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddressAndPort(), Collections.singletonList(store),
-                                                                 ranges, true, System.currentTimeMillis(), true, PreviewKind.NONE);
+                                                                 ranges, true, Clock.instance.currentTimeMillis(), true, PreviewKind.NONE);
         store.getRepairManager().snapshot(prsId.toString(), ranges, false);
 
         UUID prsId2 = UUID.randomUUID();
         ActiveRepairService.instance.registerParentRepairSession(prsId2, FBUtilities.getBroadcastAddressAndPort(),
                                                                  Collections.singletonList(store),
                                                                  ranges,
-                                                                 true, System.currentTimeMillis(),
+                                                                 true, Clock.instance.currentTimeMillis(),
                                                                  true, PreviewKind.NONE);
         createSSTables(store, 2);
         store.getRepairManager().snapshot(prsId.toString(), ranges, false);
@@ -295,7 +296,7 @@ public class ActiveRepairServiceTest
 
     private void createSSTables(ColumnFamilyStore cfs, int count)
     {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         for (int i = 0; i < count; i++)
         {
             for (int j = 0; j < 10; j++)

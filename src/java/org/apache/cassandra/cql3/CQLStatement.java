@@ -51,7 +51,7 @@ public interface CQLStatement extends IAuditLogContext
      *
      * @param state the current query state
      * @param options options for this query (consistency, variables, pageSize, ...)
-     * @param queryStartNanoTime the timestamp returned by System.nanoTime() when this statement was received
+     * @param queryStartNanoTime the timestamp returned by Clock.instance.nanoTime() when this statement was received
      */
     public ResultMessage execute(QueryState state, QueryOptions options, long queryStartNanoTime) throws RequestValidationException, RequestExecutionException;
 

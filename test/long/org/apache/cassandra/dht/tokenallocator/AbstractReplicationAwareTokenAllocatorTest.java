@@ -30,6 +30,7 @@ import org.junit.Ignore;
 
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Base class for {@link Murmur3ReplicationAwareTokenAllocatorTest} and {@link RandomReplicationAwareTokenAllocatorTest},
@@ -489,7 +490,7 @@ abstract class AbstractReplicationAwareTokenAllocatorTest extends TokenAllocator
         if (size < targetClusterSize)
         {
             System.out.format("Adding %d unit(s) using %s...", targetClusterSize - size, t.toString());
-            long time = System.currentTimeMillis();
+            long time = Clock.instance.currentTimeMillis();
             while (size < targetClusterSize)
             {
                 int tokens = tc.tokenCount(perUnitCount, rand);
@@ -500,7 +501,7 @@ abstract class AbstractReplicationAwareTokenAllocatorTest extends TokenAllocator
                 if (verifyMetrics)
                     updateSummary(t, su, st, false);
             }
-            System.out.format(" Done in %.3fs\n", (System.currentTimeMillis() - time) / 1000.0);
+            System.out.format(" Done in %.3fs\n", (Clock.instance.currentTimeMillis() - time) / 1000.0);
             if (verifyMetrics)
             {
                 updateSummary(t, su, st, true);

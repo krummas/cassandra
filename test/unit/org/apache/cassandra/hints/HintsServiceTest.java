@@ -47,6 +47,7 @@ import org.apache.cassandra.net.MockMessagingService;
 import org.apache.cassandra.net.MockMessagingSpy;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.apache.cassandra.Util.dk;
@@ -202,7 +203,7 @@ public class HintsServiceTest
         UUID hostId = StorageService.instance.getLocalHostUUID();
         for (int i = 0; i < noOfHints; i++)
         {
-            long now = System.currentTimeMillis();
+            long now = Clock.instance.currentTimeMillis();
             DecoratedKey dkey = dk(String.valueOf(i));
             TableMetadata metadata = Schema.instance.getTableMetadata(KEYSPACE, TABLE);
             PartitionUpdate.SimpleBuilder builder = PartitionUpdate.simpleBuilder(metadata, dkey).timestamp(now);

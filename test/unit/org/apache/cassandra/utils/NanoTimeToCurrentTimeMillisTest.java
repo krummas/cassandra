@@ -26,19 +26,19 @@ public class NanoTimeToCurrentTimeMillisTest
     @Test
     public void testTimestampOrdering() throws Exception
     {
-        long nowNanos = System.nanoTime();
-        long now = System.currentTimeMillis();
+        long nowNanos = Clock.instance.nanoTime();
+        long now = Clock.instance.currentTimeMillis();
         long lastConverted = 0;
         for (long ii = 0; ii < 10000000; ii++)
         {
-            now = Math.max(now, System.currentTimeMillis());
+            now = Math.max(now, Clock.instance.currentTimeMillis());
             if (ii % 10000 == 0)
             {
                 NanoTimeToCurrentTimeMillis.updateNow();
                 Thread.sleep(1);
             }
 
-            nowNanos = Math.max(nowNanos, System.nanoTime());
+            nowNanos = Math.max(nowNanos, Clock.instance.nanoTime());
             long convertedNow = NanoTimeToCurrentTimeMillis.convert(nowNanos);
 
             int maxDiff = FBUtilities.isWindows ? 15 : 1;

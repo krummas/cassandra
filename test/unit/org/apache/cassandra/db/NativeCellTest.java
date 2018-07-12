@@ -35,6 +35,7 @@ import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.SetType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.rows.*;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.concurrent.OpOrder;
 import org.apache.cassandra.utils.memory.HeapAllocator;
 import org.apache.cassandra.utils.memory.NativeAllocator;
@@ -51,7 +52,7 @@ public class NativeCellTest
     @BeforeClass
     public static void setUp()
     {
-        long seed = System.currentTimeMillis();
+        long seed = Clock.instance.currentTimeMillis();
         logger.info("Seed : {}", seed);
         rand = new Random(seed);
     }

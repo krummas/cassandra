@@ -1269,7 +1269,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public void apply(PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup, CommitLogPosition commitLogPosition)
 
     {
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         try
         {
             Memtable mt = data.getMemtableFor(opGroup, commitLogPosition);
@@ -1278,7 +1278,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             invalidateCachedPartition(key);
             metric.samplers.get(Sampler.WRITES).addSample(key.getKey(), key.hashCode(), 1);
             StorageHook.instance.reportWrite(metadata.id, update);
-            metric.writeLatency.addNano(System.nanoTime() - start);
+            metric.writeLatency.addNano(Clock.instance.nanoTime() - start);
             // CASSANDRA-11117 - certain resolution paths on memtable put can result in very
             // large time deltas, either through a variety of sentinel timestamps (used for empty values, ensuring
             // a minimal write, etc). This limits the time delta to the max value the histogram
@@ -1461,7 +1461,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         // skip snapshot creation during scrub, SEE JIRA 5891
         if(!disableSnapshot)
-            snapshotWithoutFlush("pre-scrub-" + System.currentTimeMillis());
+            snapshotWithoutFlush("pre-scrub-" + Clock.instance.currentTimeMillis());
 
         try
         {
@@ -1607,9 +1607,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 return new RefViewFragment(view.sstables, view.memtables, refs);
             if (failingSince <= 0)
             {
-                failingSince = System.nanoTime();
+                failingSince = Clock.instance.nanoTime();
             }
-            else if (System.nanoTime() - failingSince > TimeUnit.MILLISECONDS.toNanos(100))
+            else if (Clock.instance.nanoTime() - failingSince > TimeUnit.MILLISECONDS.toNanos(100))
             {
                 List<SSTableReader> released = new ArrayList<>();
                 for (SSTableReader reader : view.sstables)
@@ -1617,7 +1617,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                         released.add(reader);
                 NoSpamLogger.log(logger, NoSpamLogger.Level.WARN, 1, TimeUnit.SECONDS,
                                  "Spinning trying to capture readers {}, released: {}, ", view.sstables, released);
-                failingSince = System.nanoTime();
+                failingSince = Clock.instance.nanoTime();
             }
         }
     }
@@ -2141,7 +2141,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             }
         }
 
-        long now = System.currentTimeMillis();
+        long now = Clock.instance.currentTimeMillis();
         // make sure none of our sstables are somehow in the future (clock drift, perhaps)
         for (ColumnFamilyStore cfs : concatWithIndexes())
             for (SSTableReader sstable : cfs.getLiveSSTables())
@@ -2538,7 +2538,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     {
         double allDroppable = 0;
         long allColumns = 0;
-        int localTime = (int)(System.currentTimeMillis()/1000);
+        int localTime = (int)(Clock.instance.currentTimeMillis()/1000);
 
         for (SSTableReader sstable : getSSTables(SSTableSet.LIVE))
         {

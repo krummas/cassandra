@@ -43,6 +43,7 @@ import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.mindrot.jbcrypt.BCrypt;
 
 /**
@@ -392,7 +393,7 @@ public class CassandraRoleManager implements IRoleManager
     @VisibleForTesting
     ResultMessage.Rows select(SelectStatement statement, QueryOptions options)
     {
-        return statement.execute(QueryState.forInternalCalls(), options, System.nanoTime());
+        return statement.execute(QueryState.forInternalCalls(), options, Clock.instance.nanoTime());
     }
 
     /*

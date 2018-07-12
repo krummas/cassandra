@@ -31,14 +31,15 @@ import org.apache.cassandra.schema.Tables;
 import org.apache.cassandra.schema.TriggerMetadata;
 import org.apache.cassandra.schema.Triggers;
 import org.apache.cassandra.schema.MigrationManager;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.*;
 
 public class TriggersSchemaTest
 {
-    String ksName = "ks" + System.nanoTime();
-    String cfName = "cf" + System.nanoTime();
-    String triggerName = "trigger_" + System.nanoTime();
+    String ksName = "ks" + Clock.instance.nanoTime();
+    String cfName = "cf" + Clock.instance.nanoTime();
+    String triggerName = "trigger_" + Clock.instance.nanoTime();
     String triggerClass = "org.apache.cassandra.triggers.NoSuchTrigger.class";
 
     @BeforeClass

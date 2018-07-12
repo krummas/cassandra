@@ -39,6 +39,7 @@ import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.Clock;
 
 import static junit.framework.Assert.*;
 
@@ -96,13 +97,13 @@ public class HintsBufferTest
             hostIds[i] = UUID.randomUUID();
 
         // map each index to one random UUID from the previously created UUID array
-        Random random = new Random(System.currentTimeMillis());
+        Random random = new Random(Clock.instance.currentTimeMillis());
         UUID[] load = new UUID[HINTS_COUNT];
         for (int i = 0; i < load.length; i++)
             load[i] = hostIds[random.nextInt(HOST_ID_COUNT)];
 
         // calculate the size of a single hint (they will all have an equal size in this test)
-        int hintSize = (int) Hint.serializer.serializedSize(createHint(0, System.currentTimeMillis()), MessagingService.current_version);
+        int hintSize = (int) Hint.serializer.serializedSize(createHint(0, Clock.instance.currentTimeMillis()), MessagingService.current_version);
         int entrySize = hintSize + HintsBuffer.ENTRY_OVERHEAD_SIZE;
 
         // allocate a slab to fit *precisely* HINTS_COUNT hints
@@ -110,7 +111,7 @@ public class HintsBufferTest
         HintsBuffer buffer = HintsBuffer.create(slabSize);
 
         // use a fixed timestamp base for all mutation timestamps
-        long baseTimestamp = System.currentTimeMillis();
+        long baseTimestamp = Clock.instance.currentTimeMillis();
 
         // create HINT_THREADS_COUNT, start them, and wait for them to finish
         List<Thread> threads = new ArrayList<>(HINT_THREADS_COUNT);

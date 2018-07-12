@@ -77,6 +77,7 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.MigrationManager;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertEquals;
@@ -125,7 +126,7 @@ public class CompactionsTest
 
     public static long populate(String ks, String cf, int startRowKey, int endRowKey, int ttl)
     {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         TableMetadata cfm = Keyspace.open(ks).getColumnFamilyStore(cf).metadata();
         for (int i = startRowKey; i <= endRowKey; i++)
         {
@@ -358,7 +359,7 @@ public class CompactionsTest
             deletedRowUpdateBuilder.clustering("01").add("val", "a"); //Range tombstone covers this (timestamp 2 > 1)
             Clustering startClustering = Clustering.make(ByteBufferUtil.bytes("0"));
             Clustering endClustering = Clustering.make(ByteBufferUtil.bytes("b"));
-            deletedRowUpdateBuilder.addRangeTombstone(new RangeTombstone(Slice.make(startClustering, endClustering), new DeletionTime(2, (int) (System.currentTimeMillis() / 1000))));
+            deletedRowUpdateBuilder.addRangeTombstone(new RangeTombstone(Slice.make(startClustering, endClustering), new DeletionTime(2, (int) (Clock.instance.currentTimeMillis() / 1000))));
             deletedRowUpdateBuilder.build().applyUnsafe();
 
             RowUpdateBuilder notYetDeletedRowUpdateBuilder = new RowUpdateBuilder(table, 3, Util.dk(Integer.toString(dk)));
@@ -517,7 +518,7 @@ public class CompactionsTest
 
     private static void insertRowWithKey(int key)
     {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         DecoratedKey dk = Util.dk(String.format("%03d", key));
         new RowUpdateBuilder(Keyspace.open(KEYSPACE1).getColumnFamilyStore(CF_STANDARD1).metadata(), timestamp, dk.getKey())
                 .add("val", "val")

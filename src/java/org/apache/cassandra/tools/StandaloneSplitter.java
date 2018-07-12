@@ -34,6 +34,7 @@ import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.SSTableSplitter;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
 import static org.apache.cassandra.tools.BulkLoader.CmdLineOptions;
@@ -111,7 +112,7 @@ public class StandaloneSplitter
             // Do not load sstables since they might be broken
             Keyspace keyspace = Keyspace.openWithoutSSTables(ksName);
             ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfName);
-            String snapshotName = "pre-split-" + System.currentTimeMillis();
+            String snapshotName = "pre-split-" + Clock.instance.currentTimeMillis();
 
             List<SSTableReader> sstables = new ArrayList<>();
             for (Map.Entry<Descriptor, Set<Component>> fn : parsedFilenames.entrySet())

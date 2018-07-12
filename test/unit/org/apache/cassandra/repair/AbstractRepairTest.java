@@ -36,6 +36,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 @Ignore
@@ -81,7 +82,7 @@ public abstract class AbstractRepairTest
     {
         UUID sessionId = UUIDGen.getTimeUUID();
 
-        long repairedAt = isIncremental ? System.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE;
+        long repairedAt = isIncremental ? Clock.instance.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE;
         ActiveRepairService.instance.registerParentRepairSession(sessionId,
                                                                  COORDINATOR,
                                                                  Lists.newArrayList(cfs),

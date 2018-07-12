@@ -33,6 +33,7 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.utils.Clock;
 
 public class NoReplicationTokenAllocatorTest extends TokenAllocatorTestBase
 {
@@ -149,7 +150,7 @@ public class NoReplicationTokenAllocatorTest extends TokenAllocatorTestBase
         if (size < targetClusterSize)
         {
             System.out.format("Adding %d unit(s) using %s...", targetClusterSize - size, t.toString());
-            long time = System.currentTimeMillis();
+            long time = Clock.instance.currentTimeMillis();
 
             while (size < targetClusterSize)
             {
@@ -160,7 +161,7 @@ public class NoReplicationTokenAllocatorTest extends TokenAllocatorTestBase
                 if (verifyMetrics)
                     updateSummary(t, su, st, false);
             }
-            System.out.format(" Done in %.3fs\n", (System.currentTimeMillis() - time) / 1000.0);
+            System.out.format(" Done in %.3fs\n", (Clock.instance.currentTimeMillis() - time) / 1000.0);
 
             if (verifyMetrics)
             {

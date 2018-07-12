@@ -43,6 +43,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertEquals;
@@ -158,7 +159,7 @@ public class SSTableWriterTestBase extends SchemaLoader
         assertTrue(cfs.getTracker().getCompacting().isEmpty());
 
         if(cfs.getLiveSSTables().size() > 0)
-            assertFalse(CompactionManager.instance.submitMaximal(cfs, cfs.gcBefore((int) (System.currentTimeMillis() / 1000)), false).isEmpty());
+            assertFalse(CompactionManager.instance.submitMaximal(cfs, cfs.gcBefore((int) (Clock.instance.currentTimeMillis() / 1000)), false).isEmpty());
     }
 
     public static SSTableWriter getWriter(ColumnFamilyStore cfs, File directory, LifecycleTransaction txn)

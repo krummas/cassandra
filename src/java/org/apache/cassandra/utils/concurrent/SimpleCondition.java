@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.concurrent.locks.Condition;
 
+import org.apache.cassandra.utils.Clock;
+
 // fulfils the Condition interface without spurious wakeup problems
 // (or lost notify problems either: that is, even if you call await()
 // _after_ signal(), it will work as desired.)
@@ -50,7 +52,7 @@ public class SimpleCondition implements Condition
     {
         if (isSignaled())
             return true;
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         long until = start + unit.toNanos(time);
         if (waiting == null)
             waitingUpdater.compareAndSet(this, null, new WaitQueue());

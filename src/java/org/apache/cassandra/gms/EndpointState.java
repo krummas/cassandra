@@ -30,6 +30,7 @@ import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.CassandraVersion;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * This abstraction represents both the HeartBeatState and the ApplicationState in an EndpointState
@@ -59,7 +60,7 @@ public class EndpointState
     {
         hbState = initialHbState;
         applicationState = new AtomicReference<Map<ApplicationState, VersionedValue>>(new EnumMap<>(states));
-        updateTimestamp = System.nanoTime();
+        updateTimestamp = Clock.instance.nanoTime();
         isAlive = true;
     }
 
@@ -111,7 +112,7 @@ public class EndpointState
 
     /* getters and setters */
     /**
-     * @return System.nanoTime() when state was updated last time.
+     * @return Clock.instance.nanoTime() when state was updated last time.
      */
     public long getUpdateTimestamp()
     {
@@ -120,7 +121,7 @@ public class EndpointState
 
     void updateTimestamp()
     {
-        updateTimestamp = System.nanoTime();
+        updateTimestamp = Clock.instance.nanoTime();
     }
 
     public boolean isAlive()

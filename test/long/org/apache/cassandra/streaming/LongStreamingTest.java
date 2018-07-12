@@ -42,6 +42,7 @@ import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.io.sstable.CQLSSTableWriter;
 import org.apache.cassandra.io.sstable.SSTableLoader;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 
@@ -100,13 +101,13 @@ public class LongStreamingTest
         Assert.assertEquals(useSstableCompression, compressionParams.isEnabled());
 
 
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
 
         for (int i = 0; i < 10_000_000; i++)
             writer.addRow(i, "test1", 24);
 
         writer.close();
-        System.err.println(String.format("Writer finished after %d seconds....", TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start)));
+        System.err.println(String.format("Writer finished after %d seconds....", TimeUnit.NANOSECONDS.toSeconds(Clock.instance.nanoTime() - start)));
 
         File[] dataFiles = dataDir.listFiles((dir, name) -> name.endsWith("-Data.db"));
         long dataSize = 0l;
@@ -133,10 +134,10 @@ public class LongStreamingTest
             }
         }, new OutputHandler.SystemOutput(false, false));
 
-        start = System.nanoTime();
+        start = Clock.instance.nanoTime();
         loader.stream().get();
 
-        long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        long millis = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - start);
         System.err.println(String.format("Finished Streaming in %.2f seconds: %.2f Mb/sec",
                                          millis/1000d,
                                          (dataSize / (1 << 20) / (millis / 1000d)) * 8));
@@ -160,19 +161,19 @@ public class LongStreamingTest
             }
         }, new OutputHandler.SystemOutput(false, false));
 
-        start = System.nanoTime();
+        start = Clock.instance.nanoTime();
         loader.stream().get();
 
-        millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        millis = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - start);
         System.err.println(String.format("Finished Streaming in %.2f seconds: %.2f Mb/sec",
                                          millis/1000d,
                                          (dataSize / (1 << 20) / (millis / 1000d)) * 8));
 
 
         //Compact them both
-        start = System.nanoTime();
+        start = Clock.instance.nanoTime();
         Keyspace.open(KS).getColumnFamilyStore(TABLE).forceMajorCompaction();
-        millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        millis = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - start);
 
         System.err.println(String.format("Finished Compacting in %.2f seconds: %.2f Mb/sec",
                                          millis / 1000d,

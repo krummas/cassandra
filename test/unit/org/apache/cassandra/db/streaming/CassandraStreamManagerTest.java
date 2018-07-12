@@ -60,6 +60,7 @@ import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.streaming.StreamConnectionFactory;
 import org.apache.cassandra.streaming.StreamOperation;
 import org.apache.cassandra.streaming.StreamSession;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.concurrent.Ref;
 
@@ -84,7 +85,7 @@ public class CassandraStreamManagerTest
     @Before
     public void createKeyspace() throws Exception
     {
-        keyspace = String.format("ks_%s", System.currentTimeMillis());
+        keyspace = String.format("ks_%s", Clock.instance.currentTimeMillis());
         tbm = CreateTableStatement.parse(String.format("CREATE TABLE %s (k INT PRIMARY KEY, v INT)", table), keyspace).build();
         SchemaLoader.createKeyspace(keyspace, KeyspaceParams.simple(1), tbm);
         cfs = Schema.instance.getColumnFamilyStoreInstance(tbm.id);
@@ -166,7 +167,7 @@ public class CassandraStreamManagerTest
 
 
         UUID pendingRepair = UUIDGen.getTimeUUID();
-        long repairedAt = System.currentTimeMillis();
+        long repairedAt = Clock.instance.currentTimeMillis();
         mutateRepaired(sstable2, ActiveRepairService.UNREPAIRED_SSTABLE, pendingRepair);
         mutateRepaired(sstable3, ActiveRepairService.UNREPAIRED_SSTABLE, UUIDGen.getTimeUUID());
         mutateRepaired(sstable4, repairedAt, NO_PENDING_REPAIR);

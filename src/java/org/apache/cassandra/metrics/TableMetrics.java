@@ -1094,12 +1094,12 @@ public class TableMetrics
             private Context(Timer [] all)
             {
                 this.all = all;
-                start = System.nanoTime();
+                start = org.apache.cassandra.utils.Clock.instance.nanoTime();
             }
 
             public void close()
             {
-                long duration = System.nanoTime() - start;
+                long duration = org.apache.cassandra.utils.Clock.instance.nanoTime() - start;
                 for (Timer t : all)
                     t.update(duration, TimeUnit.NANOSECONDS);
             }

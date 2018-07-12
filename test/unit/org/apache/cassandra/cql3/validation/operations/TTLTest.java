@@ -19,6 +19,7 @@ import org.apache.cassandra.db.ExpirationDateOverflowHandling;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.rows.AbstractCell;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import org.junit.After;
@@ -328,7 +329,7 @@ public class TTLTest extends CQLTester
      */
     private int computeMaxTTL()
     {
-        int nowInSecs = (int) (System.currentTimeMillis() / 1000);
+        int nowInSecs = (int) (Clock.instance.currentTimeMillis() / 1000);
         return AbstractCell.MAX_DELETION_TIME - nowInSecs;
     }
 

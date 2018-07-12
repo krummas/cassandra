@@ -142,11 +142,11 @@ public class CounterMutation implements IMutation
 
     private void grabCounterLocks(Keyspace keyspace, List<Lock> locks) throws WriteTimeoutException
     {
-        long startTime = System.nanoTime();
+        long startTime = Clock.instance.nanoTime();
 
         for (Lock lock : LOCKS.bulkGet(getCounterLockKeys()))
         {
-            long timeout = TimeUnit.MILLISECONDS.toNanos(getTimeout()) - (System.nanoTime() - startTime);
+            long timeout = TimeUnit.MILLISECONDS.toNanos(getTimeout()) - (Clock.instance.nanoTime() - startTime);
             try
             {
                 if (!lock.tryLock(timeout, TimeUnit.NANOSECONDS))

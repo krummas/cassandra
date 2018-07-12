@@ -38,6 +38,7 @@ import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.VersionedValue;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.async.OutboundConnectionIdentifier.ConnectionType;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.apache.cassandra.net.MessagingService.Verb.PING;
@@ -88,7 +89,7 @@ public class StartupClusterConnectivityChecker
         logger.info("choosing to block until {}% of the {} known peers are marked alive and connections are established; max time to wait = {} seconds",
                     targetPercent, peers.size(), TimeUnit.NANOSECONDS.toSeconds(timeoutNanos));
 
-        long startNanos = System.nanoTime();
+        long startNanos = Clock.instance.nanoTime();
 
         AckMap acks = new AckMap(3);
         int target = (int) ((targetPercent / 100.0) * peers.size());
@@ -111,7 +112,7 @@ public class StartupClusterConnectivityChecker
 
         int connected = peers.size() - (int) latch.getCount();
         logger.info("After waiting/processing for {} milliseconds, {} out of {} peers ({}%) have been marked alive and had connections established",
-                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos),
+                    TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - startNanos),
                     connected,
                     peers.size(),
                     connected / (peers.size()) * 100.0);

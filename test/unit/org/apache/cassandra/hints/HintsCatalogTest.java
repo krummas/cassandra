@@ -28,6 +28,7 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -73,10 +74,10 @@ public class HintsCatalogTest
         UUID hostId1 = UUID.randomUUID();
         UUID hostId2 = UUID.randomUUID();
 
-        long timestamp1 = System.currentTimeMillis();
-        long timestamp2 = System.currentTimeMillis() + 1;
-        long timestamp3 = System.currentTimeMillis() + 2;
-        long timestamp4 = System.currentTimeMillis() + 3;
+        long timestamp1 = Clock.instance.currentTimeMillis();
+        long timestamp2 = Clock.instance.currentTimeMillis() + 1;
+        long timestamp3 = Clock.instance.currentTimeMillis() + 2;
+        long timestamp4 = Clock.instance.currentTimeMillis() + 3;
 
         HintsDescriptor descriptor1 = new HintsDescriptor(hostId1, timestamp1);
         HintsDescriptor descriptor2 = new HintsDescriptor(hostId2, timestamp3);
@@ -110,7 +111,7 @@ public class HintsCatalogTest
         File directory = Files.createTempDirectory(null).toFile();
         UUID hostId1 = UUID.randomUUID();
         UUID hostId2 = UUID.randomUUID();
-        long now = System.currentTimeMillis();
+        long now = Clock.instance.currentTimeMillis();
         writeDescriptor(directory, new HintsDescriptor(hostId1, now));
         writeDescriptor(directory, new HintsDescriptor(hostId1, now + 1));
         writeDescriptor(directory, new HintsDescriptor(hostId2, now + 2));
@@ -153,10 +154,10 @@ public class HintsCatalogTest
     {
         UUID hostId = UUID.randomUUID();
 
-        HintsDescriptor descriptor1 = new HintsDescriptor(hostId, System.currentTimeMillis());
-        HintsDescriptor descriptor2 = new HintsDescriptor(hostId, System.currentTimeMillis() + 1);
-        HintsDescriptor descriptor3 = new HintsDescriptor(hostId, System.currentTimeMillis() + 2);
-        HintsDescriptor descriptor4 = new HintsDescriptor(hostId, System.currentTimeMillis() + 3);
+        HintsDescriptor descriptor1 = new HintsDescriptor(hostId, Clock.instance.currentTimeMillis());
+        HintsDescriptor descriptor2 = new HintsDescriptor(hostId, Clock.instance.currentTimeMillis() + 1);
+        HintsDescriptor descriptor3 = new HintsDescriptor(hostId, Clock.instance.currentTimeMillis() + 2);
+        HintsDescriptor descriptor4 = new HintsDescriptor(hostId, Clock.instance.currentTimeMillis() + 3);
 
         createHintFile(directory, descriptor1);
         createHintFile(directory, descriptor2);

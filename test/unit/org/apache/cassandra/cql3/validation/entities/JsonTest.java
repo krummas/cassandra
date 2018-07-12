@@ -27,6 +27,7 @@ import org.apache.cassandra.serializers.SimpleDateSerializer;
 import org.apache.cassandra.serializers.TimeSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -1326,7 +1327,7 @@ public class JsonTest extends CQLTester
         for (int i = 0; i < numRows; i++)
             execute("INSERT INTO %s (k, v) VALUES (?, ?)", "" + i, "" + i);
 
-        long seed = System.nanoTime();
+        long seed = Clock.instance.nanoTime();
         System.out.println("Seed " + seed);
         final Random rand = new Random(seed);
 

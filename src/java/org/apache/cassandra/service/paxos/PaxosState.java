@@ -28,6 +28,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 public class PaxosState
@@ -55,7 +56,7 @@ public class PaxosState
 
     public static PrepareResponse prepare(Commit toPrepare)
     {
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         try
         {
             Lock lock = LOCKS.get(toPrepare.update.partitionKey());
@@ -89,14 +90,14 @@ public class PaxosState
         }
         finally
         {
-            Keyspace.open(toPrepare.update.metadata().keyspace).getColumnFamilyStore(toPrepare.update.metadata().id).metric.casPrepare.addNano(System.nanoTime() - start);
+            Keyspace.open(toPrepare.update.metadata().keyspace).getColumnFamilyStore(toPrepare.update.metadata().id).metric.casPrepare.addNano(Clock.instance.nanoTime() - start);
         }
 
     }
 
     public static Boolean propose(Commit proposal)
     {
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         try
         {
             Lock lock = LOCKS.get(proposal.update.partitionKey());
@@ -124,13 +125,13 @@ public class PaxosState
         }
         finally
         {
-            Keyspace.open(proposal.update.metadata().keyspace).getColumnFamilyStore(proposal.update.metadata().id).metric.casPropose.addNano(System.nanoTime() - start);
+            Keyspace.open(proposal.update.metadata().keyspace).getColumnFamilyStore(proposal.update.metadata().id).metric.casPropose.addNano(Clock.instance.nanoTime() - start);
         }
     }
 
     public static void commit(Commit proposal)
     {
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         try
         {
             // There is no guarantee we will see commits in the right order, because messages
@@ -155,7 +156,7 @@ public class PaxosState
         }
         finally
         {
-            Keyspace.open(proposal.update.metadata().keyspace).getColumnFamilyStore(proposal.update.metadata().id).metric.casCommit.addNano(System.nanoTime() - start);
+            Keyspace.open(proposal.update.metadata().keyspace).getColumnFamilyStore(proposal.update.metadata().id).metric.casCommit.addNano(Clock.instance.nanoTime() - start);
         }
     }
 }

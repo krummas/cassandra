@@ -58,6 +58,7 @@ import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.transport.Event;
 import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.Clock;
 
 import static ch.qos.logback.core.CoreConstants.RECONFIGURE_ON_CHANGE_TASK;
 import static org.junit.Assert.assertEquals;
@@ -297,7 +298,7 @@ public class AggregationTest extends CQLTester
         assertRows(execute("SELECT count(writetime(b)), min(ttl(b)) as min, writetime(b), ttl(c) as first FROM %s"),
                            row(0L, null, null, null));
 
-        long today = System.currentTimeMillis() * 1000;
+        long today = Clock.instance.currentTimeMillis() * 1000;
         long yesterday = today - (DateUtils.MILLIS_PER_DAY * 1000);
 
         final int secondsPerMinute = 60;
@@ -1819,8 +1820,8 @@ public class AggregationTest extends CQLTester
                                                        " STYPE map<text,bigint>\n" +
                                                        " INITCOND { };");
 
-            long tEnd = System.currentTimeMillis() + 150;
-            while (System.currentTimeMillis() < tEnd)
+            long tEnd = Clock.instance.currentTimeMillis() + 150;
+            while (Clock.instance.currentTimeMillis() < tEnd)
             {
                 execute("SELECT " + releasesByCountry + "(country,title) FROM %s WHERE year=1980");
             }

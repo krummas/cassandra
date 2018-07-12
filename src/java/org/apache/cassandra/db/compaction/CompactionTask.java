@@ -45,6 +45,7 @@ import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorSt
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Refs;
 
@@ -123,7 +124,7 @@ public class CompactionTask extends AbstractCompactionTask
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
 
         if (DatabaseDescriptor.isSnapshotBeforeCompaction())
-            cfs.snapshotWithoutFlush(System.currentTimeMillis() + "-compact-" + cfs.name);
+            cfs.snapshotWithoutFlush(Clock.instance.currentTimeMillis() + "-compact-" + cfs.name);
 
         try (CompactionController controller = getCompactionController(transaction.originals()))
         {
@@ -158,8 +159,8 @@ public class CompactionTask extends AbstractCompactionTask
             logger.debug("Compacting ({}) {}", taskId, ssTableLoggerMsg);
 
             RateLimiter limiter = CompactionManager.instance.getRateLimiter();
-            long start = System.nanoTime();
-            long startTime = System.currentTimeMillis();
+            long start = Clock.instance.nanoTime();
+            long startTime = Clock.instance.currentTimeMillis();
             long totalKeysWritten = 0;
             long estimatedKeys = 0;
             long inputSizeBytes;
@@ -208,10 +209,10 @@ public class CompactionTask extends AbstractCompactionTask
 
                         lastBytesScanned = bytesScanned;
 
-                        if (System.nanoTime() - lastCheckObsoletion > TimeUnit.MINUTES.toNanos(1L))
+                        if (Clock.instance.nanoTime() - lastCheckObsoletion > TimeUnit.MINUTES.toNanos(1L))
                         {
                             controller.maybeRefreshOverlaps();
-                            lastCheckObsoletion = System.nanoTime();
+                            lastCheckObsoletion = Clock.instance.nanoTime();
                         }
                     }
 
@@ -237,7 +238,7 @@ public class CompactionTask extends AbstractCompactionTask
             {
                 // log a bunch of statistics about the result and save to system table compaction_history
 
-                long durationInNano = System.nanoTime() - start;
+                long durationInNano = Clock.instance.nanoTime() - start;
                 long dTime = TimeUnit.NANOSECONDS.toMillis(durationInNano);
                 long startsize = inputSizeBytes;
                 long endsize = SSTableReader.getTotalBytes(newSStables);
@@ -273,7 +274,7 @@ public class CompactionTask extends AbstractCompactionTask
                     logger.trace("CF Total Bytes Compacted: {}", FBUtilities.prettyPrintMemory(CompactionTask.addToTotalBytesCompacted(endsize)));
                     logger.trace("Actual #keys: {}, Estimated #keys:{}, Err%: {}", totalKeysWritten, estimatedKeys, ((double)(totalKeysWritten - estimatedKeys)/totalKeysWritten));
                 }
-                cfs.getCompactionStrategyManager().compactionLogger.compaction(startTime, transaction.originals(), System.currentTimeMillis(), newSStables);
+                cfs.getCompactionStrategyManager().compactionLogger.compaction(startTime, transaction.originals(), Clock.instance.currentTimeMillis(), newSStables);
 
                 // update the metrics
                 cfs.metric.compactionBytesWritten.inc(endsize);
@@ -304,7 +305,7 @@ public class CompactionTask extends AbstractCompactionTask
             mergeSummary.append(String.format("%d:%d, ", rows, count));
             mergedRows.put(rows, count);
         }
-        SystemKeyspace.updateCompactionHistory(keyspaceName, columnFamilyName, System.currentTimeMillis(), startSize, endSize, mergedRows);
+        SystemKeyspace.updateCompactionHistory(keyspaceName, columnFamilyName, Clock.instance.currentTimeMillis(), startSize, endSize, mergedRows);
         return mergeSummary.toString();
     }
 

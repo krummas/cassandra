@@ -37,6 +37,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.io.sstable.IndexSummaryBuilder.downsample;
@@ -53,7 +54,7 @@ public class IndexSummaryTest
     {
         DatabaseDescriptor.daemonInitialization();
 
-        final long seed = System.nanoTime();
+        final long seed = Clock.instance.nanoTime();
         System.out.println("Using seed: " + seed);
         random.setSeed(seed);
     }
@@ -63,7 +64,7 @@ public class IndexSummaryTest
     @BeforeClass
     public static void setup()
     {
-        final long seed = System.nanoTime();
+        final long seed = Clock.instance.nanoTime();
         System.out.println("Using seed: " + seed);
         random.setSeed(seed);
     }

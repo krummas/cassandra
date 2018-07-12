@@ -39,6 +39,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.BiMultiValMap;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.SortedBiMultiValMap;
 
@@ -812,7 +813,7 @@ public class TokenMetadata
                 if (logger.isDebugEnabled())
                     logger.debug("Starting pending range calculation for {}", keyspaceName);
 
-                long startedAt = System.currentTimeMillis();
+                long startedAt = Clock.instance.currentTimeMillis();
 
                 // create clone of current state
                 BiMultiValMap<Token, InetAddressAndPort> bootstrapTokensClone = new BiMultiValMap<>();
@@ -835,7 +836,7 @@ public class TokenMetadata
 
                 pendingRanges.put(keyspaceName, calculatePendingRanges(strategy, metadata, bootstrapTokensClone,
                                                                        leavingEndpointsClone, movingEndpointsClone));
-                long took = System.currentTimeMillis() - startedAt;
+                long took = Clock.instance.currentTimeMillis() - startedAt;
 
                 if (logger.isDebugEnabled())
                     logger.debug("Pending range calculation for {} completed (took: {}ms)", keyspaceName, took);

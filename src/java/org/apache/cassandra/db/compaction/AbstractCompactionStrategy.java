@@ -44,6 +44,7 @@ import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.schema.CompactionParams;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Pluggable compaction strategy determines how SSTables get merged.
@@ -369,7 +370,7 @@ public abstract class AbstractCompactionStrategy
         // since we use estimations to calculate, there is a chance that compaction will not drop tombstones actually.
         // if that happens we will end up in infinite compaction loop, so first we check enough if enough time has
         // elapsed since SSTable created.
-        if (System.currentTimeMillis() < sstable.getCreationTimeFor(Component.DATA) + tombstoneCompactionInterval * 1000)
+        if (Clock.instance.currentTimeMillis() < sstable.getCreationTimeFor(Component.DATA) + tombstoneCompactionInterval * 1000)
            return false;
 
         double droppableRatio = sstable.getEstimatedDroppableTombstoneRatio(gcBefore);

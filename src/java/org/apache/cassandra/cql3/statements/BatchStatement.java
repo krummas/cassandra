@@ -41,6 +41,7 @@ import org.apache.cassandra.metrics.BatchMetrics;
 import org.apache.cassandra.service.*;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NoSpamLogger;
 import org.apache.cassandra.utils.Pair;
@@ -513,7 +514,7 @@ public class BatchStatement implements CQLStatement
         if (hasConditions)
             return executeInternalWithConditions(batchOptions, queryState);
 
-        executeInternalWithoutCondition(queryState, batchOptions, System.nanoTime());
+        executeInternalWithoutCondition(queryState, batchOptions, Clock.instance.nanoTime());
         return new ResultMessage.Void();
     }
 

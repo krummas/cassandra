@@ -30,6 +30,7 @@ import static org.junit.Assert.*;
 
 import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 public class RangeTombstoneListTest
 {
@@ -317,7 +318,7 @@ public class RangeTombstoneListTest
         int MAX_IT_DISTANCE = 10;
         int MAX_MARKEDAT = 10;
 
-        long seed = System.nanoTime();
+        long seed = Clock.instance.nanoTime();
         Random rand = new Random(seed);
 
         for (int i = 0; i < TEST_COUNT; i++)

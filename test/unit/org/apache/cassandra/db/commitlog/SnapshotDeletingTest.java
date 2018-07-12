@@ -36,6 +36,7 @@ import org.apache.cassandra.io.sstable.SnapshotDeletingTask;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.GCInspector;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class SnapshotDeletingTest
@@ -79,8 +80,8 @@ public class SnapshotDeletingTest
         store.forceBlockingFlush();
         store.forceMajorCompaction();
 
-        long start = System.currentTimeMillis();
-        while (System.currentTimeMillis() - start < 1000 && SnapshotDeletingTask.pendingDeletionCount() > 0)
+        long start = Clock.instance.currentTimeMillis();
+        while (Clock.instance.currentTimeMillis() - start < 1000 && SnapshotDeletingTask.pendingDeletionCount() > 0)
         {
             Thread.yield();
         }
@@ -89,7 +90,7 @@ public class SnapshotDeletingTest
     }
 
     private void populate(int rowCount) {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         TableMetadata cfm = Keyspace.open(KEYSPACE1).getColumnFamilyStore(CF_STANDARD1).metadata();
         for (int i = 0; i <= rowCount; i++)
         {

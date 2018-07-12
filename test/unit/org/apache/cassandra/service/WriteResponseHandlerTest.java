@@ -41,6 +41,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -126,7 +127,7 @@ public class WriteResponseHandlerTest
     {
         long startingCount = ks.metric.idealCLWriteLatency.latency.getCount();
         //Specify query start time in past to ensure minimum latency measurement
-        AbstractWriteResponseHandler awr = createWriteResponseHandler(ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.EACH_QUORUM, System.nanoTime() - TimeUnit.DAYS.toNanos(1));
+        AbstractWriteResponseHandler awr = createWriteResponseHandler(ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.EACH_QUORUM, Clock.instance.nanoTime() - TimeUnit.DAYS.toNanos(1));
 
         //dc1
         awr.response(createDummyMessage(0));
@@ -215,7 +216,7 @@ public class WriteResponseHandlerTest
 
     private static AbstractWriteResponseHandler createWriteResponseHandler(ConsistencyLevel cl, ConsistencyLevel ideal)
     {
-        return createWriteResponseHandler(cl, ideal, System.nanoTime());
+        return createWriteResponseHandler(cl, ideal, Clock.instance.nanoTime());
     }
 
     private static AbstractWriteResponseHandler createWriteResponseHandler(ConsistencyLevel cl, ConsistencyLevel ideal, long queryStartTime)

@@ -30,6 +30,7 @@ import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ClientWarn;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.NoSpamLogger;
 
 public class ExpirationDateOverflowHandling
@@ -75,7 +76,7 @@ public class ExpirationDateOverflowHandling
             return;
 
         // Check for localExpirationTime overflow (CASSANDRA-14092)
-        int nowInSecs = (int)(System.currentTimeMillis() / 1000);
+        int nowInSecs = (int)(Clock.instance.currentTimeMillis() / 1000);
         if (ttl + nowInSecs < 0)
         {
             switch (policy)

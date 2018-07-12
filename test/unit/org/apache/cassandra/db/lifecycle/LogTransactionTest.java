@@ -48,6 +48,7 @@ import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.MockSchema;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.concurrent.AbstractTransactionalTest;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
@@ -589,8 +590,8 @@ public class LogTransactionTest extends AbstractTransactionalTest
             Assert.assertEquals(2, logFiles.size());
 
             // insert mismatched records
-            FileUtils.append(logFiles.get(0), LogRecord.makeCommit(System.currentTimeMillis()).raw);
-            FileUtils.append(logFiles.get(1), LogRecord.makeAbort(System.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(0), LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(1), LogRecord.makeAbort(Clock.instance.currentTimeMillis()).raw);
 
         }, false);
     }
@@ -603,7 +604,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
             Assert.assertEquals(2, logFiles.size());
 
             // insert a full record and a partial one
-            String finalRecord = LogRecord.makeCommit(System.currentTimeMillis()).raw;
+            String finalRecord = LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw;
             int toChop = finalRecord.length() / 2;
             FileUtils.append(logFiles.get(0), finalRecord.substring(0, finalRecord.length() - toChop));
             FileUtils.append(logFiles.get(1), finalRecord);
@@ -619,7 +620,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
             Assert.assertEquals(2, logFiles.size());
 
             // insert a full record and a partial one
-            String finalRecord = LogRecord.makeCommit(System.currentTimeMillis()).raw;
+            String finalRecord = LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw;
             int toChop = finalRecord.length() / 2;
             FileUtils.append(logFiles.get(0), finalRecord);
             FileUtils.append(logFiles.get(1), finalRecord.substring(0, finalRecord.length() - toChop));
@@ -639,7 +640,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
             int toChop = sstableRecord.length() / 2;
             FileUtils.append(logFiles.get(0), sstableRecord.substring(0, sstableRecord.length() - toChop));
             FileUtils.append(logFiles.get(1), sstableRecord);
-            String finalRecord = LogRecord.makeCommit(System.currentTimeMillis()).raw;
+            String finalRecord = LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw;
             FileUtils.append(logFiles.get(0), finalRecord);
             FileUtils.append(logFiles.get(1), finalRecord);
 
@@ -658,7 +659,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
             int toChop = sstableRecord.length() / 2;
             FileUtils.append(logFiles.get(0), sstableRecord);
             FileUtils.append(logFiles.get(1), sstableRecord.substring(0, sstableRecord.length() - toChop));
-            String finalRecord = LogRecord.makeCommit(System.currentTimeMillis()).raw;
+            String finalRecord = LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw;
             FileUtils.append(logFiles.get(0), finalRecord);
             FileUtils.append(logFiles.get(1), finalRecord);
 
@@ -673,7 +674,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
             Assert.assertEquals(2, logFiles.size());
 
             // insert only one commit record
-            FileUtils.append(logFiles.get(0), LogRecord.makeCommit(System.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(0), LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw);
 
         }, true);
     }
@@ -686,7 +687,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
             Assert.assertEquals(2, logFiles.size());
 
             // insert only one commit record
-            FileUtils.append(logFiles.get(1), LogRecord.makeCommit(System.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(1), LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw);
 
         }, true);
     }
@@ -699,9 +700,9 @@ public class LogTransactionTest extends AbstractTransactionalTest
             Assert.assertEquals(2, logFiles.size());
 
             // insert mismatched records
-            FileUtils.append(logFiles.get(0), LogRecord.makeCommit(System.currentTimeMillis()).raw);
-            FileUtils.append(logFiles.get(1), LogRecord.makeCommit(System.currentTimeMillis()).raw);
-            FileUtils.append(logFiles.get(1), LogRecord.makeCommit(System.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(0), LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(1), LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw);
+            FileUtils.append(logFiles.get(1), LogRecord.makeCommit(Clock.instance.currentTimeMillis()).raw);
 
         }, false);
     }
@@ -901,7 +902,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
     {
         testCorruptRecord((t, s) ->
                           { // Fake a commit with invalid checksum
-                              long now = System.currentTimeMillis();
+                              long now = Clock.instance.currentTimeMillis();
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("commit:[%d,0,0][%d]", now, 12345678L)));
                           },
                           true);
@@ -912,7 +913,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
     {
         testCorruptRecord((t, s) ->
                           { // Fake two lines with invalid checksum
-                              long now = System.currentTimeMillis();
+                              long now = Clock.instance.currentTimeMillis();
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("add:[ma-3-big,%d,4][%d]", now, 12345678L)));
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("commit:[%d,0,0][%d]", now, 12345678L)));
                           },
@@ -934,7 +935,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
                                   }
                               }
 
-                              long now = System.currentTimeMillis();
+                              long now = Clock.instance.currentTimeMillis();
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("commit:[%d,0,0][%d]", now, 12345678L)));
                           },
                           false);
@@ -945,7 +946,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
     {
         testCorruptRecord((t, s) ->
                           { // Fake a commit with invalid checksum and a wrong record format (extra spaces)
-                              long now = System.currentTimeMillis();
+                              long now = Clock.instance.currentTimeMillis();
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("commit:[%d ,0 ,0 ][%d]", now, 12345678L)));
                           },
                           true);
@@ -957,7 +958,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
         testCorruptRecord((t, s) ->
                           {
                               // Fake a commit without a checksum
-                              long now = System.currentTimeMillis();
+                              long now = Clock.instance.currentTimeMillis();
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("commit:[%d,0,0]", now)));
                           },
                           true);
@@ -968,7 +969,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
     {
         testCorruptRecord((t, s) ->
                           { // Fake two lines without a checksum
-                              long now = System.currentTimeMillis();
+                              long now = Clock.instance.currentTimeMillis();
                               t.logFiles().forEach( f -> FileUtils.append(f, String.format("add:[ma-3-big,%d,4]", now)));
                               t.logFiles().forEach(f -> FileUtils.append(f, String.format("commit:[%d,0,0]", now)));
                           },
@@ -1058,7 +1059,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
                                       for (String filePath : sstable.getAllFilePaths())
                                       {
                                           if (filePath.endsWith("Data.db"))
-                                              assertTrue(new File(filePath).setLastModified(System.currentTimeMillis() + 60000)); //one minute later
+                                              assertTrue(new File(filePath).setLastModified(Clock.instance.currentTimeMillis() + 60000)); //one minute later
                                       }
                                   });
     }

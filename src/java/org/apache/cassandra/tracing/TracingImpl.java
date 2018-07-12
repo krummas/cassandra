@@ -27,6 +27,7 @@ import java.util.UUID;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 
@@ -56,7 +57,7 @@ class TracingImpl extends Tracing
         final TraceStateImpl state = getStateImpl();
         assert state != null;
 
-        final long startedAt = System.currentTimeMillis();
+        final long startedAt = Clock.instance.currentTimeMillis();
         final ByteBuffer sessionId = state.sessionIdBytes;
         final String command = state.traceType.toString();
         final int ttl = state.ttl;

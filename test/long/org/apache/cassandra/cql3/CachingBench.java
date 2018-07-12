@@ -46,6 +46,7 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class CachingBench extends CQLTester
@@ -181,9 +182,9 @@ public class CachingBench extends CQLTester
             if (ii % (FLUSH_FREQ * 10) == 0)
             {
                 System.out.println("C");
-                long startTime = System.nanoTime();
+                long startTime = Clock.instance.nanoTime();
                 getCurrentColumnFamilyStore().enableAutoCompaction(!CONCURRENT_COMPACTIONS);
-                long endTime = System.nanoTime();
+                long endTime = Clock.instance.nanoTime();
                 compactionTimeNanos += endTime - startTime;
                 getCurrentColumnFamilyStore().disableAutoCompaction();
             }
@@ -201,7 +202,7 @@ public class CachingBench extends CQLTester
         ColumnFamilyStore cfs = getCurrentColumnFamilyStore();
         cfs.disableAutoCompaction();
 
-        long onStartTime = System.currentTimeMillis();
+        long onStartTime = Clock.instance.currentTimeMillis();
         ExecutorService es = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         List<Future<?>> tasks = new ArrayList<>();
         for (int ti = 0; ti < 1; ++ti)
@@ -225,7 +226,7 @@ public class CachingBench extends CQLTester
             task.get();
 
         flush();
-        long onEndTime = System.currentTimeMillis();
+        long onEndTime = Clock.instance.currentTimeMillis();
         int startRowCount = countRows(cfs);
         int startTombCount = countTombstoneMarkers(cfs);
         int startRowDeletions = countRowDeletions(cfs);
@@ -250,9 +251,9 @@ public class CachingBench extends CQLTester
             System.out.println();
 
         String hashesBefore = getHashes();
-        long startTime = System.currentTimeMillis();
+        long startTime = Clock.instance.currentTimeMillis();
         CompactionManager.instance.performMaximal(cfs, true);
-        long endTime = System.currentTimeMillis();
+        long endTime = Clock.instance.currentTimeMillis();
 
         int endRowCount = countRows(cfs);
         int endTombCount = countTombstoneMarkers(cfs);
@@ -273,9 +274,9 @@ public class CachingBench extends CQLTester
 
     private String getHashes() throws Throwable
     {
-        long startTime = System.currentTimeMillis();
+        long startTime = Clock.instance.currentTimeMillis();
         String hashes = Arrays.toString(getRows(execute(hashQuery))[0]);
-        long endTime = System.currentTimeMillis();
+        long endTime = Clock.instance.currentTimeMillis();
         System.out.println(String.format("Hashes: %s, retrieved in %.3fs", hashes, (endTime - startTime) * 1e-3));
         return hashes;
     }

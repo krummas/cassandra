@@ -36,6 +36,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.MockSchema;
+import org.apache.cassandra.utils.Clock;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
@@ -196,11 +197,11 @@ public class HelpersTest
         {
             readers.add(MockSchema.sstable(i + 1, cfs));
         }
-        long start = System.currentTimeMillis();
+        long start = Clock.instance.currentTimeMillis();
 
         Helpers.prepareForObsoletion(readers.subList(0, 500), txnLogs, new ArrayList<>(),null );
         txnLogs.finish();
-        long time = System.currentTimeMillis() - start;
+        long time = Clock.instance.currentTimeMillis() - start;
         assertTrue(time < 20000);
     }
 }

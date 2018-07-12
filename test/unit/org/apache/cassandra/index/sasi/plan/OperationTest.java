@@ -38,6 +38,7 @@ import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import org.junit.*;
@@ -277,17 +278,17 @@ public class OperationTest extends SchemaLoader
         Operation.Builder builder = new Operation.Builder(OperationType.AND, controller, new SimpleExpression(age, Operator.NEQ, Int32Type.instance.decompose(5)));
         Operation op = builder.complete();
 
-        Unfiltered row = buildRow(buildCell(age, Int32Type.instance.decompose(6), System.currentTimeMillis()));
+        Unfiltered row = buildRow(buildCell(age, Int32Type.instance.decompose(6), Clock.instance.currentTimeMillis()));
         Row staticRow = buildRow(Clustering.STATIC_CLUSTERING);
 
         Assert.assertTrue(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), Clock.instance.currentTimeMillis()));
 
         // and reject incorrect value
         Assert.assertFalse(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(6), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(6), Clock.instance.currentTimeMillis()));
 
         Assert.assertTrue(op.satisfiedBy(row, staticRow, false));
 
@@ -302,7 +303,7 @@ public class OperationTest extends SchemaLoader
         Set<Integer> exclusions = Sets.newHashSet(0, 1, 5, 6, 11);
         for (int i = 0; i <= 11; i++)
         {
-            row = buildRow(buildCell(age, Int32Type.instance.decompose(i), System.currentTimeMillis()));
+            row = buildRow(buildCell(age, Int32Type.instance.decompose(i), Clock.instance.currentTimeMillis()));
 
             boolean result = op.satisfiedBy(row, staticRow, false);
             Assert.assertTrue(exclusions.contains(i) != result);
@@ -318,7 +319,7 @@ public class OperationTest extends SchemaLoader
         exclusions = Sets.newHashSet(0, 1, 2, 3, 4, 7, 8, 9, 10);
         for (int i = 0; i <= 10; i++)
         {
-            row = buildRow(buildCell(age, Int32Type.instance.decompose(i), System.currentTimeMillis()));
+            row = buildRow(buildCell(age, Int32Type.instance.decompose(i), Clock.instance.currentTimeMillis()));
 
             boolean result = op.satisfiedBy(row, staticRow, false);
             Assert.assertTrue(exclusions.contains(i) != result);
@@ -341,7 +342,7 @@ public class OperationTest extends SchemaLoader
         exclusions = Sets.newHashSet(7);
         for (int i = 0; i < 10; i++)
         {
-            row = buildRow(buildCell(age, Int32Type.instance.decompose(i), System.currentTimeMillis()));
+            row = buildRow(buildCell(age, Int32Type.instance.decompose(i), Clock.instance.currentTimeMillis()));
 
             boolean result = op.satisfiedBy(row, staticRow, false);
             Assert.assertTrue(exclusions.contains(i) != result);
@@ -354,18 +355,18 @@ public class OperationTest extends SchemaLoader
 
         op = builder.complete();
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(6), System.currentTimeMillis()),
-                                  buildCell(timestamp, LongType.instance.decompose(11L), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(6), Clock.instance.currentTimeMillis()),
+                                  buildCell(timestamp, LongType.instance.decompose(11L), Clock.instance.currentTimeMillis()));
 
         Assert.assertFalse(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), System.currentTimeMillis()),
-                                  buildCell(timestamp, LongType.instance.decompose(22L), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), Clock.instance.currentTimeMillis()),
+                                  buildCell(timestamp, LongType.instance.decompose(22L), Clock.instance.currentTimeMillis()));
 
         Assert.assertTrue(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), System.currentTimeMillis()),
-                                  buildCell(timestamp, LongType.instance.decompose(9L), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), Clock.instance.currentTimeMillis()),
+                                  buildCell(timestamp, LongType.instance.decompose(9L), Clock.instance.currentTimeMillis()));
 
         Assert.assertFalse(op.satisfiedBy(row, staticRow, false));
 
@@ -377,18 +378,18 @@ public class OperationTest extends SchemaLoader
                                                new SimpleExpression(age, Operator.LT, Int32Type.instance.decompose(10))));
         op = builder.complete();
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), System.currentTimeMillis()),
-                                  buildCell(timestamp, LongType.instance.decompose(9L), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(5), Clock.instance.currentTimeMillis()),
+                                  buildCell(timestamp, LongType.instance.decompose(9L), Clock.instance.currentTimeMillis()));
 
         Assert.assertTrue(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(20), System.currentTimeMillis()),
-                                  buildCell(timestamp, LongType.instance.decompose(11L), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(20), Clock.instance.currentTimeMillis()),
+                                  buildCell(timestamp, LongType.instance.decompose(11L), Clock.instance.currentTimeMillis()));
 
         Assert.assertTrue(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(buildCell(age, Int32Type.instance.decompose(0), System.currentTimeMillis()),
-                                  buildCell(timestamp, LongType.instance.decompose(9L), System.currentTimeMillis()));
+        row = buildRow(buildCell(age, Int32Type.instance.decompose(0), Clock.instance.currentTimeMillis()),
+                                  buildCell(timestamp, LongType.instance.decompose(9L), Clock.instance.currentTimeMillis()));
 
         Assert.assertFalse(op.satisfiedBy(row, staticRow, false));
 
@@ -401,15 +402,15 @@ public class OperationTest extends SchemaLoader
         Assert.assertFalse(op.satisfiedBy(row, null, false));
         Assert.assertFalse(op.satisfiedBy(row, staticRow, false));
 
-        long now = System.currentTimeMillis();
+        long now = Clock.instance.currentTimeMillis();
 
         row = OperationTest.buildRow(
                 Row.Deletion.regular(new DeletionTime(now - 10, (int) (now / 1000))),
-                          buildCell(age, Int32Type.instance.decompose(6), System.currentTimeMillis()));
+                          buildCell(age, Int32Type.instance.decompose(6), Clock.instance.currentTimeMillis()));
 
         Assert.assertFalse(op.satisfiedBy(row, staticRow, false));
 
-        row = buildRow(deletedCell(age, System.currentTimeMillis(), FBUtilities.nowInSeconds()));
+        row = buildRow(deletedCell(age, Clock.instance.currentTimeMillis(), FBUtilities.nowInSeconds()));
 
         Assert.assertFalse(op.satisfiedBy(row, staticRow, true));
 
@@ -489,7 +490,7 @@ public class OperationTest extends SchemaLoader
     {
         final ColumnMetadata comment = getColumn(UTF8Type.instance.decompose("comment"));
 
-        Unfiltered row = buildRow(buildCell(comment,UTF8Type.instance.decompose("software engineer is working on a project"),System.currentTimeMillis()));
+        Unfiltered row = buildRow(buildCell(comment,UTF8Type.instance.decompose("software engineer is working on a project"),Clock.instance.currentTimeMillis()));
         Row staticRow = buildRow(Clustering.STATIC_CLUSTERING);
 
         Operation.Builder builder = new Operation.Builder(OperationType.AND, controller,
@@ -514,8 +515,8 @@ public class OperationTest extends SchemaLoader
         ColumnMetadata score = getColumn(CLUSTERING_BACKEND, UTF8Type.instance.decompose("score"));
 
         Unfiltered row = buildRow(Clustering.make(UTF8Type.instance.fromString("US"), Int32Type.instance.decompose(27)),
-                                  buildCell(height, Int32Type.instance.decompose(182), System.currentTimeMillis()),
-                                  buildCell(score, DoubleType.instance.decompose(1.0d), System.currentTimeMillis()));
+                                  buildCell(height, Int32Type.instance.decompose(182), Clock.instance.currentTimeMillis()),
+                                  buildCell(score, DoubleType.instance.decompose(1.0d), Clock.instance.currentTimeMillis()));
         Row staticRow = buildRow(Clustering.STATIC_CLUSTERING);
 
         Operation.Builder builder = new Operation.Builder(OperationType.AND, controller);
@@ -584,9 +585,9 @@ public class OperationTest extends SchemaLoader
         final ColumnMetadata value = getColumn(STATIC_BACKEND, UTF8Type.instance.decompose("value"));
 
         Unfiltered row = buildRow(Clustering.make(UTF8Type.instance.fromString("date"), LongType.instance.decompose(20160401L)),
-                          buildCell(value, DoubleType.instance.decompose(24.56), System.currentTimeMillis()));
+                          buildCell(value, DoubleType.instance.decompose(24.56), Clock.instance.currentTimeMillis()));
         Row staticRow = buildRow(Clustering.STATIC_CLUSTERING,
-                         buildCell(sensorType, UTF8Type.instance.decompose("TEMPERATURE"), System.currentTimeMillis()));
+                         buildCell(sensorType, UTF8Type.instance.decompose("TEMPERATURE"), Clock.instance.currentTimeMillis()));
 
         // sensor_type ='TEMPERATURE' AND value = 24.56
         Operation op = new Operation.Builder(OperationType.AND, controller,

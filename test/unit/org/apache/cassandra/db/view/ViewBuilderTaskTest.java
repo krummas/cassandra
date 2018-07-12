@@ -33,6 +33,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.transport.ProtocolVersion;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 
@@ -85,7 +86,7 @@ public class ViewBuilderTaskTest extends CQLTester
             {
                 // Truncate the materialized view (not the base table)
                 cfs.viewManager.forceBlockingFlush();
-                cfs.viewManager.truncateBlocking(cfs.forceBlockingFlush(), System.currentTimeMillis());
+                cfs.viewManager.truncateBlocking(cfs.forceBlockingFlush(), Clock.instance.currentTimeMillis());
                 assertRowCount(execute("SELECT * FROM " + viewName), 0);
 
                 // Get the tokens from the referenced inserted rows

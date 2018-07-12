@@ -36,6 +36,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 @Ignore
@@ -85,7 +86,7 @@ public abstract class AbstractConsistentSessionTest
                                                                  Lists.newArrayList(cfs),
                                                                  Sets.newHashSet(RANGE1, RANGE2, RANGE3),
                                                                  true,
-                                                                 System.currentTimeMillis(),
+                                                                 Clock.instance.currentTimeMillis(),
                                                                  true,
                                                                  PreviewKind.NONE);
         return sessionId;

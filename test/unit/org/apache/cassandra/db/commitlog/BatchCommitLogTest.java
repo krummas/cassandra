@@ -33,6 +33,7 @@ import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.security.EncryptionContext;
+import org.apache.cassandra.utils.Clock;
 
 public class BatchCommitLogTest extends CommitLogTest
 {
@@ -60,18 +61,18 @@ public class BatchCommitLogTest extends CommitLogTest
                      .add("val", ByteBuffer.allocate(10 * 1024))
                      .build();
 
-        long startNano = System.nanoTime();
+        long startNano = Clock.instance.nanoTime();
         CommitLog.instance.add(m);
-        long delta = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNano);
+        long delta = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - startNano);
         Assert.assertTrue("Expect batch commitlog sync immediately, but took " + delta, delta < CL_BATCH_SYNC_WINDOW);
     }
 
     @Test
     public void testBatchCLShutDownImmediately() throws InterruptedException
     {
-        long startNano = System.nanoTime();
+        long startNano = Clock.instance.nanoTime();
         CommitLog.instance.shutdownBlocking();
-        long delta = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNano);
+        long delta = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - startNano);
         Assert.assertTrue("Expect batch commitlog shutdown immediately, but took " + delta, delta < CL_BATCH_SYNC_WINDOW);
         CommitLog.instance.start();
     }

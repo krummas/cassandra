@@ -29,6 +29,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.MerkleTrees;
 
 /**
@@ -60,7 +61,7 @@ public abstract class SyncTask extends AbstractFuture<SyncStat> implements Runna
      */
     public void run()
     {
-        startTime = System.currentTimeMillis();
+        startTime = Clock.instance.currentTimeMillis();
         // compare trees, and collect differences
         List<Range<Token>> differences = MerkleTrees.difference(r1.trees, r2.trees);
 
@@ -90,7 +91,7 @@ public abstract class SyncTask extends AbstractFuture<SyncStat> implements Runna
     protected void finished()
     {
         if (startTime != Long.MIN_VALUE)
-            Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).metric.syncTime.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+            Keyspace.open(desc.keyspace).getColumnFamilyStore(desc.columnFamily).metric.syncTime.update(Clock.instance.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
     }
 
     protected abstract void startSync(List<Range<Token>> differences);

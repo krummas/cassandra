@@ -45,6 +45,7 @@ import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertEquals;
@@ -155,7 +156,7 @@ public class RealTransactionsTest extends SchemaLoader
                  CompactionIterator ci = new CompactionIterator(txn.opType(), scanners.scanners, controller, nowInSec, txn.opId())
             )
             {
-                long lastCheckObsoletion = System.nanoTime();
+                long lastCheckObsoletion = Clock.instance.nanoTime();
                 File directory = txn.originals().iterator().next().descriptor.directory;
                 Descriptor desc = cfs.newSSTableDescriptor(directory);
                 TableMetadataRef metadata = Schema.instance.getTableMetadataRef(desc);
@@ -172,10 +173,10 @@ public class RealTransactionsTest extends SchemaLoader
                 {
                     rewriter.append(ci.next());
 
-                    if (System.nanoTime() - lastCheckObsoletion > TimeUnit.MINUTES.toNanos(1L))
+                    if (Clock.instance.nanoTime() - lastCheckObsoletion > TimeUnit.MINUTES.toNanos(1L))
                     {
                         controller.maybeRefreshOverlaps();
-                        lastCheckObsoletion = System.nanoTime();
+                        lastCheckObsoletion = Clock.instance.nanoTime();
                     }
                 }
 

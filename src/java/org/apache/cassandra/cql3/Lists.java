@@ -41,6 +41,7 @@ import org.apache.cassandra.serializers.CollectionSerializer;
 import org.apache.cassandra.serializers.MarshalException;
 import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.UUIDGen;
 
 /**
@@ -345,7 +346,7 @@ public abstract class Lists
                 else
                 {
                     // in addition to being at the same millisecond, we handle the unexpected case of the millis parameter
-                    // being in the past. That could happen if the System.currentTimeMillis() not operating montonically
+                    // being in the past. That could happen if the Clock.instance.currentTimeMillis() not operating montonically
                     // or if one thread is just a really big loser in the compareAndSet game of life.
                     long millisToUse = millis <= current.millis ? millis : current.millis;
 
@@ -522,7 +523,7 @@ public abstract class Lists
             {
                 if (remainingInBatch == 0)
                 {
-                    long time = PrecisionTime.REFERENCE_TIME - (System.currentTimeMillis() - PrecisionTime.REFERENCE_TIME);
+                    long time = PrecisionTime.REFERENCE_TIME - (Clock.instance.currentTimeMillis() - PrecisionTime.REFERENCE_TIME);
                     remainingInBatch = Math.min(PrecisionTime.MAX_NANOS, i) + 1;
                     pt = PrecisionTime.getNext(time, remainingInBatch);
                 }

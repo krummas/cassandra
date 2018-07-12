@@ -36,6 +36,7 @@ import org.apache.cassandra.db.compaction.*;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.OutputHandler;
 
@@ -89,7 +90,7 @@ public class StandaloneScrubber
                                                                   options.keyspaceName,
                                                                   options.cfName));
 
-            String snapshotName = "pre-scrub-" + System.currentTimeMillis();
+            String snapshotName = "pre-scrub-" + Clock.instance.currentTimeMillis();
 
             OutputHandler handler = new OutputHandler.SystemOutput(options.verbose, options.debug);
             Directories.SSTableLister lister = cfs.getDirectories().sstableLister(Directories.OnTxnErr.THROW).skipTemporary(true);

@@ -22,6 +22,7 @@ import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
 
 import org.apache.cassandra.streaming.*;
+import org.apache.cassandra.utils.Clock;
 
 /**
  */
@@ -53,14 +54,14 @@ public class StreamEventJMXNotifier extends NotificationBroadcasterSupport imple
                 break;
             case FILE_PROGRESS:
                 ProgressInfo progress = ((StreamEvent.ProgressEvent) event).progress;
-                long current = System.currentTimeMillis();
+                long current = Clock.instance.currentTimeMillis();
                 if (current - progressLastSent >= PROGRESS_NOTIFICATION_INTERVAL || progress.isCompleted())
                 {
                     notif = new Notification(StreamEvent.ProgressEvent.class.getCanonicalName(),
                                              StreamManagerMBean.OBJECT_NAME,
                                              seq.getAndIncrement());
                     notif.setUserData(ProgressInfoCompositeData.toCompositeData(event.planId, progress));
-                    progressLastSent = System.currentTimeMillis();
+                    progressLastSent = Clock.instance.currentTimeMillis();
                 }
                 else
                 {

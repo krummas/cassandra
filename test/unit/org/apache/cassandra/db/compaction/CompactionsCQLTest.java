@@ -49,6 +49,7 @@ import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -287,8 +288,8 @@ public class CompactionsCQLTest extends CQLTester
         DatabaseDescriptor.setCorruptedTombstoneStrategy(Config.CorruptedTombstoneStrategy.exception);
         prepare();
         // write a range tombstone with negative local deletion time (LDTs are not set by user and should not be negative):
-        RangeTombstone rt = new RangeTombstone(Slice.ALL, new DeletionTime(System.currentTimeMillis(), -1));
-        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), System.currentTimeMillis() * 1000, 22).clustering(33).addRangeTombstone(rt);
+        RangeTombstone rt = new RangeTombstone(Slice.ALL, new DeletionTime(Clock.instance.currentTimeMillis(), -1));
+        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), Clock.instance.currentTimeMillis() * 1000, 22).clustering(33).addRangeTombstone(rt);
         rub.build().apply();
         getCurrentColumnFamilyStore().forceBlockingFlush();
         compactAndValidate();
@@ -302,7 +303,7 @@ public class CompactionsCQLTest extends CQLTester
         DatabaseDescriptor.setCorruptedTombstoneStrategy(Config.CorruptedTombstoneStrategy.exception);
         prepare();
         // write a standard tombstone with negative local deletion time (LDTs are not set by user and should not be negative):
-        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), -1, System.currentTimeMillis() * 1000, 22).clustering(33).delete("b");
+        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), -1, Clock.instance.currentTimeMillis() * 1000, 22).clustering(33).delete("b");
         rub.build().apply();
         getCurrentColumnFamilyStore().forceBlockingFlush();
         compactAndValidate();
@@ -330,7 +331,7 @@ public class CompactionsCQLTest extends CQLTester
         DatabaseDescriptor.setCorruptedTombstoneStrategy(Config.CorruptedTombstoneStrategy.exception);
         prepare();
         // write a row deletion with negative local deletion time (LDTs are not set by user and should not be negative):
-        RowUpdateBuilder.deleteRowAt(getCurrentColumnFamilyStore().metadata(), System.currentTimeMillis() * 1000, -1, 22, 33).apply();
+        RowUpdateBuilder.deleteRowAt(getCurrentColumnFamilyStore().metadata(), Clock.instance.currentTimeMillis() * 1000, -1, 22, 33).apply();
         getCurrentColumnFamilyStore().forceBlockingFlush();
         compactAndValidate();
         readAndValidate(true);
@@ -352,7 +353,7 @@ public class CompactionsCQLTest extends CQLTester
         int maxSizePre = DatabaseDescriptor.getColumnIndexSize();
         DatabaseDescriptor.setColumnIndexSize(1024);
         prepareWide();
-        RowUpdateBuilder.deleteRowAt(getCurrentColumnFamilyStore().metadata(), System.currentTimeMillis() * 1000, -1, 22, 33).apply();
+        RowUpdateBuilder.deleteRowAt(getCurrentColumnFamilyStore().metadata(), Clock.instance.currentTimeMillis() * 1000, -1, 22, 33).apply();
         getCurrentColumnFamilyStore().forceBlockingFlush();
         readAndValidate(true);
         readAndValidate(false);
@@ -367,7 +368,7 @@ public class CompactionsCQLTest extends CQLTester
         int maxSizePre = DatabaseDescriptor.getColumnIndexSize();
         DatabaseDescriptor.setColumnIndexSize(1024);
         prepareWide();
-        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), -1, System.currentTimeMillis() * 1000, 22).clustering(33).delete("b");
+        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), -1, Clock.instance.currentTimeMillis() * 1000, 22).clustering(33).delete("b");
         rub.build().apply();
         getCurrentColumnFamilyStore().forceBlockingFlush();
         readAndValidate(true);
@@ -383,8 +384,8 @@ public class CompactionsCQLTest extends CQLTester
         int maxSizePre = DatabaseDescriptor.getColumnIndexSize();
         DatabaseDescriptor.setColumnIndexSize(1024);
         prepareWide();
-        RangeTombstone rt = new RangeTombstone(Slice.ALL, new DeletionTime(System.currentTimeMillis(), -1));
-        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), System.currentTimeMillis() * 1000, 22).clustering(33).addRangeTombstone(rt);
+        RangeTombstone rt = new RangeTombstone(Slice.ALL, new DeletionTime(Clock.instance.currentTimeMillis(), -1));
+        RowUpdateBuilder rub = new RowUpdateBuilder(getCurrentColumnFamilyStore().metadata(), Clock.instance.currentTimeMillis() * 1000, 22).clustering(33).addRangeTombstone(rt);
         rub.build().apply();
         getCurrentColumnFamilyStore().forceBlockingFlush();
         readAndValidate(true);
@@ -613,8 +614,8 @@ public class CompactionsCQLTest extends CQLTester
 
     private void waitForMinor(String keyspace, String cf, long maxWaitTime, boolean shouldFind) throws Throwable
     {
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < maxWaitTime)
+        long startTime = Clock.instance.currentTimeMillis();
+        while (Clock.instance.currentTimeMillis() - startTime < maxWaitTime)
         {
             UntypedResultSet res = execute("SELECT * FROM system.compaction_history");
             for (UntypedResultSet.Row r : res)

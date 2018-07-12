@@ -50,6 +50,7 @@ import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.ParameterType;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.NanoTimeToCurrentTimeMillis;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -161,7 +162,7 @@ public class MessageInHandlerTest
         buf = Unpooled.buffer(1024, 1024); // 1k should be enough for everybody!
         buf.writeInt(MessagingService.PROTOCOL_MAGIC);
         buf.writeInt(MSG_ID); // this is the id
-        buf.writeInt((int) NanoTimeToCurrentTimeMillis.convert(System.nanoTime()));
+        buf.writeInt((int) NanoTimeToCurrentTimeMillis.convert(Clock.instance.nanoTime()));
 
         msgOut.serialize(new ByteBufDataOutputPlus(buf), messagingVersion);
     }

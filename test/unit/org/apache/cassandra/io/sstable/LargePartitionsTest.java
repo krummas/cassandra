@@ -29,6 +29,7 @@ import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.metrics.CacheMetrics;
 import org.apache.cassandra.service.CacheService;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Test intended to manually measure GC pressure to write and read partitions of different size
@@ -47,9 +48,9 @@ public class LargePartitionsTest extends CQLTester
 
     private static void measured(String name, Measured measured) throws Throwable
     {
-        long t0 = System.currentTimeMillis();
+        long t0 = Clock.instance.currentTimeMillis();
         measured.measure();
-        long t = System.currentTimeMillis() - t0;
+        long t = Clock.instance.currentTimeMillis() - t0;
         System.out.println("LargePartitionsTest-measured: " + name + " took " + t + " ms");
     }
 

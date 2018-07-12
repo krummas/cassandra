@@ -42,6 +42,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.NativeLibrary;
 import org.apache.cassandra.utils.IntegerInterval;
 import org.apache.cassandra.utils.concurrent.OpOrder;
@@ -77,7 +78,7 @@ public abstract class CommitLogSegment
             if (CommitLogDescriptor.isValid(file.getName()))
                 maxId = Math.max(CommitLogDescriptor.fromFileName(file.getName()).id, maxId);
         }
-        replayLimitId = idBase = Math.max(System.currentTimeMillis(), maxId + 1);
+        replayLimitId = idBase = Math.max(Clock.instance.currentTimeMillis(), maxId + 1);
     }
 
     // The commit log entry overhead in bytes (int: length + int: head checksum + int: tail checksum)

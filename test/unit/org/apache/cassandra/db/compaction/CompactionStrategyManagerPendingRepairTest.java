@@ -34,6 +34,7 @@ import org.apache.cassandra.notifications.SSTableListChangedNotification;
 import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
 import org.apache.cassandra.repair.consistent.LocalSessionAccessor;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -165,7 +166,7 @@ public class CompactionStrategyManagerPendingRepairTest extends AbstractPendingR
         Assert.assertTrue(pendingContains(repairID, sstable));
 
         // change to repaired
-        mutateRepaired(sstable, System.currentTimeMillis());
+        mutateRepaired(sstable, Clock.instance.currentTimeMillis());
         notification = new SSTableRepairStatusChanged(Collections.singleton(sstable));
         csm.handleNotification(notification, cfs.getTracker());
         Assert.assertFalse(unrepairedContains(sstable));

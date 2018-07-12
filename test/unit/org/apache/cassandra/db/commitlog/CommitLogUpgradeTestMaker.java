@@ -43,6 +43,7 @@ import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.apache.cassandra.db.commitlog.CommitLogUpgradeTest.*;
@@ -150,7 +151,7 @@ public class CommitLogUpgradeTestMaker
             t.start();
         }
 
-        final long start = System.currentTimeMillis();
+        final long start = Clock.instance.currentTimeMillis();
         Runnable printRunnable = new Runnable()
         {
             long lastUpdate = 0;
@@ -168,11 +169,11 @@ public class CommitLogUpgradeTestMaker
                     temp += cle.counter.get();
                     sz += cle.dataSize;
                 }
-                double time = (System.currentTimeMillis() - start) / 1000.0;
+                double time = (Clock.instance.currentTimeMillis() - start) / 1000.0;
                 double avg = (temp / time);
                 System.out.println(
                         String.format("second %d mem max %dmb allocated %dmb free %dmb mutations %d since start %d avg %.3f transfer %.3fmb",
-                                      ((System.currentTimeMillis() - start) / 1000),
+                                      ((Clock.instance.currentTimeMillis() - start) / 1000),
                                       maxMemory,
                                       allocatedMemory,
                                       freeMemory,

@@ -47,6 +47,7 @@ import static org.junit.Assert.*;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 public class RandomAccessReaderTest
 {
@@ -427,7 +428,7 @@ public class RandomAccessReaderTest
         final File f = File.createTempFile("testMark", "1");
         final byte[] expected = new byte[1 << 16];
 
-        long seed = System.nanoTime();
+        long seed = Clock.instance.nanoTime();
         //seed = 365238103404423L;
         logger.info("Seed {}", seed);
         Random r = new Random(seed);

@@ -1007,7 +1007,7 @@ public class LongBTreeTest
     {
         args = Arrays.copyOf(args, args.length + 1);
         System.arraycopy(args, 0, args, 1, args.length - 1);
-        args[0] = System.currentTimeMillis();
+        args[0] = Clock.instance.currentTimeMillis();
         System.out.printf("%tT: " + formatstr + "\n", args);
     }
 }

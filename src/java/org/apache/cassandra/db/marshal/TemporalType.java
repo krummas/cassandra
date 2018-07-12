@@ -20,6 +20,7 @@ package org.apache.cassandra.db.marshal;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.cql3.Duration;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * Base type for temporal types (timestamp, date ...).
@@ -38,7 +39,7 @@ public abstract class TemporalType<T> extends AbstractType<T>
      */
     public ByteBuffer now()
     {
-        return fromTimeInMillis(System.currentTimeMillis());
+        return fromTimeInMillis(Clock.instance.currentTimeMillis());
     }
 
     /**

@@ -50,6 +50,7 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.*;
 
@@ -100,7 +101,7 @@ public class RowCacheTest
         DecoratedKey dk = cachedStore.decorateKey(key);
         RowCacheKey rck = new RowCacheKey(cachedStore.metadata(), dk);
 
-        RowUpdateBuilder rub = new RowUpdateBuilder(cachedStore.metadata(), System.currentTimeMillis(), key);
+        RowUpdateBuilder rub = new RowUpdateBuilder(cachedStore.metadata(), Clock.instance.currentTimeMillis(), key);
         rub.clustering(String.valueOf(0));
         rub.add("val", ByteBufferUtil.bytes("val" + 0));
         rub.build().applyUnsafe();
@@ -417,7 +418,7 @@ public class RowCacheTest
         String values[] = new String[200];
         for (int i = 0; i < 200; i++)
         {
-            RowUpdateBuilder rub = new RowUpdateBuilder(cachedStore.metadata(), System.currentTimeMillis(), key);
+            RowUpdateBuilder rub = new RowUpdateBuilder(cachedStore.metadata(), Clock.instance.currentTimeMillis(), key);
             rub.clustering(String.valueOf(i));
             values[i] = "val" + i;
             rub.add("val", ByteBufferUtil.bytes(values[i]));

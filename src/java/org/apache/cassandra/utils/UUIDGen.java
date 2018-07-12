@@ -323,7 +323,7 @@ public class UUIDGen
         while (true)
         {
             //Generate a candidate value for new lastNanos
-            newLastNanos = (System.currentTimeMillis() - START_EPOCH) * 10000;
+            newLastNanos = (Clock.instance.currentTimeMillis() - START_EPOCH) * 10000;
             long originalLastNanos = lastNanos.get();
             if (newLastNanos > originalLastNanos)
             {
@@ -402,7 +402,7 @@ public class UUIDGen
         // Identify the process on the load: we use both the PID and class loader hash.
         long pid = NativeLibrary.getProcessID();
         if (pid < 0)
-            pid = new Random(System.currentTimeMillis()).nextLong();
+            pid = new Random(Clock.instance.currentTimeMillis()).nextLong();
         HashingUtils.updateWithLong(hasher, pid);
 
         ClassLoader loader = UUIDGen.class.getClassLoader();

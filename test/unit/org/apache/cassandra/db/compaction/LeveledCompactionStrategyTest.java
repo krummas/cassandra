@@ -58,6 +58,7 @@ import org.apache.cassandra.repair.Validator;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.ActiveRepairService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static java.util.Collections.singleton;
@@ -364,7 +365,7 @@ public class LeveledCompactionStrategyTest
         SSTableReader sstable1 = unrepaired.manifest.generations[2].get(0);
         SSTableReader sstable2 = unrepaired.manifest.generations[1].get(0);
 
-        sstable1.descriptor.getMetadataSerializer().mutateRepaired(sstable1.descriptor, System.currentTimeMillis(), null);
+        sstable1.descriptor.getMetadataSerializer().mutateRepaired(sstable1.descriptor, Clock.instance.currentTimeMillis(), null);
         sstable1.reloadSSTableMetadata();
         assertTrue(sstable1.isRepaired());
 

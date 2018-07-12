@@ -360,7 +360,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 setGossipTokens(tokens);
 
             Gossiper.instance.forceNewerGeneration();
-            Gossiper.instance.start((int) (System.currentTimeMillis() / 1000));
+            Gossiper.instance.start((int) (Clock.instance.currentTimeMillis() / 1000));
             gossipActive = true;
         }
     }
@@ -602,7 +602,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         initialized = true;
         gossipActive = true;
         Gossiper.instance.register(this);
-        Gossiper.instance.start((int) (System.currentTimeMillis() / 1000)); // needed for node-ring gathering.
+        Gossiper.instance.start((int) (Clock.instance.currentTimeMillis() / 1000)); // needed for node-ring gathering.
         Gossiper.instance.addLocalApplicationState(ApplicationState.NET_VERSION, valueFactory.networkVersion());
         if (!MessagingService.instance().isListening())
             MessagingService.instance().listen();

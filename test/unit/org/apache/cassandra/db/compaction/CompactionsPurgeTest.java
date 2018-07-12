@@ -39,6 +39,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.CachingParams;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.*;
@@ -517,7 +518,7 @@ public class CompactionsPurgeTest
         assertEquals(0, result.size());
 
         // compact the two sstables with a gcBefore that does *not* allow the row tombstone to be purged
-        FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) - 10000, false));
+        FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs, (int) (Clock.instance.currentTimeMillis() / 1000) - 10000, false));
 
         // the data should be gone, but the tombstone should still exist
         assertEquals(1, cfs.getLiveSSTables().size());
@@ -537,7 +538,7 @@ public class CompactionsPurgeTest
         cfs.forceBlockingFlush();
 
         // compact the two sstables with a gcBefore that *does* allow the row tombstone to be purged
-        FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs, (int) (System.currentTimeMillis() / 1000) + 10000, false));
+        FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs, (int) (Clock.instance.currentTimeMillis() / 1000) + 10000, false));
 
         // both the data and the tombstone should be gone this time
         assertEquals(0, cfs.getLiveSSTables().size());

@@ -34,6 +34,7 @@ import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * During compaction we can drop entire sstables if they only contain expired tombstones and if it is guaranteed
@@ -87,7 +88,7 @@ public class SSTableExpiredBlockers
             System.exit(1);
         }
 
-        int gcBefore = (int)(System.currentTimeMillis()/1000) - metadata.params.gcGraceSeconds;
+        int gcBefore = (int)(Clock.instance.currentTimeMillis() / 1000) - metadata.params.gcGraceSeconds;
         Multimap<SSTableReader, SSTableReader> blockers = checkForExpiredSSTableBlockers(sstables, gcBefore);
         for (SSTableReader blocker : blockers.keySet())
         {

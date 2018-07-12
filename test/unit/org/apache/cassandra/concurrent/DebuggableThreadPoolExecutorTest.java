@@ -28,6 +28,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 public class DebuggableThreadPoolExecutorTest
@@ -54,7 +55,7 @@ public class DebuggableThreadPoolExecutorTest
                 Thread.sleep(50);
             }
         };
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         for (int i = 0; i < 10; i++)
         {
             executor.execute(runnable);
@@ -62,7 +63,7 @@ public class DebuggableThreadPoolExecutorTest
         assert q.size() > 0 : q.size();
         while (executor.getCompletedTaskCount() < 10)
             continue;
-        long delta = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        long delta = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - start);
         assert delta >= 9 * 50 : delta;
     }
 }

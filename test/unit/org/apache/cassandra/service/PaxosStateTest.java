@@ -36,6 +36,7 @@ import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.service.paxos.Commit;
 import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -60,7 +61,7 @@ public class PaxosStateTest
     public void testCommittingAfterTruncation() throws Exception
     {
         ColumnFamilyStore cfs = Keyspace.open("PaxosStateTestKeyspace1").getColumnFamilyStore("Standard1");
-        String key = "key" + System.nanoTime();
+        String key = "key" + Clock.instance.nanoTime();
         ByteBuffer value = ByteBufferUtil.bytes(0);
         RowUpdateBuilder builder = new RowUpdateBuilder(cfs.metadata(), FBUtilities.timestampMicros(), key);
         builder.clustering("a").add("val", value);
@@ -108,7 +109,7 @@ public class PaxosStateTest
     public void testPrepareProposePaxos() throws Throwable
     {
         ColumnFamilyStore cfs = Keyspace.open("PaxosStateTestKeyspace1").getColumnFamilyStore("Standard1");
-        String key = "key" + System.nanoTime();
+        String key = "key" + Clock.instance.nanoTime();
         ByteBuffer value = ByteBufferUtil.bytes(0);
         RowUpdateBuilder builder = new RowUpdateBuilder(cfs.metadata(), FBUtilities.timestampMicros(), key);
         builder.clustering("a").add("val", value);
@@ -117,7 +118,7 @@ public class PaxosStateTest
         // CFS should be empty initially
         assertNoDataPresent(cfs, Util.dk(key));
 
-        UUID ballot = UUIDGen.getRandomTimeUUIDFromMicros(System.currentTimeMillis());
+        UUID ballot = UUIDGen.getRandomTimeUUIDFromMicros(Clock.instance.currentTimeMillis());
 
         Commit commit = Commit.newPrepare(Util.dk(key), cfs.metadata(), ballot);
 

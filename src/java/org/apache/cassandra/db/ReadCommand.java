@@ -50,6 +50,7 @@ import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ClientWarn;
 import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -276,7 +277,7 @@ public abstract class ReadCommand extends AbstractReadQuery
                                   // iterators created inside the try as long as we do close the original resultIterator), or by closing the result.
     public UnfilteredPartitionIterator executeLocally(ReadExecutionController executionController)
     {
-        long startTimeNanos = System.nanoTime();
+        long startTimeNanos = Clock.instance.nanoTime();
 
         ColumnFamilyStore cfs = Keyspace.openAndGetStore(metadata());
         Index index = getIndex(cfs);
@@ -414,7 +415,7 @@ public abstract class ReadCommand extends AbstractReadQuery
             @Override
             public void onClose()
             {
-                recordLatency(metric, System.nanoTime() - startTimeNanos);
+                recordLatency(metric, Clock.instance.nanoTime() - startTimeNanos);
 
                 metric.tombstoneScannedHistogram.update(tombstones);
                 metric.liveScannedHistogram.update(liveRows);

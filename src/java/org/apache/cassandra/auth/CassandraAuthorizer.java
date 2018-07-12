@@ -43,6 +43,7 @@ import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.transport.messages.ResultMessage;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 /**
  * CassandraAuthorizer is an IAuthorizer implementation that keeps
@@ -342,7 +343,7 @@ public class CassandraAuthorizer implements IAuthorizer
 
     ResultMessage.Rows select(SelectStatement statement, QueryOptions options)
     {
-        return statement.execute(QueryState.forInternalCalls(), options, System.nanoTime());
+        return statement.execute(QueryState.forInternalCalls(), options, Clock.instance.nanoTime());
     }
 
     UntypedResultSet process(String query) throws RequestExecutionException
@@ -355,6 +356,6 @@ public class CassandraAuthorizer implements IAuthorizer
         QueryProcessor.instance.processBatch(statement,
                                              QueryState.forInternalCalls(),
                                              BatchQueryOptions.withoutPerStatementVariables(QueryOptions.DEFAULT),
-                                             System.nanoTime());
+                                             Clock.instance.nanoTime());
     }
 }

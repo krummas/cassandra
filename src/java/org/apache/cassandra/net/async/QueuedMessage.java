@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.CoalescingStrategies;
 
 /**
@@ -39,7 +40,7 @@ public class QueuedMessage implements CoalescingStrategies.Coalescable
 
     public QueuedMessage(MessageOut<?> message, int id)
     {
-        this(message, id, System.nanoTime(), MessagingService.DROPPABLE_VERBS.contains(message.verb), true);
+        this(message, id, Clock.instance.nanoTime(), MessagingService.DROPPABLE_VERBS.contains(message.verb), true);
     }
 
     @VisibleForTesting
@@ -55,7 +56,7 @@ public class QueuedMessage implements CoalescingStrategies.Coalescable
     /** don't drop a non-droppable message just because it's timestamp is expired */
     public boolean isTimedOut()
     {
-        return droppable && timestampNanos < System.nanoTime() - TimeUnit.MILLISECONDS.toNanos(message.getTimeout());
+        return droppable && timestampNanos < Clock.instance.nanoTime() - TimeUnit.MILLISECONDS.toNanos(message.getTimeout());
     }
 
     public boolean shouldRetry()
@@ -65,7 +66,7 @@ public class QueuedMessage implements CoalescingStrategies.Coalescable
 
     public QueuedMessage createRetry()
     {
-        return new QueuedMessage(message, id, System.nanoTime(), droppable, false);
+        return new QueuedMessage(message, id, Clock.instance.nanoTime(), droppable, false);
     }
 
     public long timestampNanos()

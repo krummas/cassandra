@@ -37,6 +37,7 @@ import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.db.compaction.DateTieredCompactionStrategy.getBuckets;
@@ -300,7 +301,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
 
         // create 2 sstables
         DecoratedKey key = Util.dk(String.valueOf("expired"));
-        new RowUpdateBuilder(cfs.metadata(), System.currentTimeMillis(), 1, key.getKey())
+        new RowUpdateBuilder(cfs.metadata(), Clock.instance.currentTimeMillis(), 1, key.getKey())
             .clustering("column")
             .add("val", value).build().applyUnsafe();
 
@@ -309,7 +310,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         Thread.sleep(10);
 
         key = Util.dk(String.valueOf("nonexpired"));
-        new RowUpdateBuilder(cfs.metadata(), System.currentTimeMillis(), key.getKey())
+        new RowUpdateBuilder(cfs.metadata(), Clock.instance.currentTimeMillis(), key.getKey())
             .clustering("column")
             .add("val", value).build().applyUnsafe();
 
@@ -326,9 +327,9 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         for (SSTableReader sstable : cfs.getLiveSSTables())
             dtcs.addSSTable(sstable);
         dtcs.startup();
-        assertNull(dtcs.getNextBackgroundTask((int) (System.currentTimeMillis() / 1000)));
+        assertNull(dtcs.getNextBackgroundTask((int) (Clock.instance.currentTimeMillis() / 1000)));
         Thread.sleep(2000);
-        AbstractCompactionTask t = dtcs.getNextBackgroundTask((int) (System.currentTimeMillis()/1000));
+        AbstractCompactionTask t = dtcs.getNextBackgroundTask((int) (Clock.instance.currentTimeMillis()/1000));
         assertNotNull(t);
         assertEquals(1, Iterables.size(t.transaction.originals()));
         SSTableReader sstable = t.transaction.originals().iterator().next();
@@ -347,7 +348,7 @@ public class DateTieredCompactionStrategyTest extends SchemaLoader
         ByteBuffer value = ByteBuffer.wrap(new byte[100]);
         int numSSTables = 40;
         // create big sstabels out of half:
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         for (int r = 0; r < numSSTables / 2; r++)
         {
             for (int i = 0; i < 10; i++)

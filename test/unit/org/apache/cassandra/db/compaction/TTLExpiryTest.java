@@ -45,6 +45,7 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.MigrationManager;
 import org.apache.cassandra.tools.SSTableExpiredBlockers;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -133,7 +134,7 @@ public class TTLExpiryTest
         cfs.forceBlockingFlush();
 
         Set<SSTableReader> sstables = Sets.newHashSet(cfs.getLiveSSTables());
-        int now = (int)(System.currentTimeMillis() / 1000);
+        int now = (int)(Clock.instance.currentTimeMillis() / 1000);
         int gcBefore = now + 2;
         Set<SSTableReader> expired = CompactionController.getFullyExpiredSSTables(
                 cfs,
@@ -165,7 +166,7 @@ public class TTLExpiryTest
         cfs.disableAutoCompaction();
         // To reproduce #10944, we need our gcBefore to be equal to the locaDeletionTime. A gcGrace of 1 will (almost always) give us that.
         MigrationManager.announceTableUpdate(cfs.metadata().unbuild().gcGraceSeconds(force10944Bug ? 1 : 0).build(), true);
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         String key = "ttl";
         new RowUpdateBuilder(cfs.metadata(), timestamp, 1, key)
                         .add("col", ByteBufferUtil.EMPTY_BYTE_BUFFER)
@@ -213,7 +214,7 @@ public class TTLExpiryTest
         cfs.truncateBlocking();
         cfs.disableAutoCompaction();
         MigrationManager.announceTableUpdate(cfs.metadata().unbuild().gcGraceSeconds(0).build(), true);
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
         String key = "ttl";
         new RowUpdateBuilder(cfs.metadata(), timestamp, 1, key)
             .add("col", ByteBufferUtil.EMPTY_BYTE_BUFFER)
@@ -264,7 +265,7 @@ public class TTLExpiryTest
         cfs.disableAutoCompaction();
         MigrationManager.announceTableUpdate(cfs.metadata().unbuild().gcGraceSeconds(0).build(), true);
 
-        new RowUpdateBuilder(cfs.metadata(), System.currentTimeMillis(), "test")
+        new RowUpdateBuilder(cfs.metadata(), Clock.instance.currentTimeMillis(), "test")
                 .noRowMarker()
                 .add("col1", ByteBufferUtil.EMPTY_BYTE_BUFFER)
                 .build()
@@ -274,14 +275,14 @@ public class TTLExpiryTest
         SSTableReader blockingSSTable = cfs.getSSTables(SSTableSet.LIVE).iterator().next();
         for (int i = 0; i < 10; i++)
         {
-            new RowUpdateBuilder(cfs.metadata(), System.currentTimeMillis(), "test")
+            new RowUpdateBuilder(cfs.metadata(), Clock.instance.currentTimeMillis(), "test")
                             .noRowMarker()
                             .delete("col1")
                             .build()
                             .applyUnsafe();
             cfs.forceBlockingFlush();
         }
-        Multimap<SSTableReader, SSTableReader> blockers = SSTableExpiredBlockers.checkForExpiredSSTableBlockers(cfs.getSSTables(SSTableSet.LIVE), (int) (System.currentTimeMillis() / 1000) + 100);
+        Multimap<SSTableReader, SSTableReader> blockers = SSTableExpiredBlockers.checkForExpiredSSTableBlockers(cfs.getSSTables(SSTableSet.LIVE), (int) (Clock.instance.currentTimeMillis() / 1000) + 100);
         assertEquals(1, blockers.keySet().size());
         assertTrue(blockers.keySet().contains(blockingSSTable));
         assertEquals(10, blockers.get(blockingSSTable).size());

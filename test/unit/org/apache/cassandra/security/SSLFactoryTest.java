@@ -38,6 +38,7 @@ import io.netty.handler.ssl.util.SelfSignedCertificate;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.EncryptionOptions;
 import org.apache.cassandra.config.EncryptionOptions.ServerEncryptionOptions;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertArrayEquals;
 
@@ -181,7 +182,7 @@ public class SSLFactoryTest
 
             SSLFactory.checkCertFilesForHotReloading();
             Thread.sleep(5000);
-            keystoreFile.setLastModified(System.currentTimeMillis());
+            keystoreFile.setLastModified(Clock.instance.currentTimeMillis());
 
             SSLFactory.checkCertFilesForHotReloading();
             SslContext newCtx = SSLFactory.getSslContext(options, true, SSLFactory.ConnectionType.NATIVE_TRANSPORT,

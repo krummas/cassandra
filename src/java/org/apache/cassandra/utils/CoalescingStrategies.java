@@ -415,7 +415,7 @@ public class CoalescingStrategies
                 case FIXED:
                     return Optional.of(new FixedCoalescingStrategy(coalesceWindow, logger, displayName));
                 case TIMEHORIZON:
-                    long initialEpoch = System.nanoTime();
+                    long initialEpoch = Clock.instance.nanoTime();
                     return Optional.of(new TimeHorizonMovingAverageCoalescingStrategy(coalesceWindow, logger, displayName, initialEpoch));
                 case DISABLED:
                     return Optional.empty();

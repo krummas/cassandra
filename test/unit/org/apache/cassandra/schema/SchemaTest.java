@@ -27,6 +27,7 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
@@ -47,7 +48,7 @@ public class SchemaTest
         Schema.instance.loadFromDisk();
         assertEquals(0, Schema.instance.getNonSystemKeyspaces().size());
 
-        Gossiper.instance.start((int)(System.currentTimeMillis() / 1000));
+        Gossiper.instance.start((int)(Clock.instance.currentTimeMillis() / 1000));
         Keyspace.setInitialized();
 
         try

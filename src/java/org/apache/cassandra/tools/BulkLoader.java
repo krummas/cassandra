@@ -36,6 +36,7 @@ import org.apache.cassandra.io.sstable.SSTableLoader;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.security.SSLFactory;
 import org.apache.cassandra.streaming.*;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.NativeSSTableLoaderClient;
@@ -131,7 +132,7 @@ public class BulkLoader
 
         public ProgressIndicator()
         {
-            start = lastTime = System.nanoTime();
+            start = lastTime = Clock.instance.nanoTime();
         }
 
         public void onSuccess(StreamState finalState)
@@ -157,7 +158,7 @@ public class BulkLoader
                     progressInfo = ((StreamEvent.ProgressEvent) event).progress;
                 }
 
-                long time = System.nanoTime();
+                long time = Clock.instance.nanoTime();
                 long deltaTime = time - lastTime;
 
                 StringBuilder sb = new StringBuilder();
@@ -230,7 +231,7 @@ public class BulkLoader
 
         private void printSummary(int connectionsPerHost)
         {
-            long end = System.nanoTime();
+            long end = Clock.instance.nanoTime();
             long durationMS = ((end - start) / (1000000));
 
             StringBuilder sb = new StringBuilder();

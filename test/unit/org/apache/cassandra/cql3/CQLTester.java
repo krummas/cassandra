@@ -723,7 +723,7 @@ public abstract class CQLTester
      */
     protected boolean waitForIndex(String keyspace, String table, String index) throws Throwable
     {
-        long start = System.currentTimeMillis();
+        long start = org.apache.cassandra.utils.Clock.instance.currentTimeMillis();
         boolean indexCreated = false;
         while (!indexCreated)
         {
@@ -737,7 +737,7 @@ public abstract class CQLTester
                 }
             }
 
-            if (System.currentTimeMillis() - start > 5000)
+            if (org.apache.cassandra.utils.Clock.instance.currentTimeMillis() - start > 5000)
                 break;
 
             Thread.sleep(10);
@@ -758,7 +758,7 @@ public abstract class CQLTester
      */
     protected boolean waitForIndexBuilds(String keyspace, String indexName) throws InterruptedException
     {
-        long start = System.currentTimeMillis();
+        long start = org.apache.cassandra.utils.Clock.instance.currentTimeMillis();
         SecondaryIndexManager indexManager = getCurrentColumnFamilyStore(keyspace).indexManager;
 
         while (true)
@@ -767,7 +767,7 @@ public abstract class CQLTester
             {
                 return true;
             }
-            else if (System.currentTimeMillis() - start > 5000)
+            else if (org.apache.cassandra.utils.Clock.instance.currentTimeMillis() - start > 5000)
             {
                 return false;
             }

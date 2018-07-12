@@ -48,6 +48,7 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 
 import static org.apache.cassandra.dht.AbstractBounds.isEmpty;
 import static org.junit.Assert.assertEquals;
@@ -167,7 +168,7 @@ public class SSTableScannerTest
 
     private static void insertRowWithKey(TableMetadata metadata, int key)
     {
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Clock.instance.currentTimeMillis();
 
         new RowUpdateBuilder(metadata, timestamp, toKey(key))
             .clustering("col")

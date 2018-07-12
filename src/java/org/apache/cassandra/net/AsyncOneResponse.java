@@ -24,13 +24,15 @@ import java.util.concurrent.TimeoutException;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.AbstractFuture;
 
+import org.apache.cassandra.utils.Clock;
+
 /**
  * A callback specialized for returning a value from a single target; that is, this is for messages
  * that we only send to one recipient.
  */
 public class AsyncOneResponse<T> extends AbstractFuture<T> implements IAsyncCallback<T>
 {
-    private final long start = System.nanoTime();
+    private final long start = Clock.instance.nanoTime();
 
     public void response(MessageIn<T> response)
     {
@@ -45,7 +47,7 @@ public class AsyncOneResponse<T> extends AbstractFuture<T> implements IAsyncCall
     @Override
     public T get(long timeout, TimeUnit unit) throws TimeoutException
     {
-        long adjustedTimeout = unit.toNanos(timeout) - (System.nanoTime() - start);
+        long adjustedTimeout = unit.toNanos(timeout) - (Clock.instance.nanoTime() - start);
         if (adjustedTimeout <= 0)
         {
             throw new TimeoutException("Operation timed out.");

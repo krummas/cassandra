@@ -1182,7 +1182,7 @@ public final class MessagingService implements MessagingServiceMBean
     }
 
     /**
-     * @return System.nanoTime() when callback was created.
+     * @return Clock.instance.nanoTime() when callback was created.
      */
     public long getRegisteredCallbackAge(int messageId)
     {

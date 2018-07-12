@@ -33,6 +33,7 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.metrics.TableMetrics;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MerkleTrees;
 
@@ -93,7 +94,7 @@ public class ValidationManager
 
         // Create Merkle trees suitable to hold estimated partitions for the given ranges.
         // We blindly assume that a partition is evenly distributed on all sstables for now.
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         long partitionCount = 0;
         long estimatedTotalBytes = 0;
         try (ValidationPartitionIterator vi = getValidationIterator(cfs.getRepairManager(), validator))
@@ -126,7 +127,7 @@ public class ValidationManager
         }
         if (logger.isDebugEnabled())
         {
-            long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            long duration = TimeUnit.NANOSECONDS.toMillis(Clock.instance.nanoTime() - start);
             logger.debug("Validation of {} partitions (~{}) finished in {} msec, for {}",
                          partitionCount,
                          FBUtilities.prettyPrintMemory(estimatedTotalBytes),

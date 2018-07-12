@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.management.Notification;
 import javax.management.NotificationBroadcasterSupport;
 
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.progress.ProgressEvent;
 import org.apache.cassandra.utils.progress.ProgressListener;
 
@@ -46,7 +47,7 @@ public class JMXProgressSupport implements ProgressListener
         Notification notification = new Notification("progress",
                                                      tag,
                                                      notificationSerialNumber.getAndIncrement(),
-                                                     System.currentTimeMillis(),
+                                                     Clock.instance.currentTimeMillis(),
                                                      event.getMessage());
         Map<String, Integer> userData = new HashMap<>();
         userData.put("type", event.getType().ordinal());

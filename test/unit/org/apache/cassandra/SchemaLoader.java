@@ -48,6 +48,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.*;
 import org.apache.cassandra.schema.MigrationManager;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class SchemaLoader
@@ -81,7 +82,7 @@ public class SchemaLoader
         // skip shadow round and endpoint collision check in tests
         System.setProperty("cassandra.allow_unsafe_join", "true");
         if (!Gossiper.instance.isEnabled())
-            Gossiper.instance.start((int) (System.currentTimeMillis() / 1000));
+            Gossiper.instance.start((int) (Clock.instance.currentTimeMillis() / 1000));
     }
 
     public static void schemaDefinition(String testName) throws ConfigurationException

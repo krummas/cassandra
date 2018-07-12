@@ -39,6 +39,7 @@ import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.service.StorageProxy;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.btree.BTreeSet;
 
@@ -132,13 +133,13 @@ public class TableViews extends AbstractCollection<View>
 
         // Read modified rows
         int nowInSec = FBUtilities.nowInSeconds();
-        long queryStartNanoTime = System.nanoTime();
+        long queryStartNanoTime = Clock.instance.nanoTime();
         SinglePartitionReadCommand command = readExistingRowsCommand(update, views, nowInSec);
         if (command == null)
             return;
 
         ColumnFamilyStore cfs = Keyspace.openAndGetStore(update.metadata());
-        long start = System.nanoTime();
+        long start = Clock.instance.nanoTime();
         Collection<Mutation> mutations;
         try (ReadExecutionController orderGroup = command.executionController();
              UnfilteredRowIterator existings = UnfilteredPartitionIterators.getOnlyElement(command.executeLocally(orderGroup), command);
@@ -146,7 +147,7 @@ public class TableViews extends AbstractCollection<View>
         {
             mutations = Iterators.getOnlyElement(generateViewUpdates(views, updates, existings, nowInSec, false));
         }
-        Keyspace.openAndGetStore(update.metadata()).metric.viewReadTime.update(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+        Keyspace.openAndGetStore(update.metadata()).metric.viewReadTime.update(Clock.instance.nanoTime() - start, TimeUnit.NANOSECONDS);
 
         if (!mutations.isEmpty())
             StorageProxy.mutateMV(update.partitionKey().getKey(), mutations, writeCommitLog, baseComplete, queryStartNanoTime);

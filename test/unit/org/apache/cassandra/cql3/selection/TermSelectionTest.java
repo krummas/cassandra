@@ -26,6 +26,7 @@ import org.junit.Test;
 import org.apache.cassandra.cql3.*;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.transport.messages.ResultMessage;
+import org.apache.cassandra.utils.Clock;
 
 import static org.junit.Assert.assertEquals;
 
@@ -43,7 +44,7 @@ public class TermSelectionTest extends CQLTester
     @Test
     public void testSelectLiteral() throws Throwable
     {
-        long timestampInMicros = System.currentTimeMillis() * 1000;
+        long timestampInMicros = Clock.instance.currentTimeMillis() * 1000;
         createTable("CREATE TABLE %s (pk int, ck int, t text, PRIMARY KEY (pk, ck) )");
         execute("INSERT INTO %s (pk, ck, t) VALUES (?, ?, ?) USING TIMESTAMP ?", 1, 1, "one", timestampInMicros);
         execute("INSERT INTO %s (pk, ck, t) VALUES (?, ?, ?) USING TIMESTAMP ?", 1, 2, "two", timestampInMicros);
