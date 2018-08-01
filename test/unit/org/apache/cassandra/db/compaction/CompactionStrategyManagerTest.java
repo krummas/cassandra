@@ -129,12 +129,12 @@ public class CompactionStrategyManagerTest
             if (i % 3 == 0)
             {
                 //make 1 third of sstables repaired
-                cfs.getCompactionStrategyManager().mutateRepaired(newSSTables, System.currentTimeMillis(), null);
+                cfs.getCompactionStrategyManager().mutateRepaired(newSSTables, System.currentTimeMillis(), null, false);
             }
             else if (i % 3 == 1)
             {
                 //make 1 third of sstables pending repair
-                cfs.getCompactionStrategyManager().mutateRepaired(newSSTables, 0, UUIDGen.getTimeUUID());
+                cfs.getCompactionStrategyManager().mutateRepaired(newSSTables, 0, UUIDGen.getTimeUUID(), false);
             }
             previousSSTables = currentSSTables;
         }
@@ -272,19 +272,19 @@ public class CompactionStrategyManagerTest
         DatabaseDescriptor.setAutomaticSSTableUpgradeEnabled(false);
     }
 
-    private static void assertHolderExclusivity(boolean isRepaired, boolean isPendingRepair, Class<? extends AbstractStrategyHolder> expectedType)
+    private static void assertHolderExclusivity(boolean isRepaired, boolean isPendingRepair, boolean isTransient, Class<? extends AbstractStrategyHolder> expectedType)
     {
         ColumnFamilyStore cfs = Keyspace.open(KS_PREFIX).getColumnFamilyStore(TABLE_PREFIX);
         CompactionStrategyManager csm = cfs.getCompactionStrategyManager();
 
-        AbstractStrategyHolder holder = csm.getHolder(isRepaired, isPendingRepair);
+        AbstractStrategyHolder holder = csm.getHolder(isRepaired, isPendingRepair, isTransient);
         assertNotNull(holder);
         assertSame(expectedType, holder.getClass());
 
         int matches = 0;
         for (AbstractStrategyHolder other : csm.getHolders())
         {
-            if (other.managesRepairedGroup(isRepaired, isPendingRepair))
+            if (other.managesRepairedGroup(isRepaired, isPendingRepair, isTransient))
             {
                 assertSame("holder assignment should be mutually exclusive", holder, other);
                 matches++;
@@ -293,13 +293,13 @@ public class CompactionStrategyManagerTest
         assertEquals(1, matches);
     }
 
-    private static void assertInvalieHolderConfig(boolean isRepaired, boolean isPendingRepair)
+    private static void assertInvalieHolderConfig(boolean isRepaired, boolean isPendingRepair, boolean isTransient)
     {
         ColumnFamilyStore cfs = Keyspace.open(KS_PREFIX).getColumnFamilyStore(TABLE_PREFIX);
         CompactionStrategyManager csm = cfs.getCompactionStrategyManager();
         try
         {
-            csm.getHolder(isRepaired, isPendingRepair);
+            csm.getHolder(isRepaired, isPendingRepair, isTransient);
             fail("Expected IllegalArgumentException");
         }
         catch (IllegalArgumentException e)
@@ -315,10 +315,14 @@ public class CompactionStrategyManagerTest
     @Test
     public void testMutualExclusiveHolderClassification() throws Exception
     {
-        assertHolderExclusivity(false, false, CompactionStrategyHolder.class);
-        assertHolderExclusivity(true, false, CompactionStrategyHolder.class);
-        assertHolderExclusivity(false, true, PendingRepairHolder.class);
-        assertInvalieHolderConfig(true, true);
+        assertHolderExclusivity(false, false, false, CompactionStrategyHolder.class);
+        assertHolderExclusivity(true, false, false, CompactionStrategyHolder.class);
+        assertHolderExclusivity(false, true, false, PendingRepairHolder.class);
+        assertHolderExclusivity(false, true, true, PendingRepairHolder.class);
+        assertInvalieHolderConfig(true, true, false);
+        assertInvalieHolderConfig(true, true, true);
+        assertInvalieHolderConfig(false, false, true);
+        assertInvalieHolderConfig(true, false, true);
     }
 
     PartitionPosition forKey(int key)
@@ -349,8 +353,8 @@ public class CompactionStrategyManagerTest
             repaired.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
         }
 
-        cfs.getCompactionStrategyManager().mutateRepaired(pendingRepair, 0, UUID.randomUUID());
-        cfs.getCompactionStrategyManager().mutateRepaired(repaired, 1000, null);
+        cfs.getCompactionStrategyManager().mutateRepaired(pendingRepair, 0, UUID.randomUUID(), false);
+        cfs.getCompactionStrategyManager().mutateRepaired(repaired, 1000, null, false);
 
         DiskBoundaries boundaries = new DiskBoundaries(cfs.getDirectories().getWriteableLocations(),
                                                        Lists.newArrayList(forKey(100), forKey(200), forKey(300)),
