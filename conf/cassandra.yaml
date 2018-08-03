@@ -1218,11 +1218,16 @@ audit_logging_options:
 # can be either "disabled", "warn" or "exception"
 # corrupted_tombstone_strategy: disabled
 
-# Set a consistency level for bootstrap
-# For example, if you have RF=3 and you bootstrap a node with QUORUM, the new node will stream the unrepaired
-# data from 2 nodes and the repaired data from one node. This makes sure that the data on the new node is consistent
-# assuming writes are performed with at least QUORUM. Supported consistency levels are: ANY, LOCAL_QUORUM, QUORUM, TWO.
-# default_bootstrap_consistency_level: ANY
-# bootstrap_consistency_level:
-#     keyspace1: QUORUM
-#     keyspace2: LOCAL_QUORUM
+# Configure if bootstrap should be consistent. Consistent bootstrap means that the bootstrapping node
+# will stream from a quorum of the nodes in either the local dc or globally.
+# Consistent bootstrap can be done if the replication factor is 3 or larger (in the local data center
+# if configured as dc_local)
+# Valid options are: 'none' to disable consistent bootstrap
+#                    'dc_local' to do consistent bootstrap in the local data center
+#                    'global' to do consistent bootstrap from all nodes.
+# default_consistent_bootstrap: none
+# Per-keyspace overrides of the default consistent bootstrap
+# consistent_bootstrap:
+#     keyspace1: none
+#     keyspace2: dc_local
+#     keyspace3: global

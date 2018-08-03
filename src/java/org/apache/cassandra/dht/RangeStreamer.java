@@ -52,6 +52,7 @@ import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.IEndpointSnitch;
+import org.apache.cassandra.locator.NetworkTopologyStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.PreviewKind;
@@ -221,8 +222,15 @@ public class RangeStreamer
         if (!useStrictSource && streamOperation == StreamOperation.BOOTSTRAP)
         {
             ConsistencyLevel cl = DatabaseDescriptor.getBootstrapConsistencyLevel(keyspaceName);
-            if (cl != ConsistencyLevel.ANY)
-                rangeFetchMap.putAll(getEndpointsForConsistencyLevel(cl, ks, rangesForKeyspace, rangeFetchMap, description, sourceFilters));
+            if (doConsistentBootstrapFor(strat, cl))
+            {
+                if (cl != ConsistencyLevel.ANY)
+                    rangeFetchMap.putAll(getEndpointsForConsistencyLevel(cl, ks, rangesForKeyspace, rangeFetchMap, description, sourceFilters));
+            }
+            else
+            {
+                logger.warn("Not doing consistent bootstrap for {} - replication factor is too small {}", keyspaceName, cl.isDatacenterLocal() ? " in dc="+DatabaseDescriptor.getLocalDataCenter() : "");
+            }
         }
 
         for (Map.Entry<InetAddressAndPort, Collection<Range<Token>>> entry : rangeFetchMap.asMap().entrySet())
@@ -234,6 +242,22 @@ public class RangeStreamer
             }
             toFetch.put(keyspaceName, entry);
         }
+    }
+
+    /**
+     * We only do consistent bootstrap if the replication factor is larger than 3. If we request a local CL, the RF in
+     * the local CL needs to be >= 3
+     */
+    private boolean doConsistentBootstrapFor(AbstractReplicationStrategy strategy, ConsistencyLevel cl)
+    {
+        if (strategy == null || strategy.getReplicationFactor() < 3)
+            return false;
+        if (cl.isDatacenterLocal() && strategy instanceof NetworkTopologyStrategy)
+        {
+            if (((NetworkTopologyStrategy)strategy).getReplicationFactor(DatabaseDescriptor.getLocalDataCenter()) < 3)
+                return false;
+        }
+        return true;
     }
 
     @VisibleForTesting

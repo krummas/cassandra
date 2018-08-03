@@ -388,8 +388,8 @@ public class Config
 
     public CorruptedTombstoneStrategy corrupted_tombstone_strategy = CorruptedTombstoneStrategy.disabled;
 
-    public String default_bootstrap_consistency_level = "ANY";
-    public Map<String, String> bootstrap_consistency_level = Collections.emptyMap();
+    public String default_consistent_bootstrap = "none";
+    public Map<String, String> consistent_bootstrap = Collections.emptyMap();
 
     /**
      * @deprecated migrate to {@link DatabaseDescriptor#isClientInitialized()}

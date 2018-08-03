@@ -771,36 +771,30 @@ public class DatabaseDescriptor
 
         validateMaxConcurrentAutoUpgradeTasksConf(conf.max_concurrent_automatic_sstable_upgrades);
 
-        ConsistencyLevel defaultCL = ConsistencyLevel.valueOf(conf.default_bootstrap_consistency_level);
-        if (validateBootstrapConsistencyLevel(defaultCL))
-            defaultBootstrapConsistencyLevel = defaultCL;
-        else
-            throw new ConfigurationException("We don't support bootstrapping with consistency level "+defaultCL);
+        defaultBootstrapConsistencyLevel = getConsistencyLevelFromConfig(conf.default_consistent_bootstrap);
 
-        for (Map.Entry<String, String> entry : conf.bootstrap_consistency_level.entrySet())
+        for (Map.Entry<String, String> entry : conf.consistent_bootstrap.entrySet())
         {
             String keyspace = entry.getKey();
-            ConsistencyLevel cl = ConsistencyLevel.valueOf(entry.getValue());
-            if (validateBootstrapConsistencyLevel(cl))
-                bootstrapConsistencyLevel.put(keyspace, cl);
-            else
-                throw new ConfigurationException("We don't support bootstrapping with consistency level "+cl);
+            ConsistencyLevel cl = getConsistencyLevelFromConfig(entry.getValue());
+            bootstrapConsistencyLevel.put(keyspace, cl);
         }
     }
-    private static boolean validateBootstrapConsistencyLevel(ConsistencyLevel cl)
+    private static ConsistencyLevel getConsistencyLevelFromConfig(String config)
     {
-        switch (cl)
+        switch (config)
         {
-            case LOCAL_QUORUM:
-            case QUORUM:
-            case TWO:
-            case ANY:
-                return true;
-            case ALL:
-                logger.warn("Bootstrap consistency ALL makes it impossible to replace a dead node");
-                return true;
+            case "none":
+                return ConsistencyLevel.ANY;
+            case "dc_local":
+                return ConsistencyLevel.LOCAL_QUORUM;
+            case "global":
+                return ConsistencyLevel.QUORUM;
+            case "all":
+                logger.warn("Using 'all' makes it impossible to replace down nodes");
+                return ConsistencyLevel.ALL;
             default:
-                return false;
+                throw new ConfigurationException("Unsupported bootstrap consistency: "+config+" none/dc_local/global is supported");
         }
     }
 
@@ -2682,6 +2676,8 @@ public class DatabaseDescriptor
 
     public static void setBootstrapConsistencyLevel(String keyspacename, ConsistencyLevel cl)
     {
+        if (!EnumSet.of(ConsistencyLevel.ANY, ConsistencyLevel.LOCAL_QUORUM, ConsistencyLevel.QUORUM, ConsistencyLevel.ALL).contains(cl))
+            throw new RuntimeException("Bad bootstrap consistency level: "+cl);
         bootstrapConsistencyLevel.put(keyspacename, cl);
     }
 }
