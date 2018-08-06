@@ -21,6 +21,7 @@ package org.apache.cassandra.audit;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
 
@@ -39,6 +40,7 @@ import org.apache.cassandra.utils.binlog.BinLog;
 public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
 {
     public static final String BATCH = "batch";
+    public static final String SINGLE = "single";
     public static final String QUERY = "query";
     public static final String BATCH_TYPE = "batch-type";
     public static final String QUERIES = "queries";
@@ -109,7 +111,8 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         logRecord(wrappedQuery, binLog);
     }
 
-    static class Batch extends AbstractLogEntry
+    @VisibleForTesting
+    public static class Batch extends AbstractLogEntry
     {
         private final int weight;
         private final BatchStatement.Type batchType;
@@ -184,7 +187,8 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         }
     }
 
-    static class Query extends AbstractLogEntry
+    @VisibleForTesting
+    public static class Query extends AbstractLogEntry
     {
         private final String query;
 
@@ -197,7 +201,7 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         @Override
         protected String type()
         {
-            return QUERY;
+            return SINGLE;
         }
 
         @Override

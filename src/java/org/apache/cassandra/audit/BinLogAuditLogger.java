@@ -50,7 +50,7 @@ import org.apache.cassandra.utils.binlog.BinLog;
 import org.apache.cassandra.utils.concurrent.WeightedQueue;
 import org.github.jamm.MemoryLayoutSpecification;
 
-abstract class BinLogAuditLogger implements IAuditLogger
+public abstract class BinLogAuditLogger implements IAuditLogger
 {
     private static final long CURRENT_VERSION = 0; // encode a dummy version, to prevent pain in decoding in the future
 
