@@ -23,6 +23,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.cassandra.locator.Endpoints;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +34,6 @@ import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
 import org.apache.cassandra.locator.Replica;
-import org.apache.cassandra.locator.ReplicaList;
 import org.apache.cassandra.metrics.ReadRepairMetrics;
 import org.apache.cassandra.service.ReplicaPlan;
 import org.apache.cassandra.tracing.Tracing;
@@ -56,7 +56,7 @@ public class BlockingReadRepair extends AbstractReadRepair
         this.blockFor = replicaPlan.consistencyLevel().blockFor(cfs.keyspace);
     }
 
-    public UnfilteredPartitionIterators.MergeListener getMergeListener(ReplicaList replicas)
+    public UnfilteredPartitionIterators.MergeListener getMergeListener(Endpoints<?> replicas)
     {
         return new PartitionIteratorMergeListener(replicas, command, replicaPlan.consistencyLevel(), this);
     }
@@ -101,7 +101,7 @@ public class BlockingReadRepair extends AbstractReadRepair
     }
 
     @Override
-    public void repairPartition(Map<Replica, Mutation> mutations, ReplicaList targets)
+    public void repairPartition(Map<Replica, Mutation> mutations, Endpoints<?> targets)
     {
         BlockingPartitionRepair blockingRepair = new BlockingPartitionRepair(mutations, blockFor, replicaPlan.with(targets));
         blockingRepair.sendInitialRepairs();

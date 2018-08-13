@@ -99,7 +99,7 @@ public abstract class AbstractReadRepair implements ReadRepair
         for (Replica replica : replicaPlan.targetReplicas())
         {
             Tracing.trace("Enqueuing full data read to {}", replica);
-            sendReadCommand(replica.getEndpoint(), readCallback);
+            sendReadCommand(replica.endpoint(), readCallback);
         }
     }
 
@@ -132,13 +132,13 @@ public abstract class AbstractReadRepair implements ReadRepair
 
         if (shouldSpeculate() && !repair.readCallback.await(cfs.sampleReadLatencyNanos, TimeUnit.NANOSECONDS))
         {
-            ReplicaCollection additional = replicaPlan.additionalReplicas();
+            ReplicaCollection<?> additional = replicaPlan.additionalReplicas();
             if (additional.isEmpty())
                 return;
 
             Replica replica = additional.iterator().next();
             Tracing.trace("Enqueuing speculative full data read to {}", replica);
-            sendReadCommand(replica.getEndpoint(), repair.readCallback);
+            sendReadCommand(replica.endpoint(), repair.readCallback);
             ReadRepairMetrics.speculatedRead.mark();
         }
     }

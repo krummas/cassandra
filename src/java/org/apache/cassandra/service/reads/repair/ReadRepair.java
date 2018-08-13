@@ -20,13 +20,19 @@ package org.apache.cassandra.service.reads.repair;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import org.apache.cassandra.locator.Endpoints;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.partitions.PartitionIterator;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
 import org.apache.cassandra.locator.Replica;
-import org.apache.cassandra.locator.ReplicaList;
+import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ReplicaPlan;
 import org.apache.cassandra.service.reads.DigestResolver;
 
@@ -40,7 +46,7 @@ public interface ReadRepair
     /**
      * Used by DataResolver to generate corrections as the partition iterator is consumed
      */
-    UnfilteredPartitionIterators.MergeListener getMergeListener(ReplicaList replicas);
+    UnfilteredPartitionIterators.MergeListener getMergeListener(Endpoints<?> replicas);
 
     /**
      * Called when the digests from the initial read don't match. Reads may block on the
@@ -83,7 +89,7 @@ public interface ReadRepair
      * Repairs a partition _after_ receiving data responses. This method receives replica list, since
      * we will block repair only on the replicas that have responded.
      */
-    void repairPartition(Map<Replica, Mutation> mutations, ReplicaList targets);
+    void repairPartition(Map<Replica, Mutation> mutations, Endpoints<?> targets);
 
     static ReadRepair create(ReadCommand command, ReplicaPlan replicaPlan, long queryStartNanoTime)
     {

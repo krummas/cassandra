@@ -26,6 +26,7 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterators;
+import org.apache.cassandra.locator.Endpoints;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.locator.ReplicaList;
@@ -44,7 +45,7 @@ public class ReadOnlyReadRepair extends AbstractReadRepair
     }
 
     @Override
-    public UnfilteredPartitionIterators.MergeListener getMergeListener(ReplicaList replicas)
+    public UnfilteredPartitionIterators.MergeListener getMergeListener(Endpoints<?> replicas)
     {
         return UnfilteredPartitionIterators.MergeListener.NOOP;
     }
@@ -62,7 +63,7 @@ public class ReadOnlyReadRepair extends AbstractReadRepair
     }
 
     @Override
-    public void repairPartition(Map<Replica, Mutation> mutations, ReplicaList targets)
+    public void repairPartition(Map<Replica, Mutation> mutations, Endpoints<?> targets)
     {
         throw new UnsupportedOperationException("ReadOnlyReadRepair shouldn't be trying to repair partitions");
     }
