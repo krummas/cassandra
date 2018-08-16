@@ -348,21 +348,6 @@ class PendingRepairManager
         return !ActiveRepairService.instance.consistent.local.isSessionInProgress(sessionID);
     }
 
-    /**
-     * calling this when underlying strategy is not LeveledCompactionStrategy is an error
-     */
-    synchronized int[] getSSTableCountPerLevel()
-    {
-        int [] res = new int[LeveledManifest.MAX_LEVEL_COUNT];
-        for (AbstractCompactionStrategy strategy : strategies.values())
-        {
-            assert strategy instanceof LeveledCompactionStrategy;
-            int[] counts = ((LeveledCompactionStrategy) strategy).getAllLevelSize();
-            res = CompactionStrategyManager.sumArrays(res, counts);
-        }
-        return res;
-    }
-
     @SuppressWarnings("resource")
     synchronized Set<ISSTableScanner> getScanners(Collection<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {

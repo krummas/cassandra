@@ -93,7 +93,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
         return Iterables.concat(Iterables.transform(managers, PendingRepairManager::getStrategies));
     }
 
-    public Iterable<AbstractCompactionStrategy> getStrategiesFor(UUID session)
+    Iterable<AbstractCompactionStrategy> getStrategiesFor(UUID session)
     {
         List<AbstractCompactionStrategy> strategies = new ArrayList<>(managers.size());
         for (PendingRepairManager manager : managers)
@@ -138,7 +138,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     {
         List<AbstractCompactionTask> tasks = new ArrayList<>(managers.size());
 
-        for (int i=0; i<managers.size(); i++)
+        for (int i = 0; i < managers.size(); i++)
         {
             if (sstables.isGroupEmpty(i))
                 continue;
@@ -167,7 +167,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     public void addSSTables(GroupedSSTableContainer sstables)
     {
         Preconditions.checkArgument(sstables.numGroups() == managers.size());
-        for (int i=0; i<managers.size(); i++)
+        for (int i = 0; i < managers.size(); i++)
         {
             if (!sstables.isGroupEmpty(i))
                 managers.get(i).addSSTables(sstables.getGroup(i));
@@ -178,7 +178,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     public void removeSSTables(GroupedSSTableContainer sstables)
     {
         Preconditions.checkArgument(sstables.numGroups() == managers.size());
-        for (int i=0; i<managers.size(); i++)
+        for (int i = 0; i < managers.size(); i++)
         {
             if (!sstables.isGroupEmpty(i))
                 managers.get(i).removeSSTables(sstables.getGroup(i));
@@ -190,7 +190,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     {
         Preconditions.checkArgument(removed.numGroups() == managers.size());
         Preconditions.checkArgument(added.numGroups() == managers.size());
-        for (int i=0; i<managers.size(); i++)
+        for (int i = 0; i < managers.size(); i++)
         {
             if (removed.isGroupEmpty(i) && added.isGroupEmpty(i))
                 continue;
@@ -206,7 +206,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
     public List<ISSTableScanner> getScanners(GroupedSSTableContainer sstables, Collection<Range<Token>> ranges)
     {
         List<ISSTableScanner> scanners = new ArrayList<>(managers.size());
-        for (int i=0; i<managers.size(); i++)
+        for (int i = 0; i < managers.size(); i++)
         {
             if (sstables.isGroupEmpty(i))
                 continue;
@@ -231,7 +231,7 @@ public class PendingRepairHolder extends AbstractStrategyHolder
         Preconditions.checkArgument(pendingRepair != null,
                                     "PendingRepairHolder can't create sstable writer without pendingRepair id");
         // to avoid creating a compaction strategy for the wrong pending repair manager, we get the index based on where the sstable is to be written
-        AbstractCompactionStrategy strategy = managers.get(router.getIndexForDescriptor(descriptor)).getOrCreate(pendingRepair);
+        AbstractCompactionStrategy strategy = managers.get(router.getIndexForSSTableDirectory(descriptor)).getOrCreate(pendingRepair);
         return strategy.createSSTableMultiWriter(descriptor,
                                                  keyCount,
                                                  repairedAt,

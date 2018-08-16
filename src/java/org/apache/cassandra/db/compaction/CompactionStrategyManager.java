@@ -147,9 +147,9 @@ public class CompactionStrategyManager implements INotificationConsumer
                 return compactionStrategyIndexFor(sstable);
             }
 
-            public int getIndexForDescriptor(Descriptor descriptor)
+            public int getIndexForSSTableDirectory(Descriptor descriptor)
             {
-                return compactionStrategyIndexFor(descriptor);
+                return compactionStrategyIndexForDirectory(descriptor);
             }
         };
         pendingRepairs = new PendingRepairHolder(cfs, router);
@@ -185,10 +185,10 @@ public class CompactionStrategyManager implements INotificationConsumer
 
             int numPartitions = getNumTokenPartitions();
             // first try to promote/demote sstables from completed repairs
-            ArrayList<TaskSupplier> repairFinishedSuppliers = pendingRepairs.getRepairFinishedTaskSuppliers();
+            List<TaskSupplier> repairFinishedSuppliers = pendingRepairs.getRepairFinishedTaskSuppliers();
             if (!repairFinishedSuppliers.isEmpty())
             {
-                repairFinishedSuppliers.sort((x, y) -> y.numRemaining - x.numRemaining);
+                Collections.sort(repairFinishedSuppliers);
                 for (TaskSupplier supplier : repairFinishedSuppliers)
                 {
                     AbstractCompactionTask task = supplier.getTask();
@@ -198,11 +198,11 @@ public class CompactionStrategyManager implements INotificationConsumer
             }
 
             // sort compaction task suppliers by remaining tasks descending
-            ArrayList<TaskSupplier> suppliers = new ArrayList<>(numPartitions * holders.size());
+            List<TaskSupplier> suppliers = new ArrayList<>(numPartitions * holders.size());
             for (AbstractStrategyHolder holder : holders)
                 suppliers.addAll(holder.getBackgroundTaskSuppliers(gcBefore));
 
-            suppliers.sort((x, y) -> y.numRemaining - x.numRemaining);
+            Collections.sort(suppliers);
 
             // return the first non-null task
             for (TaskSupplier supplier : suppliers)
@@ -312,7 +312,6 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             writeLock.unlock();
         }
-        holders.forEach(AbstractStrategyHolder::startup);
 
         if (repaired.first().logAll)
             compactionLogger.enable();
@@ -332,7 +331,7 @@ public class CompactionStrategyManager implements INotificationConsumer
     }
 
     @VisibleForTesting
-    protected AbstractCompactionStrategy compactionStrategyFor(SSTableReader sstable)
+    AbstractCompactionStrategy compactionStrategyFor(SSTableReader sstable)
     {
         // should not call maybeReloadDiskBoundaries because it may be called from within lock
         readLock.lock();
@@ -358,7 +357,7 @@ public class CompactionStrategyManager implements INotificationConsumer
      * @return
      */
     @VisibleForTesting
-    protected int compactionStrategyIndexFor(SSTableReader sstable)
+    int compactionStrategyIndexFor(SSTableReader sstable)
     {
         // should not call maybeReloadDiskBoundaries because it may be called from within lock
         readLock.lock();
@@ -377,12 +376,12 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
     }
 
-    protected int compactionStrategyIndexFor(Descriptor descriptor)
+    private int compactionStrategyIndexForDirectory(Descriptor descriptor)
     {
         readLock.lock();
         try
         {
-            return partitionSSTablesByTokenRange? currentBoundaries.getBoundariesFromSSTableDirectory(descriptor) : 0;
+            return partitionSSTablesByTokenRange ? currentBoundaries.getBoundariesFromSSTableDirectory(descriptor) : 0;
         }
         finally
         {
@@ -563,7 +562,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         startup();
     }
 
-    public Iterable<AbstractCompactionStrategy> getAllStrategies()
+    private Iterable<AbstractCompactionStrategy> getAllStrategies()
     {
         return Iterables.concat(Iterables.transform(holders, AbstractStrategyHolder::allStrategies));
     }
@@ -659,7 +658,7 @@ public class CompactionStrategyManager implements INotificationConsumer
 
     private int getHolderIndex(SSTableReader sstable)
     {
-        for (int i=0; i<holders.size(); i++)
+        for (int i = 0; i < holders.size(); i++)
         {
             if (holders.get(i).managesSSTable(sstable))
                 return i;
@@ -741,12 +740,11 @@ public class CompactionStrategyManager implements INotificationConsumer
         if (maybeReloadDiskBoundaries())
             return;
         // we need a write lock here since we move sstables from one strategy instance to another
-        AbstractStrategyHolder.GroupedSSTableContainer container = null;
         readLock.lock();
         try
         {
             List<GroupedSSTableContainer> groups = groupSSTables(sstables);
-            for (int i=0; i<holders.size(); i++)
+            for (int i = 0; i < holders.size(); i++)
             {
                 GroupedSSTableContainer group = groups.get(i);
 
@@ -863,7 +861,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             List<GroupedSSTableContainer> sstableGroups = groupSSTables(sstables);
 
-            for (int i=0; i<holders.size(); i++)
+            for (int i = 0; i < holders.size(); i++)
             {
                 AbstractStrategyHolder holder = holders.get(i);
                 GroupedSSTableContainer group = sstableGroups.get(i);
@@ -1019,7 +1017,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         try
         {
             List<GroupedSSTableContainer> groupedSSTables = groupSSTables(sstables);
-            for (int i=0; i<holders.size(); i++)
+            for (int i = 0; i < holders.size(); i++)
             {
                 ret.addAll(holders.get(i).getUserDefinedTasks(groupedSSTables.get(i), gcBefore));
             }

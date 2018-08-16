@@ -97,7 +97,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     public Collection<TaskSupplier> getBackgroundTaskSuppliers(int gcBefore)
     {
         List<TaskSupplier> suppliers = new ArrayList<>(strategies.size());
-        for (AbstractCompactionStrategy strategy: strategies)
+        for (AbstractCompactionStrategy strategy : strategies)
             suppliers.add(new TaskSupplier(strategy.getEstimatedRemainingTasks(), () -> strategy.getNextBackgroundTask(gcBefore)));
 
         return suppliers;
@@ -120,7 +120,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     public Collection<AbstractCompactionTask> getUserDefinedTasks(GroupedSSTableContainer sstables, int gcBefore)
     {
         List<AbstractCompactionTask> tasks = new ArrayList<>(strategies.size());
-        for (int i=0; i<strategies.size(); i++)
+        for (int i = 0; i < strategies.size(); i++)
         {
             if (sstables.isGroupEmpty(i))
                 continue;
@@ -134,7 +134,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     public void addSSTables(GroupedSSTableContainer sstables)
     {
         Preconditions.checkArgument(sstables.numGroups() == strategies.size());
-        for (int i=0; i<strategies.size(); i++)
+        for (int i = 0; i < strategies.size(); i++)
         {
             if (!sstables.isGroupEmpty(i))
                 strategies.get(i).addSSTables(sstables.getGroup(i));
@@ -145,7 +145,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     public void removeSSTables(GroupedSSTableContainer sstables)
     {
         Preconditions.checkArgument(sstables.numGroups() == strategies.size());
-        for (int i=0; i<strategies.size(); i++)
+        for (int i = 0; i < strategies.size(); i++)
         {
             if (!sstables.isGroupEmpty(i))
                 strategies.get(i).removeSSTables(sstables.getGroup(i));
@@ -157,7 +157,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     {
         Preconditions.checkArgument(removed.numGroups() == strategies.size());
         Preconditions.checkArgument(added.numGroups() == strategies.size());
-        for (int i=0; i<strategies.size(); i++)
+        for (int i = 0; i < strategies.size(); i++)
         {
             if (removed.isGroupEmpty(i) && added.isGroupEmpty(i))
                 continue;
@@ -179,7 +179,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
     public List<ISSTableScanner> getScanners(GroupedSSTableContainer sstables, Collection<Range<Token>> ranges)
     {
         List<ISSTableScanner> scanners = new ArrayList<>(strategies.size());
-        for (int i=0; i<strategies.size(); i++)
+        for (int i = 0; i < strategies.size(); i++)
         {
             if (sstables.isGroupEmpty(i))
                 continue;
@@ -196,7 +196,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
         sstables.forEach(group::add);
 
         Collection<Collection<SSTableReader>> anticompactionGroups = new ArrayList<>();
-        for (int i=0; i<strategies.size(); i++)
+        for (int i = 0; i < strategies.size(); i++)
         {
             if (group.isGroupEmpty(i))
                 continue;
@@ -223,7 +223,7 @@ public class CompactionStrategyHolder extends AbstractStrategyHolder
         Preconditions.checkArgument(pendingRepair == null,
                                     "CompactionStrategyHolder can't create sstable writer with pendingRepair id");
         // to avoid creating a compaction strategy for the wrong pending repair manager, we get the index based on where the sstable is to be written
-        AbstractCompactionStrategy strategy = strategies.get(router.getIndexForDescriptor(descriptor));
+        AbstractCompactionStrategy strategy = strategies.get(router.getIndexForSSTableDirectory(descriptor));
         return strategy.createSSTableMultiWriter(descriptor,
                                                  keyCount,
                                                  repairedAt,

@@ -49,12 +49,12 @@ import org.apache.cassandra.schema.CompactionParams;
  */
 public abstract class AbstractStrategyHolder
 {
-    public static class TaskSupplier
+    public static class TaskSupplier implements Comparable<TaskSupplier>
     {
-        public final int numRemaining;
-        public final Supplier<AbstractCompactionTask> supplier;
+        private final int numRemaining;
+        private final Supplier<AbstractCompactionTask> supplier;
 
-        public TaskSupplier(int numRemaining, Supplier<AbstractCompactionTask> supplier)
+        TaskSupplier(int numRemaining, Supplier<AbstractCompactionTask> supplier)
         {
             this.numRemaining = numRemaining;
             this.supplier = supplier;
@@ -64,12 +64,17 @@ public abstract class AbstractStrategyHolder
         {
             return supplier.get();
         }
+
+        public int compareTo(TaskSupplier o)
+        {
+            return o.numRemaining - numRemaining;
+        }
     }
 
     public static interface DestinationRouter
     {
         int getIndexForSSTable(SSTableReader sstable);
-        int getIndexForDescriptor(Descriptor descriptor);
+        int getIndexForSSTableDirectory(Descriptor descriptor);
     }
 
     /**
@@ -111,29 +116,23 @@ public abstract class AbstractStrategyHolder
 
         boolean isGroupEmpty(int i)
         {
-            Preconditions.checkArgument(i >= 0 && i < groups.length);
-            Set<SSTableReader> group = groups[i];
-            return group == null || group.isEmpty();
+            return getGroup(i).isEmpty();
         }
 
         boolean isEmpty()
         {
-            for (int i=0; i<groups.length; i++)
-            {
-                Set<SSTableReader> group = groups[i];
-                if (group != null && !group.isEmpty())
+            for (int i = 0; i < groups.length; i++)
+                if (!isGroupEmpty(i))
                     return false;
-
-            }
             return true;
         }
     }
 
     protected final ColumnFamilyStore cfs;
-    protected final DestinationRouter router;
-    protected int numTokenPartitions = -1;
+    final DestinationRouter router;
+    private int numTokenPartitions = -1;
 
-    public AbstractStrategyHolder(ColumnFamilyStore cfs, DestinationRouter router)
+    AbstractStrategyHolder(ColumnFamilyStore cfs, DestinationRouter router)
     {
         this.cfs = cfs;
         this.router = router;
@@ -143,7 +142,7 @@ public abstract class AbstractStrategyHolder
 
     public abstract void shutdown();
 
-    public final void setStrategy(CompactionParams params, int numTokenPartitions)
+    final void setStrategy(CompactionParams params, int numTokenPartitions)
     {
         Preconditions.checkArgument(numTokenPartitions > 0, "at least one token partition required");
         shutdown();
