@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.annotation.Nullable;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -88,6 +90,7 @@ abstract class BinLogAuditLogger implements IAuditLogger
     public static final String QUERY_START_TIME = "query-start-time";
     public static final String GENERATED_TIMESTAMP = "generated-timestamp";
     public static final String GENERATED_NOW_IN_SECONDS = "generated-now-in-seconds";
+    public static final String KEYSPACE = "keyspace";
 
     /**
      * Configure the global instance of the FullQueryLogger. Clean the provided directory before starting
@@ -308,6 +311,8 @@ abstract class BinLogAuditLogger implements IAuditLogger
 
         private final long generatedTimestamp;
         private final int generatedNowInSeconds;
+        @Nullable
+        private final String keyspace;
 
         AbstractLogEntry(QueryOptions queryOptions, QueryState queryState, long queryStartTime)
         {
@@ -319,6 +324,7 @@ abstract class BinLogAuditLogger implements IAuditLogger
 
             this.generatedTimestamp = queryState.generatedTimestamp();
             this.generatedNowInSeconds = queryState.generatedNowInSeconds();
+            this.keyspace = queryState.getClientState().getRawKeyspace();
 
             /*
              * Struggled with what tradeoff to make in terms of query options which is potentially large and complicated
@@ -355,6 +361,7 @@ abstract class BinLogAuditLogger implements IAuditLogger
 
             wire.write(GENERATED_TIMESTAMP).int64(generatedTimestamp);
             wire.write(GENERATED_NOW_IN_SECONDS).int32(generatedNowInSeconds);
+            wire.write(KEYSPACE).text(keyspace);
         }
 
         @Override
@@ -371,7 +378,10 @@ abstract class BinLogAuditLogger implements IAuditLogger
                  + 4                                                  // protocolVersion
                  + EMPTY_BYTEBUF_SIZE + queryOptionsBuffer.capacity() // queryOptionsBuffer
                  + 8                                                  // generatedTimestamp
-                 + 4;                                                 // generatedNowInSeconds
+                 + 4                                                  // generatedNowInSeconds
+                 + (keyspace != null                                  // keyspace
+                    ? Ints.checkedCast(ObjectSizes.sizeOf(keyspace))
+                    : 8);
         }
 
         protected abstract String type();
