@@ -1247,7 +1247,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
                 // Ensure all specified ranges are actually ranges owned by this host
                 RangesAtEndpoint localReplicas = getLocalReplicas(keyspace);
-                ReplicaList.Mutable streamRanges = new ReplicaList.Mutable(ranges.size());
+                ReplicaList.Builder streamRanges = ReplicaList.builder(ranges.size());
                 for (Range<Token> specifiedRange : ranges)
                 {
                     boolean foundParentRange = false;
@@ -1289,7 +1289,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     streamer.addSourceFilter(new RangeStreamer.WhitelistedSourcesFilter(sources));
                 }
 
-                streamer.addRanges(keyspace, streamRanges);
+                streamer.addRanges(keyspace, streamRanges.build());
             }
 
             StreamResultFuture resultFuture = streamer.fetchAsync();
@@ -4200,17 +4200,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         return HintsService.instance.transferHints(this::getPreferredHintsStreamTarget);
     }
 
-    private static ReplicaList getStreamCandidates(Collection<InetAddressAndPort> endpoints)
+    private static EndpointsForRange getStreamCandidates(Collection<InetAddressAndPort> endpoints)
     {
-        ReplicaList.Builder candidates = ReplicaList.builder(endpoints.size());
-        for (InetAddressAndPort endpoint: endpoints)
-        {
-            if (FailureDetector.instance.isAlive(endpoint) && !FBUtilities.getBroadcastAddressAndPort().equals(endpoint))
-            {
-                candidates.add(SystemReplicas.getSystemReplica(endpoint));
-            }
-        }
-        return candidates.build();
+        endpoints = endpoints.stream()
+                             .filter(endpoint -> FailureDetector.instance.isAlive(endpoint) && !FBUtilities.getBroadcastAddressAndPort().equals(endpoint))
+                             .collect(Collectors.toList());
+
+        return SystemReplicas.getSystemReplicas(endpoints);
     }
     /**
      * Find the best target to stream hints to. Currently the closest peer according to the snitch
@@ -4219,8 +4215,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     {
         Set<InetAddressAndPort> endpoints = StorageService.instance.getTokenMetadata().cloneAfterAllLeft().getAllEndpoints();
 
-        ReplicaList candidates = getStreamCandidates(endpoints);
-
+        EndpointsForRange candidates = getStreamCandidates(endpoints);
         if (candidates.isEmpty())
         {
             logger.warn("Unable to stream hints since no live endpoints seen");

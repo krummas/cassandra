@@ -39,6 +39,8 @@ import org.apache.cassandra.db.rows.BufferCell;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
+import org.apache.cassandra.locator.Endpoints;
+import org.apache.cassandra.locator.EndpointsForRange;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.locator.ReplicaList;
@@ -67,7 +69,7 @@ public abstract  class AbstractReadRepairTest
     static Replica replica1;
     static Replica replica2;
     static Replica replica3;
-    static ReplicaList replicas;
+    static EndpointsForRange replicas;
     static ReplicaPlan replicaPlan;
 
     static long now = TimeUnit.NANOSECONDS.toMicros(System.nanoTime());
@@ -213,7 +215,7 @@ public abstract  class AbstractReadRepairTest
         replica1 = ReplicaUtils.full(target1);
         replica2 = ReplicaUtils.full(target2);
         replica3 = ReplicaUtils.full(target3);
-        replicas = ReplicaList.immutableCopyOf(replica1, replica2, replica3);
+        replicas = EndpointsForRange.of(replica1, replica2, replica3);
 
         replicaPlan = plan(ConsistencyLevel.QUORUM, replicas);
 
@@ -242,17 +244,13 @@ public abstract  class AbstractReadRepairTest
         cfs.sampleReadLatencyNanos = 0;
         cfs.sampleWriteLatencyNanos = 0;
     }
-    static ReplicaPlan plan(ReplicaList allReplicas, Replica... targets)
-    {
-        return plan(allReplicas, ReplicaList.of(targets));
-    }
 
-    static ReplicaPlan plan(ReplicaList allReplicas, ReplicaList targets)
+    static ReplicaPlan plan(Endpoints allReplicas, Endpoints targets)
     {
         return new ReplicaPlan(ks, ConsistencyLevel.QUORUM, allReplicas, targets);
     }
 
-    static ReplicaPlan plan(ConsistencyLevel consistencyLevel, ReplicaList replicas)
+    static ReplicaPlan plan(ConsistencyLevel consistencyLevel, Endpoints replicas)
     {
         return new ReplicaPlan(ks, consistencyLevel, replicas, replicas);
     }
@@ -272,7 +270,7 @@ public abstract  class AbstractReadRepairTest
     @Test
     public void readSpeculationCycle()
     {
-        InstrumentedReadRepair repair = createInstrumentedReadRepair(plan(replicas, replica1, replica2));
+        InstrumentedReadRepair repair = createInstrumentedReadRepair(plan(replicas, EndpointsForRange.of(replica1, replica2)));
         ResultConsumer consumer = new ResultConsumer();
 
 
@@ -292,7 +290,7 @@ public abstract  class AbstractReadRepairTest
     @Test
     public void noSpeculationRequired()
     {
-        InstrumentedReadRepair repair = createInstrumentedReadRepair(plan(replicas, replica1, replica2));
+        InstrumentedReadRepair repair = createInstrumentedReadRepair(plan(replicas, EndpointsForRange.of(replica1, replica2)));
         ResultConsumer consumer = new ResultConsumer();
 
         Assert.assertEquals(epSet(), repair.getReadRecipients());

@@ -32,6 +32,8 @@ import org.junit.Test;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.db.ReadCommand;
+import org.apache.cassandra.locator.Endpoints;
+import org.apache.cassandra.locator.EndpointsForRange;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.locator.ReplicaList;
@@ -77,7 +79,7 @@ public class BlockingReadRepairTest extends AbstractReadRepairTest
 
     private static InstrumentedReadRepairHandler createRepairHandler(Map<Replica, Mutation> repairs, int maxBlockFor)
     {
-        ReplicaList replicas = ReplicaList.immutableCopyOf(Lists.newArrayList(repairs.keySet()));
+        Endpoints replicas = EndpointsForRange.copyOf(Lists.newArrayList(repairs.keySet()));
         return createRepairHandler(repairs, maxBlockFor, plan(replicas, replicas));
     }
 
@@ -141,7 +143,7 @@ public class BlockingReadRepairTest extends AbstractReadRepairTest
         repairs.put(replica1, repair1);
         repairs.put(replica2, repair2);
 
-        ReplicaPlan replicaPlan = plan(replicas, ReplicaList.immutableCopyOf(Lists.newArrayList(repairs.keySet())));
+        ReplicaPlan replicaPlan = plan(replicas, EndpointsForRange.copyOf(Lists.newArrayList(repairs.keySet())));
         InstrumentedReadRepairHandler handler = createRepairHandler(repairs, 2, replicaPlan);
 
         Assert.assertTrue(handler.mutationsSent.isEmpty());
@@ -220,7 +222,7 @@ public class BlockingReadRepairTest extends AbstractReadRepairTest
         repairs.put(replica1, repair1);
 
         // check that the correct initial mutations are sent out
-        InstrumentedReadRepairHandler handler = createRepairHandler(repairs, 2, plan(replicas, replica1, replica2));
+        InstrumentedReadRepairHandler handler = createRepairHandler(repairs, 2, plan(replicas, EndpointsForRange.of(replica1, replica2)));
         handler.sendInitialRepairs();
         Assert.assertEquals(1, handler.mutationsSent.size());
         Assert.assertTrue(handler.mutationsSent.containsKey(target1));
@@ -267,22 +269,22 @@ public class BlockingReadRepairTest extends AbstractReadRepairTest
         Replica remote2 = ReplicaUtils.full(InetAddressAndPort.getByName("10.0.0.2"));
         repairs.put(remote1, mutation(cell1));
 
-        ReplicaList participants = ReplicaList.of(replica1, replica2, remote1, remote2);
+        Endpoints participants = EndpointsForRange.of(replica1, replica2, remote1, remote2);
         ReplicaPlan plan = new ReplicaPlan(ks, ConsistencyLevel.LOCAL_QUORUM, participants, participants);
         InstrumentedReadRepairHandler handler = createRepairHandler(repairs, 2, plan);
         handler.sendInitialRepairs();
         Assert.assertEquals(2, handler.mutationsSent.size());
-        Assert.assertTrue(handler.mutationsSent.containsKey(replica1.getEndpoint()));
-        Assert.assertTrue(handler.mutationsSent.containsKey(remote1.getEndpoint()));
+        Assert.assertTrue(handler.mutationsSent.containsKey(replica1.endpoint()));
+        Assert.assertTrue(handler.mutationsSent.containsKey(remote1.endpoint()));
 
         Assert.assertEquals(1, handler.waitingOn());
         Assert.assertFalse(handler.awaitRepairs(0, TimeUnit.NANOSECONDS));
 
-        handler.ack(remote1.getEndpoint());
+        handler.ack(remote1.endpoint());
         Assert.assertEquals(1, handler.waitingOn());
         Assert.assertFalse(handler.awaitRepairs(0, TimeUnit.NANOSECONDS));
 
-        handler.ack(replica1.getEndpoint());
+        handler.ack(replica1.endpoint());
         Assert.assertEquals(0, handler.waitingOn());
         Assert.assertTrue(handler.awaitRepairs(0, TimeUnit.NANOSECONDS));
     }
