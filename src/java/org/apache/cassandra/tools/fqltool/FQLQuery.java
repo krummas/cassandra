@@ -136,6 +136,8 @@ public abstract class FQLQuery implements Comparable<FQLQuery>
         public Statement toStatement()
         {
             SimpleStatement ss = new SimpleStatement(query, values.toArray());
+            if (keyspace != null)
+                ss.setKeyspace(keyspace);
             ss.setConsistencyLevel(ConsistencyLevel.valueOf(queryOptions.getConsistency().name()));
             ss.setDefaultTimestamp(generatedTimestamp);
             return ss;
@@ -207,11 +209,8 @@ public abstract class FQLQuery implements Comparable<FQLQuery>
         public Statement toStatement()
         {
             BatchStatement bs = new BatchStatement(batchType);
-
             for (Single query : queries)
-            {
-                bs.add(new SimpleStatement(query.query, query.values.toArray()));
-            }
+                bs.add(query.toStatement());
             bs.setConsistencyLevel(ConsistencyLevel.valueOf(queryOptions.getConsistency().name()));
             bs.setDefaultTimestamp(generatedTimestamp); // todo: set actual server side generated time
             return bs;
