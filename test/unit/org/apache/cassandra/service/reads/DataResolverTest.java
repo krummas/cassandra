@@ -115,6 +115,7 @@ public class DataResolverTest
 
         nowInSec = FBUtilities.nowInSeconds();
         command = Util.cmd(cfs, dk).withNowInSeconds(nowInSec).build();
+        command.trackRepairedStatus();
         readRepair = new TestableReadRepair(command, ConsistencyLevel.QUORUM);
     }
 

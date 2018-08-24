@@ -2224,7 +2224,7 @@ public class StorageProxy implements StorageProxyMBean
             handler.assureSufficientLiveNodes();
 
             // If enabled, request repaired data tracking info from replicas
-            if (toQuery.filteredEndpoints.size() > 1 && DatabaseDescriptor.getRepairedDataTrackingForPartitionReadsEnabled())
+            if (toQuery.filteredEndpoints.size() > 1 && DatabaseDescriptor.getRepairedDataTrackingForRangeReadsEnabled())
                 rangeCommand.trackRepairedStatus();
 
             if (toQuery.filteredEndpoints.size() == 1 && canDoLocalRequest(toQuery.filteredEndpoints.get(0)))

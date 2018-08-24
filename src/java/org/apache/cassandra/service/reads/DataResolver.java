@@ -69,7 +69,9 @@ public class DataResolver extends ResponseResolver
         List<UnfilteredPartitionIterator> iters = new ArrayList<>(count);
         InetAddressAndPort[] sources = new InetAddressAndPort[count];
 
-        RepairedDataTracker repairedDataTracker = new RepairedDataTracker(getRepairedDataVerifier(command));
+        RepairedDataTracker repairedDataTracker = command.isTrackingRepairedStatus()
+                                                  ? new RepairedDataTracker(getRepairedDataVerifier(command))
+                                                  : null;
         for (int i = 0; i < count; i++)
         {
             MessageIn<ReadResponse> msg = responses.get(i);
@@ -77,7 +79,7 @@ public class DataResolver extends ResponseResolver
             sources[i] = msg.from;
 
             // don't try and inspect repaired status from replicas which definitely didn't send it
-            if (msg.payload.mayIncludeRepairedStatusTracking())
+            if (command.isTrackingRepairedStatus() && msg.payload.mayIncludeRepairedStatusTracking())
             {
                 repairedDataTracker.recordDigest(msg.from, msg.payload.repairedDataDigest());
                 if (msg.payload.hasPendingRepairSessions())
@@ -229,7 +231,8 @@ public class DataResolver extends ResponseResolver
             public void close()
             {
                 partitionListener.close();
-                repairedDataDigestTracker.verify();
+                if (repairedDataDigestTracker != null)
+                    repairedDataDigestTracker.verify();
             }
         };
     }
