@@ -341,18 +341,21 @@ public class CompactionStrategyManagerTest
         ColumnFamilyStore cfs = createJBODMockCFS(numDir);
         Keyspace.open(cfs.keyspace.getName()).getColumnFamilyStore(cfs.name).disableAutoCompaction();
         assertTrue(cfs.getLiveSSTables().isEmpty());
-        List<SSTableReader> unrepaired = new ArrayList<>();
+        List<SSTableReader> transientRepairs = new ArrayList<>();
         List<SSTableReader> pendingRepair = new ArrayList<>();
+        List<SSTableReader> unrepaired = new ArrayList<>();
         List<SSTableReader> repaired = new ArrayList<>();
 
         for (int i = 0; i < numDir; i++)
         {
             int key = 100 * i;
-            unrepaired.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
+            transientRepairs.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
             pendingRepair.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
+            unrepaired.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
             repaired.add(createSSTableWithKey(cfs.keyspace.getName(), cfs.name, key++));
         }
 
+        cfs.getCompactionStrategyManager().mutateRepaired(transientRepairs, 0, UUID.randomUUID(), true);
         cfs.getCompactionStrategyManager().mutateRepaired(pendingRepair, 0, UUID.randomUUID(), false);
         cfs.getCompactionStrategyManager().mutateRepaired(repaired, 1000, null, false);
 
@@ -362,7 +365,7 @@ public class CompactionStrategyManagerTest
 
         CompactionStrategyManager csm = new CompactionStrategyManager(cfs, () -> boundaries, true);
 
-        List<GroupedSSTableContainer> grouped = csm.groupSSTables(Iterables.concat(repaired, pendingRepair, unrepaired));
+        List<GroupedSSTableContainer> grouped = csm.groupSSTables(Iterables.concat( transientRepairs, pendingRepair, repaired, unrepaired));
 
         for (int x=0; x<grouped.size(); x++)
         {
@@ -376,7 +379,16 @@ public class CompactionStrategyManagerTest
                 if (sstable.isRepaired())
                     expected = repaired.get(y);
                 else if (sstable.isPendingRepair())
-                    expected = pendingRepair.get(y);
+                {
+                    if (sstable.isTransient())
+                    {
+                        expected = transientRepairs.get(y);
+                    }
+                    else
+                    {
+                        expected = pendingRepair.get(y);
+                    }
+                }
                 else
                     expected = unrepaired.get(y);
 
