@@ -569,4 +569,25 @@ public class Range<T extends RingPosition<T>> extends AbstractBounds<T> implemen
             }
         }
     }
+
+    public static <T extends RingPosition<T>> void assertNormalized(List<Range<T>> ranges)
+    {
+        Range<T> lastRange = null;
+        for (Range<T> range : ranges)
+        {
+            if (lastRange == null)
+            {
+                lastRange = range;
+            }
+            else if (lastRange.left.compareTo(range.left) >= 0 || lastRange.intersects(range))
+            {
+                throw new AssertionError(String.format("Ranges aren't properly normalized. lastRange %s, range %s, compareTo %d, intersects %b, all ranges %s%n",
+                                                       lastRange,
+                                                       range,
+                                                       lastRange.compareTo(range),
+                                                       lastRange.intersects(range),
+                                                       ranges));
+            }
+        }
+    }
 }

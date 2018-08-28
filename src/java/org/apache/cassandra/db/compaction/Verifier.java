@@ -350,6 +350,7 @@ public class Verifier implements Closeable
         public RangeOwnHelper(List<Range<Token>> normalizedRanges)
         {
             this.normalizedRanges = normalizedRanges;
+            Range.assertNormalized(normalizedRanges);
         }
 
         /**
