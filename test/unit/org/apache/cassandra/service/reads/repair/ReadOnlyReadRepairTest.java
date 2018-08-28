@@ -33,6 +33,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.EndpointsForRange;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.ReplicaList;
+import org.apache.cassandra.locator.ReplicaUtils;
 import org.apache.cassandra.service.ReplicaPlan;
 import org.apache.cassandra.service.reads.ReadCallback;
 
@@ -85,13 +86,13 @@ public class ReadOnlyReadRepairTest extends AbstractReadRepairTest
     public void getMergeListener()
     {
         InstrumentedReadRepair repair = createInstrumentedReadRepair(plan(replicas, replicas));
-        Assert.assertSame(UnfilteredPartitionIterators.MergeListener.NOOP, repair.getMergeListener(EndpointsForRange.of()));
+        Assert.assertSame(UnfilteredPartitionIterators.MergeListener.NOOP, repair.getMergeListener(EndpointsForRange.builder(ReplicaUtils.FULL_RANGE).build()));
     }
 
     @Test(expected = UnsupportedOperationException.class)
     public void repairPartitionFailure()
     {
         InstrumentedReadRepair repair = createInstrumentedReadRepair(plan(replicas, replicas));
-        repair.repairPartition(Collections.emptyMap(), EndpointsForRange.of());
+        repair.repairPartition(Collections.emptyMap(), EndpointsForRange.builder(ReplicaUtils.FULL_RANGE).build());
     }
 }
