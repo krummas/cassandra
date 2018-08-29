@@ -456,15 +456,15 @@ class PendingRepairManager
             }
             finally
             {
-                // we always abort because mutating metadata isn't guarded by LifecycleTransaction, so this won't roll
-                // anything back. Also, we don't want to obsolete the originals. We're only using it to prevent other
-                // compactions from marking these sstables compacting, and unmarking them when we're done
                 if (obsoleteSSTables)
                 {
                     transaction.finish();
                 }
                 else
                 {
+                    // we abort here because mutating metadata isn't guarded by LifecycleTransaction, so this won't roll
+                    // anything back. Also, we don't want to obsolete the originals. We're only using it to prevent other
+                    // compactions from marking these sstables compacting, and unmarking them when we're done
                     transaction.abort();
                 }
                 if (completed)

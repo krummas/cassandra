@@ -391,7 +391,12 @@ public abstract class AbstractReplicationStrategy
     {
         try
         {
-            ReplicationFactor.fromString(s);
+            ReplicationFactor rf = ReplicationFactor.fromString(s);
+            if (rf.trans > 0)
+            {
+                if (DatabaseDescriptor.getNumTokens() > 1)
+                    throw new ConfigurationException(String.format("Transient replication is not supported with vnodes yet"));
+            }
         }
         catch (IllegalArgumentException e)
         {

@@ -135,7 +135,9 @@ public class DatabaseDescriptorRefTest
     "org.apache.cassandra.config.EncryptionOptions$ServerEncryptionOptionsCustomizer",
     "org.apache.cassandra.ConsoleAppenderBeanInfo",
     "org.apache.cassandra.ConsoleAppenderCustomizer",
-    "org.apache.cassandra.locator.InetAddressAndPort"
+    "org.apache.cassandra.locator.InetAddressAndPort",
+    "org.apache.cassandra.cql3.statements.schema.AlterKeyspaceStatement",
+    "org.apache.cassandra.cql3.statements.schema.CreateKeyspaceStatement"
     };
 
     static final Set<String> checkedClasses = new HashSet<>(Arrays.asList(validClasses));
