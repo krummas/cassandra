@@ -105,9 +105,14 @@ public class Replica implements Comparable<Replica>
     }
 
     /**
-     * Subtract the ranges of the given replicas from the range of this replica,
-     * returning a set of replicas with the endpoint and transient information of
-     * this replica, and the ranges resulting from the subtraction.
+     * This is used exclusively in TokenMetadata to check if a portion of a range is already replicated
+     * by an endpoint so that we only mark as pending the portion that is either not replicated sufficiently (transient
+     * when we need full) or at all.
+     *
+     * If it's not replicated at all it needs to be pending because there is no data.
+     * If it's replicated but only transiently and we need to replicate it fully it must be marked as pending until it
+     * is available fully otherwise a read might treat this replica as full and not read from a full replica that has
+     * the data.
      */
     public RangesAtEndpoint subtractByRange(RangesAtEndpoint toSubtract)
     {
@@ -121,12 +126,12 @@ public class Replica implements Comparable<Replica>
         return result.build();
     }
 
-    public RangesAtEndpoint subtract(Replica that)
-    {
-        assert isFull() && that.isFull();  // FIXME: this
-        return subtractIgnoreTransientStatus(that.range);
-    }
-
+    /**
+     * Don't use this method and ignore transient status unless you are explicitly handling it outside this method.
+     *
+     * This helper method is used by StorageService.calculateStreamAndFetchRanges to perform subtraction.
+     * It ignores transient status because it's already being handled in calculateStreamAndFetchRanges.
+     */
     public RangesAtEndpoint subtractIgnoreTransientStatus(Range<Token> subtract)
     {
         Set<Range<Token>> ranges = this.range.subtract(subtract);
