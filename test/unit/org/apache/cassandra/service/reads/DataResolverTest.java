@@ -904,145 +904,64 @@ public class DataResolverTest
     /** Tests for repaired data tracking */
 
     @Test
-    public void trackMatchingRepairedDigests()
-    {
-        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
-        InetAddressAndPort peer1 = peer();
-        InetAddressAndPort peer2 = peer();
-        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectDigest(peer2, digest1);
-
-        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
-
-        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-
-        try(PartitionIterator data = resolver.resolve())
-        {
-            PartitionIterators.consume(data);
-        }
-        assertTrue(verifier.verified);
-    }
-
-    @Test
-    public void trackMatchingEmptyRepairedDigests()
-    {
-        // special case as a read response which is generated entirely from unrepaired
-        // data will have an empty digest if repaired data tracking was requested
-        ByteBuffer digest1 = ByteBufferUtil.EMPTY_BYTE_BUFFER;
-        InetAddressAndPort peer1 = peer();
-        InetAddressAndPort peer2 = peer();
-        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectDigest(peer2, digest1);
-
-        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
-
-        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-
-        try(PartitionIterator data = resolver.resolve())
-        {
-            PartitionIterators.consume(data);
-        }
-        assertTrue(verifier.verified);
-    }
-
-    @Test
-    public void trackMismatchingRepairedDigests()
-    {
-        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
-        ByteBuffer digest2 = ByteBufferUtil.bytes("digest2");
-        InetAddressAndPort peer1 = peer();
-        InetAddressAndPort peer2 = peer();
-        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectDigest(peer2, digest2);
-
-        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
-
-        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest2, false, command));
-
-        try(PartitionIterator data = resolver.resolve())
-        {
-            PartitionIterators.consume(data);
-        }
-        assertTrue(verifier.verified);
-    }
-
-    @Test
-    public void trackMatchingRepairedDigestsWithDifferentData()
-    {
-        // As far as repaired data tracking is concerned, the actual data in the response is not relevant
-        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
-        InetAddressAndPort peer1 = peer();
-        InetAddressAndPort peer2 = peer();
-        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectDigest(peer2, digest1);
-
-        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
-
-        resolver.preprocess(readResponseMessage(peer1, iter(new RowUpdateBuilder(cfm, nowInSec, 1L, dk).clustering("1")
-                                                                                                       .buildUpdate()),
-                                                digest1, false, command));
-        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-
-        try(PartitionIterator data = resolver.resolve())
-        {
-            PartitionIterators.consume(data);
-        }
-        assertTrue(verifier.verified);
-    }
-
-    @Test
-    public void trackMismatchingRepairedDigestsWithDifferentData()
-    {
-        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
-        ByteBuffer digest2 = ByteBufferUtil.bytes("digest2");
-        InetAddressAndPort peer1 = peer();
-        InetAddressAndPort peer2 = peer();
-        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectDigest(peer2, digest2);
-
-        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
-
-        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest1, false, command));
-        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                digest2, false, command));
-
-        try(PartitionIterator data = resolver.resolve())
-        {
-            PartitionIterators.consume(data);
-        }
-        assertTrue(verifier.verified);
-    }
-
-    @Test
-    public void trackPendingRepairSessionsFromOneSource()
+    public void trackMatchingEmptyDigestsWithAllConclusive()
     {
         InetAddressAndPort peer1 = peer();
         InetAddressAndPort peer2 = peer();
         TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, ByteBufferUtil.EMPTY_BYTE_BUFFER);
-        verifier.expectPendingSessions(peer1);
-        verifier.expectDigest(peer2, ByteBufferUtil.EMPTY_BYTE_BUFFER);
+        verifier.expectDigest(peer1, ByteBufferUtil.EMPTY_BYTE_BUFFER, true);
+        verifier.expectDigest(peer2, ByteBufferUtil.EMPTY_BYTE_BUFFER, true);
 
         DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
 
         resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
                                                 ByteBufferUtil.EMPTY_BYTE_BUFFER, true, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                ByteBufferUtil.EMPTY_BYTE_BUFFER, true, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMatchingEmptyDigestsWithSomeConclusive()
+    {
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, ByteBufferUtil.EMPTY_BYTE_BUFFER, false);
+        verifier.expectDigest(peer2, ByteBufferUtil.EMPTY_BYTE_BUFFER, true);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                ByteBufferUtil.EMPTY_BYTE_BUFFER, false, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                ByteBufferUtil.EMPTY_BYTE_BUFFER, true, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMatchingEmptyDigestsWithNoneConclusive()
+    {
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, ByteBufferUtil.EMPTY_BYTE_BUFFER, false);
+        verifier.expectDigest(peer2, ByteBufferUtil.EMPTY_BYTE_BUFFER, false);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                ByteBufferUtil.EMPTY_BYTE_BUFFER, false, command));
         resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
                                                 ByteBufferUtil.EMPTY_BYTE_BUFFER, false, command));
 
@@ -1054,41 +973,14 @@ public class DataResolverTest
     }
 
     @Test
-    public void trackPendingRepairSessionsFromMultipleSources()
-    {
-        InetAddressAndPort peer1 = peer();
-        InetAddressAndPort peer2 = peer();
-        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, ByteBufferUtil.EMPTY_BYTE_BUFFER);
-        verifier.expectPendingSessions(peer1);
-        verifier.expectDigest(peer2, ByteBufferUtil.EMPTY_BYTE_BUFFER);
-        verifier.expectPendingSessions(peer2);
-
-        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
-
-        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                ByteBufferUtil.EMPTY_BYTE_BUFFER, true, command));
-        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
-                                                ByteBufferUtil.EMPTY_BYTE_BUFFER, true, command));
-
-        try(PartitionIterator data = resolver.resolve())
-        {
-            PartitionIterators.consume(data);
-        }
-        assertTrue(verifier.verified);
-    }
-
-    @Test
-    public void trackMatchingDigestsAndRepairSessions()
+    public void trackMatchingDigestsWithAllConclusive()
     {
         ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
         InetAddressAndPort peer1 = peer();
         InetAddressAndPort peer2 = peer();
         TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectPendingSessions(peer1);
-        verifier.expectDigest(peer2, digest1);
-        verifier.expectPendingSessions(peer2);
+        verifier.expectDigest(peer1, digest1, true);
+        verifier.expectDigest(peer2, digest1, true);
 
         DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
 
@@ -1105,6 +997,180 @@ public class DataResolverTest
     }
 
     @Test
+    public void trackMatchingDigestsWithSomeConclusive()
+    {
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, true);
+        verifier.expectDigest(peer2, digest1, false);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm,dk)),
+                                                digest1, true, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, false, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMatchingDigestsWithNoneConclusive()
+    {
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, false);
+        verifier.expectDigest(peer2, digest1, false);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm,dk)),
+                                                digest1, false, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, false, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMatchingRepairedDigestsWithDifferentData()
+    {
+        // As far as repaired data tracking is concerned, the actual data in the response is not relevant
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, true);
+        verifier.expectDigest(peer2, digest1, true);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(new RowUpdateBuilder(cfm, nowInSec, 1L, dk).clustering("1")
+                                                                                                       .buildUpdate()),
+                                                digest1, true, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, true, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMismatchingRepairedDigestsWithAllConclusive()
+    {
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        ByteBuffer digest2 = ByteBufferUtil.bytes("digest2");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, true);
+        verifier.expectDigest(peer2, digest2, true);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, true, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest2, true, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMismatchingRepairedDigestsWithSomeConclusive()
+    {
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        ByteBuffer digest2 = ByteBufferUtil.bytes("digest2");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, false);
+        verifier.expectDigest(peer2, digest2, true);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, false, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest2, true, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMismatchingRepairedDigestsWithNoneConclusive()
+    {
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        ByteBuffer digest2 = ByteBufferUtil.bytes("digest2");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, false);
+        verifier.expectDigest(peer2, digest2, false);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, false, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest2, false, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
+    public void trackMismatchingRepairedDigestsWithDifferentData()
+    {
+        ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
+        ByteBuffer digest2 = ByteBufferUtil.bytes("digest2");
+        InetAddressAndPort peer1 = peer();
+        InetAddressAndPort peer2 = peer();
+        TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
+        verifier.expectDigest(peer1, digest1, true);
+        verifier.expectDigest(peer2, digest2, true);
+
+        DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
+
+        resolver.preprocess(readResponseMessage(peer1, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest1, true, command));
+        resolver.preprocess(readResponseMessage(peer2, iter(PartitionUpdate.emptyUpdate(cfm, dk)),
+                                                digest2, true, command));
+
+        try(PartitionIterator data = resolver.resolve())
+        {
+            PartitionIterators.consume(data);
+        }
+        assertTrue(verifier.verified);
+    }
+
+    @Test
     public void noVerificationForSingletonResponse()
     {
         // for CL <= 1 a coordinator shouldn't request repaired data tracking but we
@@ -1112,8 +1178,7 @@ public class DataResolverTest
         ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
         InetAddressAndPort peer1 = peer();
         TestRepairedDataVerifier verifier = new TestRepairedDataVerifier();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectPendingSessions(peer1);
+        verifier.expectDigest(peer1, digest1, true);
 
         DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 1, System.nanoTime(), readRepair, verifier);
 
@@ -1138,8 +1203,7 @@ public class DataResolverTest
         ByteBuffer digest1 = ByteBufferUtil.bytes("digest1");
         InetAddressAndPort peer1 = peer();
         InetAddressAndPort peer2 = peer();
-        verifier.expectDigest(peer1, digest1);
-        verifier.expectPendingSessions(peer1);
+        verifier.expectDigest(peer1, digest1, true);
 
         DataResolver resolver = resolverWithVerifier(ks, command, ConsistencyLevel.ALL, 2, System.nanoTime(), readRepair, verifier);
 
@@ -1165,14 +1229,9 @@ public class DataResolverTest
         private final RepairedDataTracker expected = new RepairedDataTracker(null);
         private boolean verified = false;
 
-        private void expectDigest(InetAddressAndPort from, ByteBuffer digest)
+        private void expectDigest(InetAddressAndPort from, ByteBuffer digest, boolean conclusive)
         {
-            expected.recordDigest(from, digest);
-        }
-
-        private void expectPendingSessions(InetAddressAndPort from)
-        {
-            expected.recordPendingSessions(from);
+            expected.recordDigest(from, digest, conclusive);
         }
 
         @Override

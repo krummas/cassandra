@@ -79,11 +79,11 @@ public class DataResolver extends ResponseResolver
             sources[i] = msg.from;
 
             // don't try and inspect repaired status from replicas which definitely didn't send it
-            if (command.isTrackingRepairedStatus() && msg.payload.mayIncludeRepairedStatusTracking())
+            if (repairedDataTracker != null && msg.payload.mayIncludeRepairedDigest())
             {
-                repairedDataTracker.recordDigest(msg.from, msg.payload.repairedDataDigest());
-                if (msg.payload.hasPendingRepairSessions())
-                    repairedDataTracker.recordPendingSessions(msg.from);
+                repairedDataTracker.recordDigest(msg.from,
+                                                 msg.payload.repairedDataDigest(),
+                                                 msg.payload.isRepairedDigestConclusive());
             }
         }
 

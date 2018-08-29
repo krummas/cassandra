@@ -274,7 +274,7 @@ public abstract class ReadCommand extends AbstractReadQuery
     protected int oldestUnrepairedTombstone()
     {
         return oldestUnrepairedTombstone;
-    };
+    }
 
     @SuppressWarnings("resource")
     public ReadResponse createResponse(UnfilteredPartitionIterator iterator)
@@ -623,16 +623,14 @@ public abstract class ReadCommand extends AbstractReadQuery
 
     // For tracking purposes we consider data repaired if the sstable is either:
     // * marked repaired
-    // * marked pending, but the local session is has been committed. This reduces the window
+    // * marked pending, but the local session has been committed. This reduces the window
     //   whereby the tracking is affected by compaction backlog causing repaired sstables to
     //   remain in the pending state
+    // If an sstable is involved in a pending repair which is not yet committed, we mark the
+    // repaired data info inconclusive, as the same data on other replicas may be in a
+    // slightly different state.
     protected boolean considerRepairedForTracking(SSTableReader sstable)
     {
-        // sstable is not strictly repaired, so possibly update the timestamp oldest unrepaired tombstone
-        // this is used for purging, not for tracking but it's convenient to check it here
-        if (!sstable.isRepaired())
-            oldestUnrepairedTombstone = Math.min(oldestUnrepairedTombstone, sstable.getMinLocalDeletionTime());
-
         if (!isTrackingRepairedStatus())
             return false;
 
@@ -642,7 +640,7 @@ public abstract class ReadCommand extends AbstractReadQuery
             if (ActiveRepairService.instance.consistent.local.isSessionFinalized(pendingRepair))
                 return true;
             else
-                getRepairedDataInfo().trackPendingRepairSession(pendingRepair);
+                getRepairedDataInfo().markInconclusive();
         }
 
         return sstable.isRepaired();
@@ -740,12 +738,12 @@ public abstract class ReadCommand extends AbstractReadQuery
             return ByteBufferUtil.EMPTY_BYTE_BUFFER;
         }
 
-        default Set<UUID> getPendingRepairSessions()
+        default boolean isConclusive()
         {
-            return Collections.emptySet();
+            return true;
         }
 
-        default void trackPendingRepairSession(UUID sessionId)
+        default void markInconclusive()
         {
         }
 
@@ -773,8 +771,8 @@ public abstract class ReadCommand extends AbstractReadQuery
 
     private static class DefaultRepairedDataInfo implements RepairedDataInfo
     {
-        private Set<UUID> pendingRepairSessions;
         private Hasher hasher;
+        private boolean isConclusive = true;
 
         public ByteBuffer getRepairedDataDigest()
         {
@@ -783,22 +781,14 @@ public abstract class ReadCommand extends AbstractReadQuery
                    : ByteBuffer.wrap(getHasher().hash().asBytes());
         }
 
-        public Set<UUID> getPendingRepairSessions()
+        public boolean isConclusive()
         {
-            return pendingRepairSessions == null
-                   ? Collections.emptySet()
-                   : pendingRepairSessions;
+            return isConclusive;
         }
 
-        public void trackPendingRepairSession(UUID sessionId)
+        public void markInconclusive()
         {
-            if (sessionId != null)
-            {
-                if (pendingRepairSessions == null)
-                    pendingRepairSessions = new HashSet<>();
-
-                pendingRepairSessions.add(sessionId);
-            }
+            isConclusive = false;
         }
 
         public void trackPartitionKey(DecoratedKey key)

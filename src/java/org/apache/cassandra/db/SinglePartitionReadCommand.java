@@ -565,6 +565,7 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
         List<UnfilteredRowIterator> repairedIterators = null;
         ClusteringIndexFilter filter = clusteringIndexFilter();
         long minTimestamp = Long.MAX_VALUE;
+        long mostRecentPartitionTombstone = Long.MIN_VALUE;
         try
         {
             for (Memtable memtable : view.memtables)
@@ -581,6 +582,9 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                 // Memtable data is always considered unrepaired
                 oldestUnrepairedTombstone = Math.min(oldestUnrepairedTombstone, partition.stats().minLocalDeletionTime);
                 unrepairedIterators.add(iter);
+
+                mostRecentPartitionTombstone = Math.max(mostRecentPartitionTombstone,
+                                                        iter.partitionLevelDeletion().markedForDeleteAt());
             }
 
             /*
@@ -596,7 +600,6 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
              * in one pass, and minimize the number of sstables for which we read a partition tombstone.
              */
             Collections.sort(view.sstables, SSTableReader.maxTimestampComparator);
-            long mostRecentPartitionTombstone = Long.MIN_VALUE;
             int nonIntersectingSSTables = 0;
             List<SSTableReader> skippedSSTablesWithTombstones = null;
             SSTableReadMetricsCollector metricsCollector = new SSTableReadMetricsCollector();
@@ -605,14 +608,15 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
             {
                 // if we've already seen a partition tombstone with a timestamp greater
                 // than the most recent update to this sstable, we can skip it
-                // if we're tracking repaired status though, we have to disable this
-                // optimization as we must read from all tables containing the partition
+                // if we're tracking repaired status, we mark the repaired digest inconclusive
+                // as other replicas may not have seen this partition delete and so could include
+                // data from this sstable (or others) in their digests
                 if (sstable.getMaxTimestamp() < mostRecentPartitionTombstone)
                 {
-                    if (!isTrackingRepairedStatus())
-                        break;
-                    else if (!considerRepairedForTracking(sstable))
-                        continue;
+                    if (isTrackingRepairedStatus())
+                        getRepairedDataInfo().markInconclusive();
+
+                    break;
                 }
 
                 if (!shouldInclude(sstable))
@@ -633,6 +637,8 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                 @SuppressWarnings("resource") // 'iter' is added to iterators which is closed on exception,
                                               // or through the closing of the final merged iterator
                 UnfilteredRowIteratorWithLowerBound iter = makeIterator(cfs, sstable, metricsCollector);
+                if (!sstable.isRepaired())
+                    oldestUnrepairedTombstone = Math.min(oldestUnrepairedTombstone, sstable.getMinLocalDeletionTime());
 
                 if (considerRepairedForTracking(sstable))
                 {
@@ -659,6 +665,9 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                     @SuppressWarnings("resource") // 'iter' is added to iterators which is close on exception,
                                                   // or through the closing of the final merged iterator
                     UnfilteredRowIteratorWithLowerBound iter = makeIterator(cfs, sstable, metricsCollector);
+                    if (!sstable.isRepaired())
+                        oldestUnrepairedTombstone = Math.min(oldestUnrepairedTombstone, sstable.getMinLocalDeletionTime());
+
                     if (considerRepairedForTracking(sstable))
                     {
                         if (repairedIterators == null)
@@ -785,6 +794,7 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
         ImmutableBTreePartition result = null;
 
         Tracing.trace("Merging memtable contents");
+        long mostRecentPartitionDelete = Long.MIN_VALUE;
         for (Memtable memtable : view.memtables)
         {
             Partition partition = memtable.getPartition(partitionKey());
@@ -797,6 +807,8 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                     continue;
 
                 result = add(iter, result, filter);
+                mostRecentPartitionDelete = Math.max(mostRecentPartitionDelete,
+                                                     result.partitionLevelDeletion().markedForDeleteAt());
             }
         }
 
@@ -816,14 +828,15 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                 // if we've already seen a partition tombstone with a timestamp greater
                 // than the most recent update to this sstable, we're done, since the rest of the sstables
                 // will also be older
-                // if we're tracking repaired status though, we have to disable this
-                // optimization as we must read from all tables containing the partition
-                if (result != null && sstable.getMaxTimestamp() < result.partitionLevelDeletion().markedForDeleteAt())
+                // if we're tracking repaired status, we mark the repaired digest inconclusive
+                // as other replicas may not have seen this partition delete and so could include
+                // data from this sstable in their digests
+                if (sstable.getMaxTimestamp() < mostRecentPartitionDelete)
                 {
-                    if (!isTrackingRepairedStatus())
-                        break;
-                    else if (!considerRepairedForTracking(sstable))
-                        continue;
+                    if (considerRepairedForTracking(sstable))
+                        getRepairedDataInfo().markInconclusive();
+
+                    break;
                 }
 
                 long currentMaxTs = sstable.getMaxTimestamp();
@@ -832,8 +845,6 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                     break;
 
                 // which collection of iterators does one we obtain from this sstable belong in?
-                // note: this check also takes care of tracking the oldest unrepaired tombstone
-                // for purging purposes
                 List<UnfilteredRowIterator> iterList;
                 if (considerRepairedForTracking(sstable))
                 {
@@ -876,6 +887,8 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                         iterList.add(iter);
                     }
 
+                    mostRecentPartitionDelete = Math.max(mostRecentPartitionDelete,
+                                                         iter.partitionLevelDeletion().markedForDeleteAt());
                     continue;
                 }
 
@@ -893,6 +906,8 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
                 if (sstable.isRepaired())
                     onlyUnrepaired = false;
 
+                mostRecentPartitionDelete = Math.max(mostRecentPartitionDelete,
+                                                     iter.partitionLevelDeletion().markedForDeleteAt());
                 iterList.add(iter);
             }
 
