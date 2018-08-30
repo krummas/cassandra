@@ -401,6 +401,20 @@ public class FullQueryLoggerTest extends CQLTester
         configureFQL();
         logQuery("foo");
         Util.spinAssertEquals(true, () -> checkForQueries(Arrays.asList("foo")), 60);
+        testRoundTripQueryHelper(false);
+    }
+
+    @Test
+    public void testRoundTripQueryNoKeyspace() throws Exception
+    {
+        configureFQL();
+        logQueryNoKeyspace("foo");
+        Util.spinAssertEquals(true, () -> checkForQueries(Arrays.asList("foo")), 60);
+        testRoundTripQueryHelper(true);
+    }
+
+    private void testRoundTripQueryHelper(boolean nullKeyspace)
+    {
         try (ChronicleQueue queue = ChronicleQueueBuilder.single(tempDir.toFile()).rollCycle(RollCycles.TEST_SECONDLY).build())
         {
             ExcerptTailer tailer = queue.createTailer();
@@ -409,7 +423,10 @@ public class FullQueryLoggerTest extends CQLTester
                 ProtocolVersion protocolVersion = ProtocolVersion.decode(wire.read("protocol-version").int32());
                 assertEquals(ProtocolVersion.CURRENT, protocolVersion);
                 QueryOptions queryOptions = QueryOptions.codec.decode(Unpooled.wrappedBuffer(wire.read("query-options").bytes()), protocolVersion);
-                assertEquals("abc", wire.read("keyspace").text());
+                if (nullKeyspace)
+                    assertNull(wire.read("keyspace").text());
+                else
+                    assertEquals("abc", wire.read("keyspace").text());
                 compareQueryOptions(QueryOptions.DEFAULT, queryOptions);
                 assertEquals(1L, wire.read("query-time").int64());
                 assertEquals("foo", wire.read("query").text());
@@ -421,6 +438,22 @@ public class FullQueryLoggerTest extends CQLTester
     public void testRoundTripBatch() throws Exception
     {
         configureFQL();
+        instance.logBatch("UNLOGGED", "abc", Arrays.asList("foo1", "foo2"), Arrays.asList(Arrays.asList(ByteBuffer.allocate(1) , ByteBuffer.allocateDirect(2)), Arrays.asList()), QueryOptions.DEFAULT, 1);
+        Util.spinAssertEquals(true, () ->
+        {
+            try (ChronicleQueue queue = ChronicleQueueBuilder.single(tempDir.toFile()).rollCycle(RollCycles.TEST_SECONDLY).build())
+            {
+                return queue.createTailer().readingDocument().isPresent();
+            }
+        }, 60);
+        testRoundTripBatch(false);
+    }
+
+
+    @Test
+    public void testRoundTripBatchNullKeyspace() throws Exception
+    {
+        configureFQL();
         instance.logBatch("UNLOGGED", null, Arrays.asList("foo1", "foo2"), Arrays.asList(Arrays.asList(ByteBuffer.allocate(1) , ByteBuffer.allocateDirect(2)), Arrays.asList()), QueryOptions.DEFAULT, 1);
         Util.spinAssertEquals(true, () ->
         {
@@ -429,6 +462,11 @@ public class FullQueryLoggerTest extends CQLTester
                 return queue.createTailer().readingDocument().isPresent();
             }
         }, 60);
+        testRoundTripBatch(true);
+    }
+
+    private void testRoundTripBatch(boolean nullKeyspace)
+    {
         try (ChronicleQueue queue = ChronicleQueueBuilder.single(tempDir.toFile()).rollCycle(RollCycles.TEST_SECONDLY).build())
         {
             ExcerptTailer tailer = queue.createTailer();
@@ -438,7 +476,10 @@ public class FullQueryLoggerTest extends CQLTester
                 assertEquals(ProtocolVersion.CURRENT, protocolVersion);
                 QueryOptions queryOptions = QueryOptions.codec.decode(Unpooled.wrappedBuffer(wire.read("query-options").bytes()), protocolVersion);
                 assertEquals(1L, wire.read("query-time").int64());
-                assertNull(wire.read("keyspace").text());
+                if (nullKeyspace)
+                    assertNull(wire.read("keyspace").text());
+                else
+                    assertEquals("abc", wire.read("keyspace").text());
                 compareQueryOptions(QueryOptions.DEFAULT, queryOptions);
                 assertEquals("UNLOGGED", wire.read("batch-type").text());
                 ValueIn in = wire.read("queries");
@@ -454,6 +495,7 @@ public class FullQueryLoggerTest extends CQLTester
             }));
         }
     }
+
 
     @Test
     public void testQueryWeight()
@@ -617,6 +659,11 @@ public class FullQueryLoggerTest extends CQLTester
     private void logQuery(String query)
     {
         instance.logQuery(query, "abc", QueryOptions.DEFAULT, 1);
+    }
+
+    private void logQueryNoKeyspace(String query)
+    {
+        instance.logQuery(query, null, QueryOptions.DEFAULT, 1);
     }
 
 }

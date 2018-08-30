@@ -21,6 +21,8 @@ package org.apache.cassandra.audit;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Ints;
 
@@ -45,12 +47,13 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
     /**
      * Log an invocation of a batch of queries
      * @param type The type of the batch
+     * @param keyspace the keyspace this was executed against (nullable)
      * @param queries CQL text of the queries
      * @param values Values to bind to as parameters for the queries
      * @param queryOptions Options associated with the query invocation
      * @param batchTimeMillis Approximate time in milliseconds since the epoch since the batch was invoked
      */
-    void logBatch(String type, String keyspace, List<String> queries, List<List<ByteBuffer>> values, QueryOptions queryOptions, long batchTimeMillis)
+    void logBatch(String type, @Nullable String keyspace, List<String> queries, List<List<ByteBuffer>> values, QueryOptions queryOptions, long batchTimeMillis)
     {
         Preconditions.checkNotNull(type, "type was null");
         Preconditions.checkNotNull(queries, "queries was null");
@@ -72,10 +75,11 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
     /**
      * Log a single CQL query
      * @param query CQL query text
+     * @param keyspace the active keyspace
      * @param queryOptions Options associated with the query invocation
      * @param queryTimeMillis Approximate time in milliseconds since the epoch since the batch was invoked
      */
-    void logQuery(String query, String keyspace, QueryOptions queryOptions, long queryTimeMillis)
+    void logQuery(String query, @Nullable String keyspace, QueryOptions queryOptions, long queryTimeMillis)
     {
         Preconditions.checkNotNull(query, "query was null");
         Preconditions.checkNotNull(queryOptions, "queryOptions was null");
@@ -99,7 +103,7 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         private final List<String> queries;
         private final List<List<ByteBuffer>> values;
 
-        public WeighableMarshallableBatch(String batchType, String keyspace, List<String> queries, List<List<ByteBuffer>> values, QueryOptions queryOptions, long batchTimeMillis)
+        public WeighableMarshallableBatch(String batchType, @Nullable String keyspace, List<String> queries, List<List<ByteBuffer>> values, QueryOptions queryOptions, long batchTimeMillis)
         {
            super(keyspace, queryOptions, batchTimeMillis);
            this.queries = queries;
@@ -174,7 +178,7 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
     {
         private final String query;
 
-        public WeighableMarshallableQuery(String query, String keyspace, QueryOptions queryOptions, long queryTimeMillis)
+        public WeighableMarshallableQuery(String query, @Nullable String keyspace, QueryOptions queryOptions, long queryTimeMillis)
         {
             super(keyspace, queryOptions, queryTimeMillis);
             this.query = query;

@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.annotation.Nullable;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -297,7 +299,7 @@ abstract class BinLogAuditLogger implements IAuditLogger
         private final int protocolVersion;
         private final String keyspace;
 
-        AbstractWeighableMarshallable(String keyspace, QueryOptions queryOptions, long timeMillis)
+        AbstractWeighableMarshallable(@Nullable String keyspace, QueryOptions queryOptions, long timeMillis)
         {
             this.keyspace = keyspace;
             this.timeMillis = timeMillis;
