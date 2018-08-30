@@ -20,61 +20,43 @@ package org.apache.cassandra.locator;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-
-import com.google.common.base.Predicate;
 
 import com.google.common.collect.Iterables;
-import org.apache.cassandra.utils.FBUtilities;
 
 import static com.google.common.collect.Iterables.all;
 
 public class Replicas
 {
 
-    public static <C extends ReplicaCollection<? extends C>> C filterOnEndpoints(C source, Predicate<InetAddressAndPort> predicate)
-    {
-        return source.filter(r -> predicate.apply(r.endpoint()));
-    }
-
-    public static <C extends ReplicaCollection<? extends C>> C filterOutLocalEndpoint(C replicas)
-    {
-        InetAddressAndPort local = FBUtilities.getBroadcastAddressAndPort();
-        return filterOnEndpoints(replicas, e -> !e.equals(local));
-    }
-
-
-    public static <C extends ReplicaCollection<? extends C>> C subtractEndpoints(C subtractFrom, Set<InetAddressAndPort> subtract)
-    {
-        return Replicas.filterOnEndpoints(subtractFrom, e -> !subtract.contains(e));
-    }
-
-    public static <C extends ReplicaCollection<? extends C>> C keepEndpoints(C keepIn, Set<InetAddressAndPort> keep)
-    {
-        return Replicas.filterOnEndpoints(keepIn, keep::contains);
-    }
-
-
     /**
-     * Basically a placeholder for places new logic for transient replicas should go
+     * A placeholder for areas of the code that cannot yet handle transient replicas, but should do so in future
      */
-    public static void assertFull(Replica replica)
+    public static void temporaryAssertFull(Replica replica)
     {
         if (!replica.isFull())
         {
-            // FIXME: add support for transient replicas
             throw new UnsupportedOperationException("transient replicas are currently unsupported: " + replica);
         }
     }
 
     /**
-     * Basically a placeholder for places new logic for transient replicas should go
+     * A placeholder for areas of the code that cannot yet handle transient replicas, but should do so in future
+     */
+    public static void temporaryAssertFull(Iterable<Replica> replicas)
+    {
+        if (!all(replicas, Replica::isFull))
+        {
+            throw new UnsupportedOperationException("transient replicas are currently unsupported: " + Iterables.toString(replicas));
+        }
+    }
+
+    /**
+     * For areas of the code that should never see a transient replica
      */
     public static void assertFull(Iterable<Replica> replicas)
     {
         if (!all(replicas, Replica::isFull))
         {
-            // FIXME: add support for transient replicas
             throw new UnsupportedOperationException("transient replicas are currently unsupported: " + Iterables.toString(replicas));
         }
     }

@@ -114,11 +114,10 @@ public class Replica implements Comparable<Replica>
      * is available fully otherwise a read might treat this replica as full and not read from a full replica that has
      * the data.
      */
-    public RangesAtEndpoint subtractByRange(RangesAtEndpoint toSubtract)
+    public RangesAtEndpoint subtractSameReplication(RangesAtEndpoint toSubtract)
     {
-        // TODO: is it OK to ignore transient status here?
-        Set<Range<Token>> subtractedRanges = range().subtractAll(toSubtract.ranges());
-        RangesAtEndpoint.Builder result = RangesAtEndpoint.builder(subtractedRanges.size());
+        Set<Range<Token>> subtractedRanges = range().subtractAll(toSubtract.filter(r -> r.isFull() == isFull()).ranges());
+        RangesAtEndpoint.Builder result = RangesAtEndpoint.builder(endpoint, subtractedRanges.size());
         for (Range<Token> range : subtractedRanges)
         {
             result.add(decorateSubrange(range));
@@ -135,7 +134,7 @@ public class Replica implements Comparable<Replica>
     public RangesAtEndpoint subtractIgnoreTransientStatus(Range<Token> subtract)
     {
         Set<Range<Token>> ranges = this.range.subtract(subtract);
-        RangesAtEndpoint.Builder result = RangesAtEndpoint.builder(ranges.size());
+        RangesAtEndpoint.Builder result = RangesAtEndpoint.builder(endpoint, ranges.size());
         for (Range<Token> subrange : ranges)
             result.add(decorateSubrange(subrange));
         return result.build();

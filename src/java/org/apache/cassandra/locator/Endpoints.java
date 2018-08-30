@@ -19,7 +19,10 @@
 package org.apache.cassandra.locator;
 
 import org.apache.cassandra.locator.ReplicaCollection.Mutable.Conflict;
+import org.apache.cassandra.utils.FBUtilities;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,27 +30,17 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-public abstract class Endpoints<C extends Endpoints<C>> extends AbstractReplicaCollection<C>
+public abstract class Endpoints<E extends Endpoints<E>> extends AbstractReplicaCollection<E>
 {
     static final Map<InetAddressAndPort, Replica> EMPTY_MAP = Collections.unmodifiableMap(new LinkedHashMap<>());
 
     volatile Map<InetAddressAndPort, Replica> byEndpoint;
-    // TODO UNUSED
-    Endpoints(List<Replica> list, boolean isSnapshot)
-    {
-        this(list, isSnapshot, null);
-    }
+
     Endpoints(List<Replica> list, boolean isSnapshot, Map<InetAddressAndPort, Replica> byEndpoint)
     {
         super(list, isSnapshot);
         this.byEndpoint = byEndpoint;
     }
-
-    /**
-     * construct a new Mutable of our own type, so that we can concatenate
-     * TODO: this isn't terribly pretty, but we need sometimes to select / merge two Endpoints of unknown type;
-     */
-    public abstract Mutable<C> newMutable(int initialCapacity);
 
     @Override
     public Set<InetAddressAndPort> endpoints()
@@ -61,6 +54,12 @@ public abstract class Endpoints<C extends Endpoints<C>> extends AbstractReplicaC
         if (map == null)
             byEndpoint = map = buildByEndpoint(list);
         return map;
+    }
+
+    public boolean contains(InetAddressAndPort endpoint, boolean isFull)
+    {
+        Replica replica = byEndpoint().get(endpoint);
+        return replica != null && replica.isFull() == isFull;
     }
 
     @Override
@@ -85,17 +84,68 @@ public abstract class Endpoints<C extends Endpoints<C>> extends AbstractReplicaC
         return Collections.unmodifiableMap(byEndpoint);
     }
 
-    // TODO: TR-Review ignoreConflicts is not an acceptable solution here - we need to explicitly resolve them in case of transient/full mismatch
-    public static <E extends Endpoints<E>> E concat(E natural, E pending, Conflict ignoreConflicts)
+    public E withoutSelf()
     {
-        if (pending.isEmpty())
-            return natural;
-        if (natural.isEmpty())
-            return pending;
-        Mutable<E> mutable = natural.newMutable(natural.size() + pending.size());
-        mutable.addAll(natural);
-        mutable.addAll(pending, ignoreConflicts);
-        return mutable.asImmutableView();
+        InetAddressAndPort self = FBUtilities.getBroadcastAddressAndPort();
+        return filter(r -> !self.equals(r.endpoint()));
+    }
+
+    public E keep(Set<InetAddressAndPort> keep)
+    {
+        return filter(r -> keep.contains(r.endpoint()));
+    }
+
+    public E keep(Iterable<InetAddressAndPort> endpoints)
+    {
+        ReplicaCollection.Mutable<E> copy = newMutable(
+                endpoints instanceof Collection<?>
+                        ? ((Collection<InetAddressAndPort>) endpoints).size()
+                        : size()
+        );
+        Map<InetAddressAndPort, Replica> byEndpoint = byEndpoint();
+        for (InetAddressAndPort endpoint : endpoints)
+        {
+            Replica keep = byEndpoint.get(endpoint);
+            if (keep == null)
+                continue;
+            copy.add(keep, ReplicaCollection.Mutable.Conflict.DUPLICATE);
+        }
+        return copy.asSnapshot();
+    }
+
+    /**
+     * Care must be taken to ensure no conflicting ranges occur in pending and natural.
+     * Conflicts can occur for two reasons:
+     *   1) due to lack of isolation when reading pending/natural
+     *   2) because a movement that changes the type of replication from transient to full must be handled
+     *      differently for reads and writes (with the reader treating it as transient, and writer as full)
+     *
+     * The method haveConflicts() below, and resolveConflictsInX, are used to detect and resolve any issues
+     */
+    public static <E extends Endpoints<E>> E concat(E natural, E pending)
+    {
+        return AbstractReplicaCollection.concat(natural, pending, Conflict.NONE);
+    }
+
+    public static <E extends Endpoints<E>> boolean haveConflicts(E natural, E pending)
+    {
+        Set<InetAddressAndPort> naturalEndpoints = natural.endpoints();
+        for (InetAddressAndPort pendingEndpoint : pending.endpoints())
+        {
+            if (naturalEndpoints.contains(pendingEndpoint))
+                return true;
+        }
+        return false;
+    }
+
+    public static <E extends Endpoints<E>> E resolveConflictsInNatural(E natural, E pending)
+    {
+        return natural.filter(r -> !r.isTransient() || !pending.contains(r.endpoint(), true));
+    }
+
+    public static <E extends Endpoints<E>> E resolveConflictsInPending(E natural, E pending)
+    {
+        return pending.filter(r -> !natural.contains(r.endpoint(), true));
     }
 
 }

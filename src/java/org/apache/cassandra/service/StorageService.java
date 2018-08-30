@@ -1248,7 +1248,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
                 // Ensure all specified ranges are actually ranges owned by this host
                 RangesAtEndpoint localReplicas = getLocalReplicas(keyspace);
-                ReplicaList.Builder streamRanges = ReplicaList.builder(ranges.size());
+                RangesAtEndpoint.Builder streamRanges = new RangesAtEndpoint.Builder(FBUtilities.getBroadcastAddressAndPort(), ranges.size());
                 for (Range<Token> specifiedRange : ranges)
                 {
                     boolean foundParentRange = false;
@@ -2726,7 +2726,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
      * Finds living endpoints responsible for the given ranges
      *
      * @param keyspaceName the keyspace ranges belong to
-     * @param newReplicas the ranges to find sources for
+     * @param leavingReplicas the ranges to find sources for
      * @return multimap of addresses to ranges the address is responsible for
      */
     private Multimap<InetAddressAndPort, FetchReplica> getNewSourceReplicas(String keyspaceName, Set<LeavingReplica> leavingReplicas)
@@ -2898,11 +2898,11 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 RangesAtEndpoint fullReplicas = fetchReplicas.stream()
                                                              .filter(f -> f.remote.isFull())
                                                              .map(f -> f.local)
-                                                             .collect(RangesAtEndpoint.collector());
+                                                             .collect(RangesAtEndpoint.collector(myAddress));
                 RangesAtEndpoint transientReplicas = fetchReplicas.stream()
                                                                   .filter(f -> f.remote.isTransient())
                                                                   .map(f -> f.local)
-                                                                  .collect(RangesAtEndpoint.collector());
+                                                                  .collect(RangesAtEndpoint.collector(myAddress));
                 if (logger.isDebugEnabled())
                     logger.debug("Requesting from {} full replicas {} transient replicas {}", sourceAddress, StringUtils.join(fullReplicas, ", "), StringUtils.join(transientReplicas, ", "));
 
@@ -3970,7 +3970,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
      * @param pos position for which we need to find the endpoint
      * @return the endpoint responsible for this token
      */
-    public EndpointsForToken getNaturalReplicasForToken(String keyspaceName, RingPosition pos)
+    public static EndpointsForToken getNaturalReplicasForToken(String keyspaceName, RingPosition pos)
     {
         return Keyspace.open(keyspaceName).getReplicationStrategy().getNaturalReplicasForToken(pos);
     }
@@ -3983,7 +3983,12 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         // TODO: race condition to fetch these. impliciations??
         EndpointsForToken natural = getNaturalReplicasForToken(keyspaceName, token);
         EndpointsForToken pending = tokenMetadata.pendingEndpointsForToken(token, keyspaceName);
-        return Endpoints.concat(natural, pending, Conflict.ALL);
+        if (Endpoints.haveConflicts(natural, pending))
+        {
+            natural = Endpoints.resolveConflictsInNatural(natural, pending);
+            pending = Endpoints.resolveConflictsInPending(natural, pending);
+        }
+        return Endpoints.concat(natural, pending);
     }
 
     /**
@@ -4142,6 +4147,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                                                                     + keyspaceName + " (RF = " + rf + ", N = " + numNodes + ")."
                                                                     + " Perform a forceful decommission to ignore.");
                     }
+                    // TODO: do we care about fixing transient/full self-movements here? probably
                     if (tokenMetadata.getPendingRanges(keyspaceName, FBUtilities.getBroadcastAddressAndPort()).size() > 0)
                         throw new UnsupportedOperationException("data is currently moving to this node; unable to leave the ring");
                 }
@@ -4250,7 +4256,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                              .filter(endpoint -> FailureDetector.instance.isAlive(endpoint) && !FBUtilities.getBroadcastAddressAndPort().equals(endpoint))
                              .collect(Collectors.toList());
 
-        return SystemReplicas.getSystemReplicas(endpoints);
+        return EndpointsForRange.copyOf(SystemReplicas.getSystemReplicas(endpoints));
     }
     /**
      * Find the best target to stream hints to. Currently the closest peer according to the snitch
@@ -4318,6 +4324,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         // checking if data is moving to this node
         for (String keyspaceName : keyspacesToProcess)
         {
+            // TODO: do we care about fixing transient/full self-movements here?
             if (tokenMetadata.getPendingRanges(keyspaceName, localAddress).size() > 0)
                 throw new UnsupportedOperationException("data is currently moving to this node; unable to leave the ring");
         }
@@ -4507,7 +4514,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     RangesAtEndpoint updatedReplicas = strategy.getPendingAddressRanges(tokenMetaClone, newToken, localAddress);
 
                     // calculated parts of the ranges to request/stream from/to nodes in the ring
-                    Pair<RangesAtEndpoint, RangesAtEndpoint> streamAndFetchOwnRanges = Pair.create(RangesAtEndpoint.empty(), RangesAtEndpoint.empty());
+                    Pair<RangesAtEndpoint, RangesAtEndpoint> streamAndFetchOwnRanges = Pair.create(RangesAtEndpoint.empty(localAddress), RangesAtEndpoint.empty(localAddress));
                     //In the single node token move there is nothing to do and Range subtraction is broken
                     //so it's easier to just identify this case up front.
                     if (tokenMetaClone.getTopology().getDatacenterEndpoints().get(DatabaseDescriptor.getEndpointSnitch().getDatacenter(FBUtilities.getBroadcastAddressAndPort()
@@ -4535,11 +4542,11 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                         RangesAtEndpoint fullReplicas = sourceAndOurReplicas.stream()
                                 .filter(pair -> pair.remote.isFull())
                                 .map(pair -> pair.local)
-                                .collect(RangesAtEndpoint.collector());
+                                .collect(RangesAtEndpoint.collector(localAddress));
                         RangesAtEndpoint transientReplicas = sourceAndOurReplicas.stream()
                                 .filter(pair -> pair.remote.isTransient())
                                 .map(pair -> pair.local)
-                                .collect(RangesAtEndpoint.collector());
+                                .collect(RangesAtEndpoint.collector(localAddress));
                         logger.debug("Will request range {} of keyspace {} from endpoint {}", workMap.get(address), keyspace, address);
                         streamPlan.requestRanges(address, keyspace, fullReplicas, transientReplicas);
                     });
@@ -5334,8 +5341,9 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     public static Pair<RangesAtEndpoint, RangesAtEndpoint> calculateStreamAndFetchRanges(RangesAtEndpoint current, RangesAtEndpoint updated)
     {
         // FIXME: transient replication
-        RangesAtEndpoint.Builder toStream = RangesAtEndpoint.builder();
-        RangesAtEndpoint.Builder toFetch  = RangesAtEndpoint.builder();
+        // this should always be the local node, except for tests TODO: assert this
+        RangesAtEndpoint.Builder toStream = RangesAtEndpoint.builder(current.endpoint());
+        RangesAtEndpoint.Builder toFetch  = RangesAtEndpoint.builder(current.endpoint());
 
         logger.debug("Calculating toStream");
         for (Replica r1 : current)
@@ -5349,7 +5357,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 if (r1.intersectsOnRange(r2) && !(r1.isFull() && r2.isTransient()))
                 {
                     RangesAtEndpoint.Mutable oldRemainder = remainder;
-                    remainder = new RangesAtEndpoint.Mutable();
+                    remainder = new RangesAtEndpoint.Mutable(current.endpoint());
                     if (oldRemainder != null)
                     {
                         for (Replica replica : oldRemainder)
@@ -5388,7 +5396,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                 if (r2.intersectsOnRange(r1) && !(r1.isTransient() && r2.isFull()))
                 {
                     RangesAtEndpoint.Mutable oldRemainder = remainder;
-                    remainder = new RangesAtEndpoint.Mutable();
+                    remainder = new RangesAtEndpoint.Mutable(current.endpoint());
                     if (oldRemainder != null)
                     {
                         for (Replica replica : oldRemainder)
@@ -5458,8 +5466,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
                     {
                         Range<Token> range = entry.getKey();
                         EndpointsForRange replicas = entry.getValue();
-                        // TODO: test bulk load
-                        Replicas.assertFull(replicas);
+                        Replicas.temporaryAssertFull(replicas);
                         for (InetAddressAndPort endpoint : replicas.endpoints())
                             addRangeForEndpoint(range, endpoint);
                     }

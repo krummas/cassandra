@@ -199,6 +199,8 @@ public enum ConsistencyLevel
          * If we are doing an each quorum query, we have to make sure that the endpoints we select
          * provide a quorum for each data center. If we are not using a NetworkTopologyStrategy,
          * we should fall through and grab a quorum in the replication strategy.
+         *
+         * We do not speculate for EACH_QUORUM.
          */
         if (this == EACH_QUORUM && keyspace.getReplicationStrategy() instanceof NetworkTopologyStrategy)
             return filterForEachQuorum(keyspace, liveReplicas);
@@ -260,7 +262,7 @@ public enum ConsistencyLevel
                 }
                 // Fallthough on purpose for SimpleStrategy
             default:
-                return Iterables.size(liveReplicas) >= blockFor(keyspace);
+                return liveReplicas.size() >= blockFor(keyspace);
         }
     }
 
@@ -308,7 +310,7 @@ public enum ConsistencyLevel
                 }
                 // Fallthough on purpose for SimpleStrategy
             default:
-                int live = Iterables.size(liveReplicas);
+                int live = liveReplicas.size();
                 if (live < blockFor)
                 {
                     if (logger.isTraceEnabled())
