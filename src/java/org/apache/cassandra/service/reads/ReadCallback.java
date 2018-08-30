@@ -159,7 +159,7 @@ public class ReadCallback<E extends Endpoints<E>, L extends ReplicaLayout<E, L>>
 
     public void assureSufficientLiveNodes() throws UnavailableException
     {
-        replicaLayout.consistencyLevel().assureSufficientLiveNodes(replicaLayout.keyspace(), replicaLayout.selected());
+        replicaLayout.consistencyLevel().assureSufficientLiveNodesForRead(replicaLayout.keyspace(), replicaLayout.selected());
     }
 
     public boolean isLatencyForSnitch()

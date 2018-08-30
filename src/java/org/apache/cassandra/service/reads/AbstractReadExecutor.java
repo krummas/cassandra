@@ -44,7 +44,6 @@ import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.locator.ReplicaCollection;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.service.reads.repair.BlockingReadRepair;
 import org.apache.cassandra.service.reads.repair.ReadRepair;
 import org.apache.cassandra.service.StorageProxy.LocalReadRunnable;
 import org.apache.cassandra.tracing.TraceState;
@@ -108,15 +107,16 @@ public abstract class AbstractReadExecutor
 
     protected void makeDataRequests(ReplicaCollection<?> replicas)
     {
-        makeRequests(command, replicas);
-
+        // TODO: would be better to ensure we only ever supply isFull replicas here
+        makeRequests(command, replicas.filter(Replica::isFull));
+        makeRequests(command.copyAsTransientQuery(), replicas.filter(Replica::isTransient));
     }
 
     protected void makeDigestRequests(ReplicaCollection<?> replicas)
     {
         // only send digest requests to full replicas, send data requests instead to the transient replicas
         makeRequests(command.copyAsDigestQuery(), replicas.filter(Replica::isFull));
-        makeRequests(command, replicas.filter(Replica::isTransient));
+        makeRequests(command.copyAsTransientQuery(), replicas.filter(Replica::isTransient));
     }
 
     private void makeRequests(ReadCommand readCommand, ReplicaCollection<?> replicas)
@@ -178,17 +178,18 @@ public abstract class AbstractReadExecutor
             return new NeverSpeculatingReadExecutor(cfs, command, replicaLayout, queryStartNanoTime, false);
 
         // There are simply no extra replicas to speculate.
-        // Handle this separately so it can log failed attempts to speculate due to lack of replicas
-        if (consistencyLevel.blockFor(keyspace) == replicaLayout.all().size())
-            return new NeverSpeculatingReadExecutor(cfs, command, replicaLayout, queryStartNanoTime, true);
+        // Handle this separately so it can record failed attempts to speculate due to lack of replicas
+        if (replicaLayout.selected().size() == replicaLayout.all().size())
+        {
+            boolean recordFailedSpeculation = consistencyLevel != ConsistencyLevel.ALL;
+            return new NeverSpeculatingReadExecutor(cfs, command, replicaLayout, queryStartNanoTime, recordFailedSpeculation);
+        }
 
         // If CL.ALL, upgrade to AlwaysSpeculating;
         // If We are going to contact every node anyway, ask for 2 full data requests instead of 1, for redundancy
         // (same amount of requests in total, but we turn 1 digest request into a full blown data request)
-        if (replicaLayout.all().size() == replicaLayout.selected().size() || retry.equals(AlwaysSpeculativeRetryPolicy.INSTANCE))
-        {
+        if (retry.equals(AlwaysSpeculativeRetryPolicy.INSTANCE))
             return new AlwaysSpeculatingReadExecutor(cfs, command, replicaLayout, queryStartNanoTime);
-        }
         else // PERCENTILE or CUSTOM.
             return new SpeculatingReadExecutor(cfs, command, replicaLayout, queryStartNanoTime);
     }

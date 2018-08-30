@@ -19,7 +19,9 @@ package org.apache.cassandra.db;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Predicate;
 
+import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
 import org.apache.cassandra.locator.Endpoints;
 import org.apache.cassandra.locator.ReplicaCollection;
@@ -140,6 +142,28 @@ public enum ConsistencyLevel
         }
     }
 
+    public int blockForWrite(Keyspace keyspace, Endpoints<?> pending)
+    {
+        assert pending != null;
+
+        int blockFor = blockFor(keyspace);
+        switch (this)
+        {
+            case ANY:
+                break;
+            case LOCAL_ONE: case LOCAL_QUORUM: case LOCAL_SERIAL:
+                // we will only count local replicas towards our response count, as these queries only care about local guarantees
+                blockFor += countLocalEndpoints(pending);
+                break;
+            case ONE: case TWO: case THREE:
+            case QUORUM: case EACH_QUORUM:
+            case SERIAL:
+            case ALL:
+                blockFor += pending.size();
+        }
+        return blockFor;
+    }
+
     /**
      * Determine if this consistency level meets or exceeds the consistency requirements of the given cl for the given keyspace
      */
@@ -239,7 +263,7 @@ public enum ConsistencyLevel
         });
     }
 
-    public boolean isSufficientLiveNodes(Keyspace keyspace, ReplicaCollection<?> liveReplicas)
+    public boolean isSufficientLiveNodes(Keyspace keyspace, Endpoints<?> liveReplicas)
     {
         switch (this)
         {
@@ -266,26 +290,33 @@ public enum ConsistencyLevel
         }
     }
 
-    public void assureSufficientLiveNodes(Keyspace keyspace, ReplicaCollection<?> liveReplicas) throws UnavailableException
+    public void assureSufficientLiveNodesForRead(Keyspace keyspace, Endpoints<?> liveReplicas) throws UnavailableException
     {
-        int blockFor = blockFor(keyspace);
+        assureSufficientLiveNodes(keyspace, liveReplicas, blockFor(keyspace));
+    }
+    public void assureSufficientLiveNodesForWrite(Keyspace keyspace, Endpoints<?> liveNatural, Endpoints<?> pendingWithDown) throws UnavailableException
+    {
+        assureSufficientLiveNodes(keyspace, liveNatural, blockForWrite(keyspace, pendingWithDown));
+    }
+    public void assureSufficientLiveNodes(Keyspace keyspace, Endpoints<?> liveNatural, int blockFor) throws UnavailableException
+    {
         switch (this)
         {
             case ANY:
                 // local hint is acceptable, and local node is always live
                 break;
             case LOCAL_ONE:
-                if (countLocalEndpoints(liveReplicas) == 0)
+                if (countLocalEndpoints(liveNatural) == 0)
                     throw new UnavailableException(this, 1, 0);
                 break;
             case LOCAL_QUORUM:
-                int localLive = countLocalEndpoints(liveReplicas);
+                int localLive = countLocalEndpoints(liveNatural);
                 if (localLive < blockFor)
                 {
                     if (logger.isTraceEnabled())
                     {
                         StringBuilder builder = new StringBuilder("Local replicas [");
-                        for (Replica replica : liveReplicas)
+                        for (Replica replica : liveNatural)
                         {
                             if (isLocal(replica))
                                 builder.append(replica).append(',');
@@ -299,7 +330,7 @@ public enum ConsistencyLevel
             case EACH_QUORUM:
                 if (keyspace.getReplicationStrategy() instanceof NetworkTopologyStrategy)
                 {
-                    for (Map.Entry<String, Integer> entry : countPerDCEndpoints(keyspace, liveReplicas).entrySet())
+                    for (Map.Entry<String, Integer> entry : countPerDCEndpoints(keyspace, liveNatural).entrySet())
                     {
                         int dcBlockFor = localQuorumFor(keyspace, entry.getKey());
                         int dcLive = entry.getValue();
@@ -310,11 +341,11 @@ public enum ConsistencyLevel
                 }
                 // Fallthough on purpose for SimpleStrategy
             default:
-                int live = liveReplicas.size();
+                int live = liveNatural.size();
                 if (live < blockFor)
                 {
                     if (logger.isTraceEnabled())
-                        logger.trace("Live nodes {} do not satisfy ConsistencyLevel ({} required)", Iterables.toString(liveReplicas), blockFor);
+                        logger.trace("Live nodes {} do not satisfy ConsistencyLevel ({} required)", Iterables.toString(liveNatural), blockFor);
                     throw new UnavailableException(this, blockFor, live);
                 }
                 break;

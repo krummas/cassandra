@@ -288,7 +288,7 @@ public abstract class ReplicaLayout<E extends Endpoints<E>, L extends ReplicaLay
             return new ForToken(keyspace, consistencyLevel, token, natural, pending, selected);
         }
 
-        return forWrite(keyspace, consistencyLevel, token, consistencyLevel.blockFor(keyspace), natural, pending, isAlive);
+        return forWrite(keyspace, consistencyLevel, token, consistencyLevel.blockForWrite(keyspace, pending), natural, pending, isAlive);
     }
 
     public static ReplicaLayout.ForPaxos forPaxos(Keyspace keyspace, DecoratedKey key, ConsistencyLevel consistencyForPaxos) throws UnavailableException
@@ -366,7 +366,7 @@ public abstract class ReplicaLayout<E extends Endpoints<E>, L extends ReplicaLay
         EndpointsForToken selected = consistencyLevel.filterForQuery(keyspace, natural, retry.equals(AlwaysSpeculativeRetryPolicy.INSTANCE));
 
         // Throw UAE early if we don't have enough replicas.
-        consistencyLevel.assureSufficientLiveNodes(keyspace, selected);
+        consistencyLevel.assureSufficientLiveNodesForRead(keyspace, selected);
 
         return new ForToken(keyspace, consistencyLevel, token, natural, null, selected);
     }

@@ -90,6 +90,11 @@ public abstract class Endpoints<E extends Endpoints<E>> extends AbstractReplicaC
         return filter(r -> !self.equals(r.endpoint()));
     }
 
+    public E without(Set<InetAddressAndPort> remove)
+    {
+        return filter(r -> !remove.contains(r.endpoint()));
+    }
+
     public E keep(Set<InetAddressAndPort> keep)
     {
         return filter(r -> keep.contains(r.endpoint()));
@@ -138,14 +143,16 @@ public abstract class Endpoints<E extends Endpoints<E>> extends AbstractReplicaC
         return false;
     }
 
+    // must apply first
     public static <E extends Endpoints<E>> E resolveConflictsInNatural(E natural, E pending)
     {
         return natural.filter(r -> !r.isTransient() || !pending.contains(r.endpoint(), true));
     }
 
+    // must apply second
     public static <E extends Endpoints<E>> E resolveConflictsInPending(E natural, E pending)
     {
-        return pending.filter(r -> !natural.contains(r.endpoint(), true));
+        return pending.without(natural.endpoints());
     }
 
 }

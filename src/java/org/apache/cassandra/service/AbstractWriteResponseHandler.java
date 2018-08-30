@@ -193,8 +193,7 @@ public abstract class AbstractWriteResponseHandler<T> implements IAsyncCallbackW
     {
         // During bootstrap, we have to include the pending endpoints or we may fail the consistency level
         // guarantees (see #833)
-        // TODO: move block for?
-        return replicaLayout.consistencyLevel().blockFor(replicaLayout.keyspace()) + replicaLayout.pending().size();
+        return replicaLayout.consistencyLevel().blockForWrite(replicaLayout.keyspace(), replicaLayout.pending());
     }
 
     /**
@@ -230,8 +229,7 @@ public abstract class AbstractWriteResponseHandler<T> implements IAsyncCallbackW
 
     public void assureSufficientLiveNodes() throws UnavailableException
     {
-        // TODO: this check is rubbish, as it ignores pending
-        replicaLayout.consistencyLevel().assureSufficientLiveNodes(replicaLayout.keyspace(), replicaLayout.natural().filter(isReplicaAlive));
+        replicaLayout.consistencyLevel().assureSufficientLiveNodesForWrite(replicaLayout.keyspace(), replicaLayout.all().filter(isReplicaAlive), replicaLayout.pending());
     }
 
     protected void signal()
