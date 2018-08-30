@@ -2931,6 +2931,17 @@ public class StorageProxy implements StorageProxyMBean
         return DatabaseDescriptor.getRepairedDataTrackingForPartitionReadsEnabled();
     }
 
+    public boolean getReportOnlyConfirmedRepairedDataMismatches()
+    {
+        return DatabaseDescriptor.reportOnlyConfirmedRepairedDataMismatches();
+
+    }
+
+    public void setReportOnlyConfirmedRepairedDataMismatches(boolean onlyConfirmed)
+    {
+        DatabaseDescriptor.reportOnlyConfirmedRepairedDataMismatches(onlyConfirmed);
+    }
+
     static class PaxosParticipants
     {
         final List<InetAddressAndPort> liveEndpoints;
