@@ -112,11 +112,11 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
     static class Batch extends AbstractLogEntry
     {
         private final int weight;
-        private final BatchStatement.Type type;
+        private final BatchStatement.Type batchType;
         private final List<String> queries;
         private final List<List<ByteBuffer>> values;
 
-        public Batch(BatchStatement.Type type,
+        public Batch(BatchStatement.Type batchType,
                      List<String> queries,
                      List<List<ByteBuffer>> values,
                      QueryOptions queryOptions,
@@ -127,12 +127,13 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
 
             this.queries = queries;
             this.values = values;
-            this.type = type;
+            this.batchType = batchType;
 
             int weight = super.weight();
 
-            // weight, queries, values, batch type
-            weight += 8 + 2 * EMPTY_LIST_SIZE + 8;
+            weight += 4 +                       // weight
+                      2 * EMPTY_LIST_SIZE +     // two lists, queries & values
+                      8;                        // enum size (batch type)
 
             for (String query : queries)
                 weight += ObjectSizes.sizeOf(query);
@@ -157,7 +158,7 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         public void writeMarshallable(WireOut wire)
         {
             super.writeMarshallable(wire);
-            wire.write(BATCH_TYPE).text(type.name());
+            wire.write(BATCH_TYPE).text(batchType.name());
             ValueOut valueOut = wire.write(QUERIES);
             valueOut.int32(queries.size());
             for (String query : queries)
