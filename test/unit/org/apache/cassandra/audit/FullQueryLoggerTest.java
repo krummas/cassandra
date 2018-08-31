@@ -68,6 +68,7 @@ import static org.apache.cassandra.audit.FullQueryLogger.BATCH;
 import static org.apache.cassandra.audit.FullQueryLogger.BATCH_TYPE;
 import static org.apache.cassandra.audit.FullQueryLogger.QUERIES;
 import static org.apache.cassandra.audit.FullQueryLogger.QUERY;
+import static org.apache.cassandra.audit.FullQueryLogger.SINGLE;
 import static org.apache.cassandra.audit.FullQueryLogger.VALUES;
 
 public class FullQueryLoggerTest extends CQLTester
@@ -421,7 +422,7 @@ public class FullQueryLoggerTest extends CQLTester
             assertTrue(tailer.readDocument(wire ->
             {
                 assertEquals(0, wire.read(VERSION).int16());
-                assertEquals(QUERY, wire.read(TYPE).text());
+                assertEquals(SINGLE, wire.read(TYPE).text());
 
                 assertEquals(1L, wire.read(QUERY_START_TIME).int64());
 

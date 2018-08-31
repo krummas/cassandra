@@ -39,6 +39,7 @@ import org.apache.cassandra.utils.binlog.BinLog;
 public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
 {
     public static final String BATCH = "batch";
+    public static final String SINGLE = "single";
     public static final String QUERY = "query";
     public static final String BATCH_TYPE = "batch-type";
     public static final String QUERIES = "queries";
@@ -197,7 +198,7 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         @Override
         protected String type()
         {
-            return QUERY;
+            return SINGLE;
         }
 
         @Override
