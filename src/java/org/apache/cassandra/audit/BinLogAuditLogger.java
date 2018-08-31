@@ -39,8 +39,8 @@ import net.openhft.chronicle.wire.WireOut;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.io.FSError;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.transport.CBUtil;
-import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.NoSpamLogger;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.Throwables;
@@ -50,6 +50,8 @@ import org.github.jamm.MemoryLayoutSpecification;
 
 abstract class BinLogAuditLogger implements IAuditLogger
 {
+    private static final long CURRENT_VERSION = 0; // encode a dummy version, to prevent pain in decoding in the future
+
     static final int EMPTY_BYTEBUFFER_SIZE = Ints.checkedCast(ObjectSizes.sizeOnHeapExcludingData(ByteBuffer.allocate(0)));
     static final int EMPTY_LIST_SIZE = Ints.checkedCast(ObjectSizes.measureDeep(new ArrayList(0)));
     private static final int EMPTY_BYTEBUF_SIZE;
@@ -78,6 +80,14 @@ abstract class BinLogAuditLogger implements IAuditLogger
     protected Path path;
 
     private final AtomicLong droppedSamplesSinceLastLog = new AtomicLong();
+
+    public static final String VERSION = "version";
+    public static final String TYPE = "type";
+    public static final String PROTOCOL_VERSION = "protocol-version";
+    public static final String QUERY_OPTIONS = "query-options";
+    public static final String QUERY_START_TIME = "query-start-time";
+    public static final String GENERATED_TIMESTAMP = "generated-timestamp";
+    public static final String GENERATED_NOW_IN_SECONDS = "generated-now-in-seconds";
 
     /**
      * Configure the global instance of the FullQueryLogger. Clean the provided directory before starting
@@ -290,19 +300,26 @@ abstract class BinLogAuditLogger implements IAuditLogger
         }
     }
 
-    protected static abstract class AbstractWeighableMarshallable extends BinLog.ReleaseableWriteMarshallable implements WeightedQueue.Weighable
+    protected static abstract class AbstractLogEntry extends BinLog.ReleaseableWriteMarshallable implements WeightedQueue.Weighable
     {
-        private final ByteBuf queryOptionsBuffer;
-        private final long timeMillis;
+        private final long queryStartTime;
         private final int protocolVersion;
+        private final ByteBuf queryOptionsBuffer;
 
-        AbstractWeighableMarshallable(QueryOptions queryOptions, long timeMillis)
+        private final long generatedTimestamp;
+        private final int generatedNowInSeconds;
+
+        AbstractLogEntry(QueryOptions queryOptions, QueryState queryState, long queryStartTime)
         {
-            this.timeMillis = timeMillis;
-            ProtocolVersion version = queryOptions.getProtocolVersion();
-            this.protocolVersion = version.asInt();
-            int optionsSize = QueryOptions.codec.encodedSize(queryOptions, version);
+            this.queryStartTime = queryStartTime;
+
+            this.protocolVersion = queryOptions.getProtocolVersion().asInt();
+            int optionsSize = QueryOptions.codec.encodedSize(queryOptions, queryOptions.getProtocolVersion());
             queryOptionsBuffer = CBUtil.allocator.buffer(optionsSize, optionsSize);
+
+            this.generatedTimestamp = queryState.generatedTimestamp();
+            this.generatedNowInSeconds = queryState.generatedNowInSeconds();
+
             /*
              * Struggled with what tradeoff to make in terms of query options which is potentially large and complicated
              * There is tension between low garbage production (or allocator overhead), small working set size, and CPU overhead reserializing the
@@ -315,27 +332,29 @@ abstract class BinLogAuditLogger implements IAuditLogger
              * some scaling.
              *
              */
-            boolean success = false;
             try
             {
-                QueryOptions.codec.encode(queryOptions, queryOptionsBuffer, version);
-                success = true;
+                QueryOptions.codec.encode(queryOptions, queryOptionsBuffer, queryOptions.getProtocolVersion());
             }
-            finally
+            catch (Throwable e)
             {
-                if (!success)
-                {
-                    queryOptionsBuffer.release();
-                }
+                queryOptionsBuffer.release();
+                throw e;
             }
         }
 
         @Override
         public void writeMarshallable(WireOut wire)
         {
-            wire.write("protocol-version").int32(protocolVersion);
-            wire.write("query-options").bytes(BytesStore.wrap(queryOptionsBuffer.nioBuffer()));
-            wire.write("query-time").int64(timeMillis);
+            wire.write(VERSION).int16(CURRENT_VERSION);
+            wire.write(TYPE).text(type());
+
+            wire.write(QUERY_START_TIME).int64(queryStartTime);
+            wire.write(PROTOCOL_VERSION).int32(protocolVersion);
+            wire.write(QUERY_OPTIONS).bytes(BytesStore.wrap(queryOptionsBuffer.nioBuffer()));
+
+            wire.write(GENERATED_TIMESTAMP).int64(generatedTimestamp);
+            wire.write(GENERATED_NOW_IN_SECONDS).int32(generatedNowInSeconds);
         }
 
         @Override
@@ -344,12 +363,18 @@ abstract class BinLogAuditLogger implements IAuditLogger
             queryOptionsBuffer.release();
         }
 
-        //8-bytes for protocol version (assume alignment cost), 8-byte timestamp, 8-byte object header + other contents
         @Override
         public int weight()
         {
-            return 8 + 8 + OBJECT_HEADER_SIZE + EMPTY_BYTEBUF_SIZE + queryOptionsBuffer.capacity();
+            return OBJECT_HEADER_SIZE
+                 + 8                                                  // queryStartTime
+                 + 4                                                  // protocolVersion
+                 + EMPTY_BYTEBUF_SIZE + queryOptionsBuffer.capacity() // queryOptionsBuffer
+                 + 8                                                  // generatedTimestamp
+                 + 4;                                                 // generatedNowInSeconds
         }
+
+        protected abstract String type();
     }
 
     private static Throwable cleanDirectory(File directory, Throwable accumulate)

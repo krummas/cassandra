@@ -28,6 +28,8 @@ import net.openhft.chronicle.bytes.BytesStore;
 import net.openhft.chronicle.wire.ValueOut;
 import net.openhft.chronicle.wire.WireOut;
 import org.apache.cassandra.cql3.QueryOptions;
+import org.apache.cassandra.cql3.statements.BatchStatement;
+import org.apache.cassandra.service.QueryState;
 import org.apache.cassandra.utils.ObjectSizes;
 import org.apache.cassandra.utils.binlog.BinLog;
 
@@ -36,10 +38,16 @@ import org.apache.cassandra.utils.binlog.BinLog;
  */
 public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
 {
+    public static final String BATCH = "batch";
+    public static final String QUERY = "query";
+    public static final String BATCH_TYPE = "batch-type";
+    public static final String QUERIES = "queries";
+    public static final String VALUES = "values";
+
     @Override
     public void log(AuditLogEntry entry)
     {
-        logQuery(entry.getOperation(), entry.getOptions(), entry.getTimestamp());
+        logQuery(entry.getOperation(), entry.getOptions(), entry.getState(), entry.getTimestamp());
     }
 
     /**
@@ -48,14 +56,21 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
      * @param queries CQL text of the queries
      * @param values Values to bind to as parameters for the queries
      * @param queryOptions Options associated with the query invocation
+     * @param queryState Timestamp state associated with the query invocation
      * @param batchTimeMillis Approximate time in milliseconds since the epoch since the batch was invoked
      */
-    void logBatch(String type, List<String> queries, List<List<ByteBuffer>> values, QueryOptions queryOptions, long batchTimeMillis)
+    void logBatch(BatchStatement.Type type,
+                  List<String> queries,
+                  List<List<ByteBuffer>> values,
+                  QueryOptions queryOptions,
+                  QueryState queryState,
+                  long batchTimeMillis)
     {
         Preconditions.checkNotNull(type, "type was null");
         Preconditions.checkNotNull(queries, "queries was null");
         Preconditions.checkNotNull(values, "value was null");
         Preconditions.checkNotNull(queryOptions, "queryOptions was null");
+        Preconditions.checkNotNull(queryState, "queryState was null");
         Preconditions.checkArgument(batchTimeMillis > 0, "batchTimeMillis must be > 0");
 
         //Don't construct the wrapper if the log is disabled
@@ -65,7 +80,7 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
             return;
         }
 
-        WeighableMarshallableBatch wrappedBatch = new WeighableMarshallableBatch(type, queries, values, queryOptions, batchTimeMillis);
+        Batch wrappedBatch = new Batch(type, queries, values, queryOptions, queryState, batchTimeMillis);
         logRecord(wrappedBatch, binLog);
     }
 
@@ -73,12 +88,14 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
      * Log a single CQL query
      * @param query CQL query text
      * @param queryOptions Options associated with the query invocation
+     * @param queryState Timestamp state associated with the query invocation
      * @param queryTimeMillis Approximate time in milliseconds since the epoch since the batch was invoked
      */
-    void logQuery(String query, QueryOptions queryOptions, long queryTimeMillis)
+    void logQuery(String query, QueryOptions queryOptions, QueryState queryState, long queryTimeMillis)
     {
         Preconditions.checkNotNull(query, "query was null");
         Preconditions.checkNotNull(queryOptions, "queryOptions was null");
+        Preconditions.checkNotNull(queryState, "queryState was null");
         Preconditions.checkArgument(queryTimeMillis > 0, "queryTimeMillis must be > 0");
 
         //Don't construct the wrapper if the log is disabled
@@ -88,70 +105,66 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
             return;
         }
 
-        WeighableMarshallableQuery wrappedQuery = new WeighableMarshallableQuery(query, queryOptions, queryTimeMillis);
+        Query wrappedQuery = new Query(query, queryOptions, queryState, queryTimeMillis);
         logRecord(wrappedQuery, binLog);
     }
 
-    static class WeighableMarshallableBatch extends AbstractWeighableMarshallable
+    static class Batch extends AbstractLogEntry
     {
         private final int weight;
-        private final String batchType;
+        private final BatchStatement.Type type;
         private final List<String> queries;
         private final List<List<ByteBuffer>> values;
 
-        public WeighableMarshallableBatch(String batchType, List<String> queries, List<List<ByteBuffer>> values, QueryOptions queryOptions, long batchTimeMillis)
+        public Batch(BatchStatement.Type type,
+                     List<String> queries,
+                     List<List<ByteBuffer>> values,
+                     QueryOptions queryOptions,
+                     QueryState queryState,
+                     long batchTimeMillis)
         {
-           super(queryOptions, batchTimeMillis);
-           this.queries = queries;
-           this.values = values;
-           this.batchType = batchType;
-           boolean success = false;
-           try
-           {
-               //weight, batch type, queries, values
-               int weightTemp = 8 + EMPTY_LIST_SIZE + EMPTY_LIST_SIZE;
-               for (int ii = 0; ii < queries.size(); ii++)
-               {
-                   weightTemp += ObjectSizes.sizeOf(queries.get(ii));
-               }
+            super(queryOptions, queryState, batchTimeMillis);
 
-               weightTemp += EMPTY_LIST_SIZE * values.size();
-               for (int ii = 0; ii < values.size(); ii++)
-               {
-                   List<ByteBuffer> sublist = values.get(ii);
-                   weightTemp += EMPTY_BYTEBUFFER_SIZE * sublist.size();
-                   for (int zz = 0; zz < sublist.size(); zz++)
-                   {
-                       weightTemp += sublist.get(zz).capacity();
-                   }
-               }
-               weightTemp += super.weight();
-               weightTemp += ObjectSizes.sizeOf(batchType);
-               weight = weightTemp;
-               success = true;
-           }
-           finally
-           {
-               if (!success)
-               {
-                   release();
-               }
-           }
+            this.queries = queries;
+            this.values = values;
+            this.type = type;
+
+            int weight = super.weight();
+
+            // weight, queries, values, batch type
+            weight += 8 + 2 * EMPTY_LIST_SIZE + 8;
+
+            for (String query : queries)
+                weight += ObjectSizes.sizeOf(query);
+
+            for (List<ByteBuffer> subValues : values)
+            {
+                weight += EMPTY_LIST_SIZE;
+                for (ByteBuffer value : subValues)
+                    weight += EMPTY_BYTEBUFFER_SIZE + value.capacity();
+            }
+
+            this.weight = weight;
+        }
+
+        @Override
+        protected String type()
+        {
+            return BATCH;
         }
 
         @Override
         public void writeMarshallable(WireOut wire)
         {
-            wire.write("type").text("batch");
             super.writeMarshallable(wire);
-            wire.write("batch-type").text(batchType);
-            ValueOut valueOut = wire.write("queries");
+            wire.write(BATCH_TYPE).text(type.name());
+            ValueOut valueOut = wire.write(QUERIES);
             valueOut.int32(queries.size());
             for (String query : queries)
             {
                 valueOut.text(query);
             }
-            valueOut = wire.write("values");
+            valueOut = wire.write(VALUES);
             valueOut.int32(values.size());
             for (List<ByteBuffer> subValues : values)
             {
@@ -170,22 +183,27 @@ public class FullQueryLogger extends BinLogAuditLogger implements IAuditLogger
         }
     }
 
-    static class WeighableMarshallableQuery extends AbstractWeighableMarshallable
+    static class Query extends AbstractLogEntry
     {
         private final String query;
 
-        public WeighableMarshallableQuery(String query, QueryOptions queryOptions, long queryTimeMillis)
+        public Query(String query, QueryOptions queryOptions, QueryState queryState, long queryStartTime)
         {
-            super(queryOptions, queryTimeMillis);
+            super(queryOptions, queryState, queryStartTime);
             this.query = query;
+        }
+
+        @Override
+        protected String type()
+        {
+            return QUERY;
         }
 
         @Override
         public void writeMarshallable(WireOut wire)
         {
-            wire.write("type").text("single");
             super.writeMarshallable(wire);
-            wire.write("query").text(query);
+            wire.write(QUERY).text(query);
         }
 
         @Override
