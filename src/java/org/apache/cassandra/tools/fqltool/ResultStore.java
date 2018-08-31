@@ -49,6 +49,7 @@ import org.apache.cassandra.utils.binlog.BinLog;
  * document formats:
  * to mark the start of a new result set:
  * -------------------
+ * version: int16
  * type: column_definitions
  * column_count: int32;
  * column_definition: text, text
@@ -58,12 +59,14 @@ import org.apache.cassandra.utils.binlog.BinLog;
  *
  * to mark a failed query:
  * ---------------------
+ * version: int16
  * type: query_failed
  * message: text
  * ---------------------
  *
  * row:
  * --------------------
+ * version: int16
  * type: row
  * row_column_count: int32
  * column: bytes
@@ -71,12 +74,14 @@ import org.apache.cassandra.utils.binlog.BinLog;
  *
  * to mark the end of a result set:
  * -------------------
+ * version: int16
  * type: end_resultset
  * -------------------
  *
  */
 public class ResultStore
 {
+    private static final String VERSION = "version";
     private static final String TYPE = "type";
     // types:
     private static final String ROW = "row";
@@ -89,6 +94,8 @@ public class ResultStore
     private static final String MESSAGE = "message";
     private static final String ROW_COLUMN_COUNT = "row_column_count";
     private static final String COLUMN = "column";
+
+    private static final int CURRENT_VERSION = 0;
 
     private final List<ChronicleQueue> queues;
     private final List<ExcerptAppender> appenders;
@@ -143,7 +150,10 @@ public class ResultStore
             ResultHandler.ComparableRow row = rows.get(i);
             if (row == null && !finishedHosts.contains(i))
             {
-                appenders.get(i).writeDocument(wire -> wire.write(TYPE).text(END));
+                appenders.get(i).writeDocument(wire -> {
+                    wire.write(VERSION).int16(CURRENT_VERSION);
+                    wire.write(TYPE).text(END);
+                });
                 finishedHosts.add(i);
             }
             else if (row != null)
@@ -171,6 +181,7 @@ public class ResultStore
 
         public void writeMarshallable(WireOut wire)
         {
+            wire.write(VERSION).int16(CURRENT_VERSION);
             if (!defs.wasFailed())
             {
                 wire.write(TYPE).text(COLUMN_DEFINITIONS);
@@ -198,6 +209,7 @@ public class ResultStore
 
         public void readMarshallable(WireIn wire) throws IORuntimeException
         {
+            int version = wire.read(VERSION).int32();
             String type = wire.read(TYPE).text();
             if (type.equals(FAILURE))
             {
@@ -228,6 +240,7 @@ public class ResultStore
 
         public void readMarshallable(WireIn wire) throws IORuntimeException
         {
+            int version = wire.read(VERSION).int32();
             String type = wire.read(TYPE).text();
             if (!type.equals(END))
             {
@@ -261,6 +274,7 @@ public class ResultStore
 
         public void writeMarshallable(WireOut wire)
         {
+            wire.write(VERSION).int16(CURRENT_VERSION);
             wire.write(TYPE).text(ROW);
             wire.write(ROW_COLUMN_COUNT).int32(row.getColumnDefinitions().size());
             for (int jj = 0; jj < row.getColumnDefinitions().size(); jj++)
