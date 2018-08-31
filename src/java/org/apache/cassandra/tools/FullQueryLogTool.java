@@ -31,6 +31,7 @@ import io.airlift.airline.ParseCommandUnrecognizedException;
 import io.airlift.airline.ParseOptionConversionException;
 import io.airlift.airline.ParseOptionMissingException;
 import io.airlift.airline.ParseOptionMissingValueException;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.tools.fqltool.commands.Compare;
 import org.apache.cassandra.tools.fqltool.commands.Dump;
 import org.apache.cassandra.tools.fqltool.commands.Replay;
@@ -42,6 +43,7 @@ public class FullQueryLogTool
 {
     public static void main(String... args)
     {
+        DatabaseDescriptor.clientInitialization();
         List<Class<? extends Runnable>> commands = newArrayList(
                 Help.class,
                 Dump.class,
