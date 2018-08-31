@@ -137,16 +137,16 @@ public class QueryReplayer implements Closeable
     {
         try
         {
-            if (query.keyspace != null && !query.keyspace.equals(session.getLoggedKeyspace()))
+            if (query.keyspace() != null && !query.keyspace().equals(session.getLoggedKeyspace()))
             {
                 if (debug)
-                    out.printf("Switching keyspace from %s to %s%n", session.getLoggedKeyspace(), query.keyspace);
-                session.execute("USE " + query.keyspace);
+                    out.printf("Switching keyspace from %s to %s%n", session.getLoggedKeyspace(), query.keyspace());
+                session.execute("USE " + query.keyspace());
             }
         }
         catch (Throwable t)
         {
-            out.printf("USE %s failed: %s%n", query.keyspace, t.getMessage());
+            out.printf("USE %s failed: %s%n", query.keyspace(), t.getMessage());
         }
     }
 

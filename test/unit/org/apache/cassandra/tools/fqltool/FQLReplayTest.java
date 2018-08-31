@@ -146,11 +146,11 @@ public class FQLReplayTest
                 assertNotNull(reader.getQuery());
                 if (reader.getQuery() instanceof FQLQuery.Single)
                 {
-                    assertTrue(reader.getQuery().keyspace == null || reader.getQuery().keyspace.equals("querykeyspace"));
+                    assertTrue(reader.getQuery().keyspace() == null || reader.getQuery().keyspace().equals("querykeyspace"));
                 }
                 else
                 {
-                    assertEquals("someks", reader.getQuery().keyspace);
+                    assertEquals("someks", reader.getQuery().keyspace());
                 }
                 queryCount++;
             }
@@ -166,7 +166,7 @@ public class FQLReplayTest
 
         ResultHandler.ComparableResultSet res = createResultSet(10, 10, true);
         ResultStore rs = new ResultStore(Collections.singletonList(tmpDir), queryDir);
-        FQLQuery query = new FQLQuery.Single("abc", 3, QueryOptions.DEFAULT, 12345, 11111, 22, "select * from abc", Collections.emptyList());
+        FQLQuery query = new FQLQuery.Single("abc", QueryOptions.DEFAULT.getProtocolVersion().asInt(), QueryOptions.DEFAULT, 12345, 11111, 22, "select * from abc", Collections.emptyList());
         try
         {
             rs.storeColumnDefinitions(query, Collections.singletonList(res.getColumnDefinitions()));
@@ -351,7 +351,7 @@ public class FQLReplayTest
         ResultHandler.ComparableResultSet res2 = createResultSet(10, 5, false);
         ResultHandler.ComparableResultSet res3 = createResultSet(10, 10, false);
         List<ResultHandler.ComparableResultSet> toCompare = Lists.newArrayList(res, res2, res3);
-        FQLQuery query = new FQLQuery.Single("aaa", 3, QueryOptions.DEFAULT, 123123, 11111, 22222, "select * from abcabc", Collections.emptyList());
+        FQLQuery query = new FQLQuery.Single("aaa", QueryOptions.DEFAULT.getProtocolVersion().asInt(), QueryOptions.DEFAULT, 123123, 11111, 22222, "select * from abcabc", Collections.emptyList());
         try (ResultHandler rh = new ResultHandler(targetHosts, resultPaths, queryDir))
         {
             rh.handleResults(query, toCompare);
@@ -501,7 +501,7 @@ public class FQLReplayTest
                                                      "select * from aaa",
                                                      values);
         Statement stmt = single.toStatement();
-        assertEquals(stmt.getDefaultTimestamp(), 1234 * 1000);
+        assertEquals(stmt.getDefaultTimestamp(), 12345);
         assertTrue(stmt instanceof SimpleStatement);
         SimpleStatement simpleStmt = (SimpleStatement)stmt;
         assertEquals("select * from aaa",simpleStmt.getQueryString(CodecRegistry.DEFAULT_INSTANCE));
@@ -533,13 +533,13 @@ public class FQLReplayTest
                                                    queries,
                                                    values);
         Statement stmt = batch.toStatement();
-        assertEquals(stmt.getDefaultTimestamp(), 1234 * 1000);
+        assertEquals(stmt.getDefaultTimestamp(), 12345);
         assertTrue(stmt instanceof com.datastax.driver.core.BatchStatement);
         com.datastax.driver.core.BatchStatement batchStmt = (com.datastax.driver.core.BatchStatement)stmt;
         List<Statement> statements = Lists.newArrayList(batchStmt.getStatements());
         List<Statement> fromFQLQueries = batch.queries.stream().map(FQLQuery.Single::toStatement).collect(Collectors.toList());
         assertEquals(statements.size(), fromFQLQueries.size());
-        assertEquals(1234 * 1000, batchStmt.getDefaultTimestamp());
+        assertEquals(12345, batchStmt.getDefaultTimestamp());
         for (int i = 0; i < statements.size(); i++)
             compareStatements(statements.get(i), fromFQLQueries.get(i));
     }
