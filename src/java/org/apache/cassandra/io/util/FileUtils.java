@@ -372,8 +372,10 @@ public final class FileUtils
     /** Return true if file is contained in folder */
     public static boolean isContained(File folder, File file)
     {
-        String folderPath = getCanonicalPath(folder);
-        String filePath = getCanonicalPath(file);
+        String folderPath = getCanonicalPath(folder) + File.separator;
+        // we add the separator to the 'file' to check to be able to use isContained
+        // with directories that are equal to folder.
+        String filePath = getCanonicalPath(file) + File.separator;
 
         return filePath.startsWith(folderPath);
     }

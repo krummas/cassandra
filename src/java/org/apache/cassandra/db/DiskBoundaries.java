@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.service.StorageService;
 
 public class DiskBoundaries
@@ -119,7 +120,7 @@ public class DiskBoundaries
         for (int i = 0; i < directories.size(); i++)
         {
             Directories.DataDirectory directory = directories.get(i);
-            if (descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
+            if (FileUtils.isContained(directory.location, descriptor.directory))
                 return i;
         }
         return 0;

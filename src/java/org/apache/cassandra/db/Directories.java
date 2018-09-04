@@ -278,9 +278,11 @@ public class Directories
     public File getLocationForDisk(DataDirectory dataDirectory)
     {
         if (dataDirectory != null)
+        {
             for (File dir : dataPaths)
-                if (dir.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+                if (FileUtils.isContained(dataDirectory.location, dir))
                     return dir;
+        }
         return null;
     }
 
@@ -289,10 +291,8 @@ public class Directories
         if (directory != null)
         {
             for (DataDirectory dataDirectory : paths)
-            {
-                if (directory.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+                if (FileUtils.isContained(dataDirectory.location, directory))
                     return dataDirectory;
-            }
         }
         return null;
     }

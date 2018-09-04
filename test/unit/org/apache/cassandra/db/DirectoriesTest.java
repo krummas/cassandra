@@ -490,4 +490,42 @@ public class DirectoriesTest
 
         return candidates;
     }
+
+    @Test
+    public void testGetLocationForDisk()
+    {
+        Collection<DataDirectory> paths = new ArrayList<>();
+        paths.add(new DataDirectory(new File("/tmp/aaa")));
+        paths.add(new DataDirectory(new File("/tmp/aa")));
+        paths.add(new DataDirectory(new File("/tmp/a")));
+
+        for (TableMetadata cfm : CFM)
+        {
+            Directories dirs = new Directories(cfm, paths);
+            for (DataDirectory dir : paths)
+            {
+                String p = dirs.getLocationForDisk(dir).getAbsolutePath() + File.separator;
+                assertTrue(p.startsWith(dir.location.getAbsolutePath() + File.separator));
+            }
+        }
+    }
+
+    @Test
+    public void getDataDirectoryForFile()
+    {
+        Collection<DataDirectory> paths = new ArrayList<>();
+        paths.add(new DataDirectory(new File("/tmp/a")));
+        paths.add(new DataDirectory(new File("/tmp/aa")));
+        paths.add(new DataDirectory(new File("/tmp/aaa")));
+
+        for (TableMetadata cfm : CFM)
+        {
+            Directories dirs = new Directories(cfm, paths);
+            for (DataDirectory dir : paths)
+            {
+                String p = dirs.getDataDirectoryForFile(dir.location).location.getAbsolutePath() + File.separator;
+                assertTrue(p.startsWith(dir.location.getAbsolutePath() + File.separator));
+            }
+        }
+    }
 }
