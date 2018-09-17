@@ -5332,7 +5332,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     }
 
     public void enableAuditLog(String loggerName, String includedKeyspaces, String excludedKeyspaces, String includedCategories, String excludedCategories,
-                               String includedUsers, String excludedUsers, String archiveCommand) throws ConfigurationException, IllegalStateException
+                               String includedUsers, String excludedUsers) throws ConfigurationException, IllegalStateException
     {
         loggerName = loggerName != null ? loggerName : DatabaseDescriptor.getAuditLoggingOptions().logger;
 
@@ -5348,7 +5348,6 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         auditLogOptions.excluded_categories = excludedCategories != null ? excludedCategories : DatabaseDescriptor.getAuditLoggingOptions().excluded_categories;
         auditLogOptions.included_users = includedUsers != null ? includedUsers : DatabaseDescriptor.getAuditLoggingOptions().included_users;
         auditLogOptions.excluded_users = excludedUsers != null ? excludedUsers : DatabaseDescriptor.getAuditLoggingOptions().excluded_users;
-        auditLogOptions.archive_command = archiveCommand != null ? archiveCommand : DatabaseDescriptor.getAuditLoggingOptions().archive_command;
 
         AuditLogManager.getInstance().enableAuditLog(auditLogOptions);
 

@@ -1225,7 +1225,14 @@ audit_logging_options:
     # excluded_categories:
     # included_users:
     # excluded_users:
-    # archive_command:
+    # archive_command: /path/to/script %path
+
+# default options for full query logging - these can be overridden from command line when executing
+# nodetool enablefullquerylog
+# for archive_command, %path will be replaced with the log file that is ready to be archived
+#full_query_logging_options:
+   # log_dir: /path/to/logs
+   # archive_command: /path/to/archivescript %path
 
 # validate tombstones on reads and compaction
 # can be either "disabled", "warn" or "exception"
