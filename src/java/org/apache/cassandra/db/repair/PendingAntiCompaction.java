@@ -20,7 +20,9 @@ package org.apache.cassandra.db.repair;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -44,6 +46,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.locator.RangesAtEndpoint;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.concurrent.Refs;
 
 /**
@@ -92,9 +95,41 @@ public class PendingAntiCompaction
             this.sessionID = sessionID;
         }
 
+        private static boolean canIgnorePendingRepair(UUID sessionID)
+        {
+            return ActiveRepairService.instance.consistent.local.isSessionFinalized(sessionID);
+        }
+
+        /**
+         * If there are sstables we'd like to acquire that are currently held by other sessions, we need to bail out. If we
+         * didn't bail out here and the other repair sessions we're seeing were to fail, incremental repair behavior would be
+         * confusing. You generally expect all data received before a repair session to be repaired when the session completes,
+         * and that wouldn't be the case if the other session failed and moved it's data back to unrepaired.
+         */
+        private void validatePendingSSTables(Iterable<SSTableReader> sstables)
+        {
+            Set<UUID> activeRepairSessions = new HashSet<>();
+            for (SSTableReader sstable: Iterables.filter(sstables, s -> s.isPendingRepair() && !canIgnorePendingRepair(s.getPendingRepair())))
+            {
+                activeRepairSessions.add(sstable.getPendingRepair());
+            }
+
+            if (!activeRepairSessions.isEmpty())
+            {
+                logger.warn("Prepare phase for incremental repair session {} has failed because it encountered " +
+                            "intersecting sstables belonging to another incremental repair session(s) ({}). This is " +
+                            "caused by starting an incremental repair session before a previous one has completed. " +
+                            "Check nodetool repair_admin for hung sessions and fix them.",
+                            sessionID, activeRepairSessions);
+                throw new SSTableAcquisitionException();
+            }
+        }
+
         private Iterable<SSTableReader> getSSTables()
         {
-            return Iterables.filter(cfs.getLiveSSTables(), s -> !s.isRepaired() && !s.isPendingRepair() && s.intersects(ranges));
+            Iterable<SSTableReader> sstables = Iterables.filter(cfs.getLiveSSTables(), s -> !s.isRepaired() && s.intersects(ranges));
+            validatePendingSSTables(sstables);
+            return Iterables.filter(sstables, s -> !s.isPendingRepair());
         }
 
         @SuppressWarnings("resource")
@@ -114,9 +149,16 @@ public class PendingAntiCompaction
         public AcquireResult call() throws Exception
         {
             logger.debug("acquiring sstables for pending anti compaction on session {}", sessionID);
-            AcquireResult refTxn = acquireTuple();
-            if (refTxn != null)
-                return refTxn;
+            try
+            {
+                AcquireResult refTxn = acquireTuple();
+                if (refTxn != null)
+                    return refTxn;
+            }
+            catch (SSTableAcquisitionException e)
+            {
+                return null;
+            }
 
             // try to modify after cancelling running compactions. This will attempt to cancel in flight compactions for
             // up to a minute, after which point, null will be returned
