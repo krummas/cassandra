@@ -27,6 +27,9 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 
+import javax.annotation.Nullable;
+
+import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.AsyncFunction;
@@ -45,9 +48,13 @@ import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.concurrent.Refs;
+
+import static org.apache.cassandra.service.ActiveRepairService.NO_PENDING_REPAIR;
+import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABLE;
 
 /**
  * Performs an anti compaction on a set of tables and token ranges, isolating the unrepaired sstables
@@ -95,41 +102,46 @@ public class PendingAntiCompaction
             this.sessionID = sessionID;
         }
 
-        private static boolean canIgnorePendingRepair(UUID sessionID)
+        private Iterable<SSTableReader> getSSTables()
         {
-            return ActiveRepairService.instance.consistent.local.isSessionFinalized(sessionID);
-        }
+            Set<UUID> conflictingSessions = new HashSet<>();
 
-        /**
-         * If there are sstables we'd like to acquire that are currently held by other sessions, we need to bail out. If we
-         * didn't bail out here and the other repair sessions we're seeing were to fail, incremental repair behavior would be
-         * confusing. You generally expect all data received before a repair session to be repaired when the session completes,
-         * and that wouldn't be the case if the other session failed and moved it's data back to unrepaired.
-         */
-        private void validatePendingSSTables(Iterable<SSTableReader> sstables)
-        {
-            Set<UUID> activeRepairSessions = new HashSet<>();
-            for (SSTableReader sstable: Iterables.filter(sstables, s -> s.isPendingRepair() && !canIgnorePendingRepair(s.getPendingRepair())))
-            {
-                activeRepairSessions.add(sstable.getPendingRepair());
-            }
+            Iterable<SSTableReader> sstables = Iterables.filter(cfs.getLiveSSTables(), sstable -> {
+                StatsMetadata metadata = sstable.getSSTableMetadata();
 
-            if (!activeRepairSessions.isEmpty())
+                // exclude repaired sstables
+                if (metadata.repairedAt != UNREPAIRED_SSTABLE)
+                    return false;
+
+                // exclude sstables pending repair, but record session ids for
+                // non-finalized sessions for a later error message
+                if (metadata.pendingRepair != NO_PENDING_REPAIR)
+                {
+                    if (!ActiveRepairService.instance.consistent.local.isSessionFinalized(metadata.pendingRepair))
+                    {
+                        conflictingSessions.add(metadata.pendingRepair);
+                    }
+                    return false;
+                }
+
+                return true;
+            });
+
+            // If there are sstables we'd like to acquire that are currently held by other sessions, we need to bail out. If we
+            // didn't bail out here and the other repair sessions we're seeing were to fail, incremental repair behavior would be
+            // confusing. You generally expect all data received before a repair session to be repaired when the session completes,
+            // and that wouldn't be the case if the other session failed and moved it's data back to unrepaired.
+            if (!conflictingSessions.isEmpty())
             {
                 logger.warn("Prepare phase for incremental repair session {} has failed because it encountered " +
                             "intersecting sstables belonging to another incremental repair session(s) ({}). This is " +
                             "caused by starting an incremental repair session before a previous one has completed. " +
                             "Check nodetool repair_admin for hung sessions and fix them.",
-                            sessionID, activeRepairSessions);
+                            sessionID, conflictingSessions);
                 throw new SSTableAcquisitionException();
             }
-        }
 
-        private Iterable<SSTableReader> getSSTables()
-        {
-            Iterable<SSTableReader> sstables = Iterables.filter(cfs.getLiveSSTables(), s -> !s.isRepaired() && s.intersects(ranges));
-            validatePendingSSTables(sstables);
-            return Iterables.filter(sstables, s -> !s.isPendingRepair());
+            return sstables;
         }
 
         @SuppressWarnings("resource")
@@ -182,9 +194,23 @@ public class PendingAntiCompaction
             return CompactionManager.instance.submitPendingAntiCompaction(result.cfs, tokenRanges, result.refs, result.txn, parentRepairSession);
         }
 
+        private static boolean shouldAbort(AcquireResult result)
+        {
+            if (result == null)
+                return true;
+
+            // sstables in the acquire result are now marked compacting and are locked to this anti compaction. If any
+            // of them are marked repaired or pending repair, acquisition raced with another pending anti-compaction, or
+            // possibly even a repair session, and we need to abort to prevent sstables from moving between sessions.
+            return result.refs != null && Iterables.any(result.refs, sstable -> {
+                StatsMetadata metadata = sstable.getSSTableMetadata();
+                return metadata.pendingRepair != NO_PENDING_REPAIR || metadata.repairedAt != UNREPAIRED_SSTABLE;
+            });
+        }
+
         public ListenableFuture apply(List<AcquireResult> results) throws Exception
         {
-            if (Iterables.any(results, t -> t == null))
+            if (Iterables.any(results, AcquisitionCallback::shouldAbort))
             {
                 // Release all sstables, and report failure back to coordinator
                 for (AcquireResult result : results)
