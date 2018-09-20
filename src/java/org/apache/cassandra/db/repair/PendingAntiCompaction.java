@@ -26,10 +26,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
-import javax.annotation.Nullable;
-
-import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.AsyncFunction;
@@ -106,7 +104,10 @@ public class PendingAntiCompaction
         {
             Set<UUID> conflictingSessions = new HashSet<>();
 
-            Iterable<SSTableReader> sstables = Iterables.filter(cfs.getLiveSSTables(), sstable -> {
+            Iterable<SSTableReader> sstables = cfs.getLiveSSTables().stream().filter(sstable -> {
+                if (!sstable.intersects(ranges))
+                    return false;
+
                 StatsMetadata metadata = sstable.getSSTableMetadata();
 
                 // exclude repaired sstables
@@ -125,7 +126,7 @@ public class PendingAntiCompaction
                 }
 
                 return true;
-            });
+            }).collect(Collectors.toList());
 
             // If there are sstables we'd like to acquire that are currently held by other sessions, we need to bail out. If we
             // didn't bail out here and the other repair sessions we're seeing were to fail, incremental repair behavior would be
