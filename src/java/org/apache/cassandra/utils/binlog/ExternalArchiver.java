@@ -74,7 +74,7 @@ public class ExternalArchiver implements BinLogArchiver
         archiveExisting(path);
         this.path = path;
 
-        executor.submit(() -> {
+        executor.execute(() -> {
            while (shouldContinue)
            {
                DelayFile toArchive = null;

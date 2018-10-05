@@ -41,7 +41,8 @@ public class EnableFullQueryLog extends NodeToolCmd
     @Option(title = "path", name = {"--path"}, description = "Path to store the full query log at. Will have it's contents recursively deleted.")
     private String path = null;
 
-    @Option(title = "archive_command", name = {"--archive-command"}, description = "Path to executable that will handle archiving rolled full query log files")
+    @Option(title = "archive_command", name = {"--archive-command"}, description = "Command that will handle archiving rolled full query log files." +
+                                                                                   " Format is `/path/to/script.sh %path` where %path will be replaced with the file to archive")
     private String archiveCommand = null;
 
     @Override
