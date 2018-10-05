@@ -83,8 +83,10 @@ public interface StorageProxyMBean
      * @param maxQueueWeight How many bytes of query data to queue before blocking or dropping samples
      * @param maxLogSize How many bytes of log data to store before dropping segments. Might not be respected if a log file hasn't rolled so it can be deleted.
      * @param archiveCommand executable archiving the rolled log files,
+     * @param maxArchiveRetries max number of times to retry a failing archive command
+     *
      */
-    public void configureFullQueryLogger(String path, String rollCycle, Boolean blocking, int maxQueueWeight, long maxLogSize, @Nullable String archiveCommand);
+    public void configureFullQueryLogger(String path, String rollCycle, Boolean blocking, int maxQueueWeight, long maxLogSize, @Nullable String archiveCommand, int maxArchiveRetries);
 
     /**
      * Disable the full query logger if it is enabled.

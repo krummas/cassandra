@@ -59,10 +59,12 @@ abstract class BinLogAuditLogger implements IAuditLogger
      * @param blocking Whether the FQL should block if the FQL falls behind or should drop log records
      * @param maxQueueWeight Maximum weight of in memory queue for records waiting to be written to the file before blocking or dropping
      * @param maxLogSize Maximum size of the rolled files to retain on disk before deleting the oldest file
+     * @param archiveCommand the archive command to execute on rolled log files
+     * @param maxArchiveRetries max number of retries of failed archive commands
      */
-    public synchronized void configure(Path path, String rollCycle, boolean blocking, int maxQueueWeight, long maxLogSize, String archiveCommand)
+    public synchronized void configure(Path path, String rollCycle, boolean blocking, int maxQueueWeight, long maxLogSize, String archiveCommand, int maxArchiveRetries)
     {
-        this.configure(path, rollCycle, blocking, maxQueueWeight, maxLogSize, true, archiveCommand);
+        this.configure(path, rollCycle, blocking, maxQueueWeight, maxLogSize, true, archiveCommand, maxArchiveRetries);
     }
 
     /**
@@ -73,8 +75,10 @@ abstract class BinLogAuditLogger implements IAuditLogger
      * @param maxQueueWeight Maximum weight of in memory queue for records waiting to be written to the file before blocking or dropping
      * @param maxLogSize Maximum size of the rolled files to retain on disk before deleting the oldest file
      * @param cleanDirectory Indicates to clean the directory before starting FullQueryLogger or not
+     * @param archiveCommand the archive command to execute on rolled log files
+     * @param maxArchiveRetries max number of retries of failed archive commands
      */
-    public synchronized void configure(Path path, String rollCycle, boolean blocking, int maxQueueWeight, long maxLogSize, boolean cleanDirectory, String archiveCommand)
+    public synchronized void configure(Path path, String rollCycle, boolean blocking, int maxQueueWeight, long maxLogSize, boolean cleanDirectory, String archiveCommand, int maxArchiveRetries)
     {
         Preconditions.checkNotNull(path, "path was null");
         File pathAsFile = path.toFile();
@@ -96,7 +100,7 @@ abstract class BinLogAuditLogger implements IAuditLogger
         }
 
         // create the archiver before cleaning directories - ExternalArchiver will try to archive any existing file.
-        BinLogArchiver archiver = Strings.isNullOrEmpty(archiveCommand) ? new DeletingArchiver(maxLogSize) : new ExternalArchiver(archiveCommand, path);
+        BinLogArchiver archiver = Strings.isNullOrEmpty(archiveCommand) ? new DeletingArchiver(maxLogSize) : new ExternalArchiver(archiveCommand, path, maxArchiveRetries);
         if (cleanDirectory)
         {
             logger.info("Cleaning directory: {} as requested",path);

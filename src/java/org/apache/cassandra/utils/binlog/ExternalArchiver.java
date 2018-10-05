@@ -59,17 +59,22 @@ public class ExternalArchiver implements BinLogArchiver
     private final String archiveCommand;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(new NamedThreadFactory("BinLogArchiver"));
     private final Path path;
+    /**
+     * for testing, to be able to make sure that the command is executed
+     */
+    private final ExecCommand commandExecutor;
     private volatile boolean shouldContinue = true;
 
-    public ExternalArchiver(String archiveCommand, Path path)
+    public ExternalArchiver(String archiveCommand, Path path, int maxArchiveRetries)
     {
-        this(archiveCommand, path, DEFAULT_RETRY_DELAY_MS);
+        this(archiveCommand, path, DEFAULT_RETRY_DELAY_MS, maxArchiveRetries, ExternalArchiver::exec);
     }
 
     @VisibleForTesting
-    ExternalArchiver(String archiveCommand, Path path, long retryDelayMs)
+    ExternalArchiver(String archiveCommand, Path path, long retryDelayMs, int maxRetries, ExecCommand command)
     {
         this.archiveCommand = archiveCommand;
+        this.commandExecutor = command;
         // if there are any .cq4 files in path, archive them on startup - this handles any leftover files from crashes etc
         archiveExisting(path);
         this.path = path;
@@ -88,8 +93,16 @@ public class ExternalArchiver implements BinLogArchiver
                {
                    if (toArchive != null)
                    {
-                       logger.error("Got error archiving {}", toArchive.file, t);
-                       archiveQueue.add(new DelayFile(toArchive.file, retryDelayMs, TimeUnit.MILLISECONDS));
+
+                       if (toArchive.retries < maxRetries)
+                       {
+                           logger.error("Got error archiving {}, retrying in {} minutes", toArchive.file, TimeUnit.MINUTES.convert(retryDelayMs, TimeUnit.MILLISECONDS), t);
+                           archiveQueue.add(new DelayFile(toArchive.file, retryDelayMs, TimeUnit.MILLISECONDS, toArchive.retries + 1));
+                       }
+                       else
+                       {
+                           logger.error("Max retries {} reached for {}, leaving on disk", toArchive.retries, toArchive.file, t);
+                       }
                    }
                    else
                        logger.error("Got error waiting for files to archive", t);
@@ -102,7 +115,7 @@ public class ExternalArchiver implements BinLogArchiver
     public void onReleased(int cycle, File file)
     {
         logger.debug("BinLog file released: {}", file);
-        archiveQueue.add(new DelayFile(file, 0, TimeUnit.MILLISECONDS));
+        archiveQueue.add(new DelayFile(file, 0, TimeUnit.MILLISECONDS, 0));
     }
 
     /**
@@ -152,10 +165,10 @@ public class ExternalArchiver implements BinLogArchiver
     {
         String cmd = PATH.matcher(archiveCommand).replaceAll(Matcher.quoteReplacement(f.getAbsolutePath()));
         logger.debug("Executing archive command: {}", cmd);
-        exec(cmd);
+        commandExecutor.exec(cmd);
     }
 
-    private void exec(String command) throws IOException
+    static void exec(String command) throws IOException
     {
         ProcessBuilder pb = new ProcessBuilder(command.split(" "));
         pb.redirectErrorStream(true);
@@ -166,11 +179,13 @@ public class ExternalArchiver implements BinLogArchiver
     {
         public final File file;
         private final long delayTime;
+        private final int retries;
 
-        public DelayFile(File file, long delay, TimeUnit delayUnit)
+        public DelayFile(File file, long delay, TimeUnit delayUnit, int retries)
         {
             this.file = file;
             this.delayTime = System.currentTimeMillis() + TimeUnit.MILLISECONDS.convert(delay, delayUnit);
+            this.retries = retries;
         }
         public long getDelay(TimeUnit unit)
         {
@@ -182,5 +197,10 @@ public class ExternalArchiver implements BinLogArchiver
             DelayFile other = (DelayFile)o;
             return Longs.compare(delayTime, other.delayTime);
         }
+    }
+
+    interface ExecCommand
+    {
+        public void exec(String command) throws IOException;
     }
 }

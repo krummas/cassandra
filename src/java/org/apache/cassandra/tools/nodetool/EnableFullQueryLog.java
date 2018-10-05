@@ -45,9 +45,12 @@ public class EnableFullQueryLog extends NodeToolCmd
                                                                                    " Format is `/path/to/script.sh %path` where %path will be replaced with the file to archive")
     private String archiveCommand = null;
 
+    @Option(title = "archive_command", name = {"--max-archive-retries"}, description = "Max number of archive retries.")
+    private int archiveRetries = Integer.MIN_VALUE;
+
     @Override
     public void execute(NodeProbe probe)
     {
-        probe.getSpProxy().configureFullQueryLogger(path, rollCycle, blocking, maxQueueWeight, maxLogSize, archiveCommand);
+        probe.getSpProxy().configureFullQueryLogger(path, rollCycle, blocking, maxQueueWeight, maxLogSize, archiveCommand, archiveRetries);
     }
 }

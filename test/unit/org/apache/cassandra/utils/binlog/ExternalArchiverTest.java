@@ -26,13 +26,14 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Sets;
 import org.junit.Test;
 
 import net.openhft.chronicle.queue.impl.single.SingleChronicleQueue;
 import org.apache.cassandra.utils.Pair;
-import org.apache.cassandra.utils.binlog.ExternalArchiver;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -50,7 +51,7 @@ public class ExternalArchiverTest
         File logfileToArchive = Files.createTempFile(logdirectory, "logfile", "xyz").toFile();
         Files.write(logfileToArchive.toPath(), "content".getBytes());
 
-        ExternalArchiver ea = new ExternalArchiver(script+" %path", null);
+        ExternalArchiver ea = new ExternalArchiver(script+" %path", null, 10);
         ea.onReleased(1, logfileToArchive);
         while (logfileToArchive.exists())
         {
@@ -80,7 +81,7 @@ public class ExternalArchiverTest
             existingFiles.add(logfileToArchive);
         }
 
-        ExternalArchiver ea = new ExternalArchiver(script + " %path", dir);
+        ExternalArchiver ea = new ExternalArchiver(script + " %path", dir, 10);
         boolean allGone = false;
         while (!allGone)
         {
@@ -109,7 +110,7 @@ public class ExternalArchiverTest
         String script = s.left;
         String moveDir = s.right;
         Path dir = Files.createTempDirectory("archive");
-        ExternalArchiver ea = new ExternalArchiver(script + " %path", dir);
+        ExternalArchiver ea = new ExternalArchiver(script + " %path", dir, 10);
         List<File> existingFiles = new ArrayList<>();
         for (int i = 0; i < 10; i++)
         {
@@ -129,24 +130,103 @@ public class ExternalArchiverTest
         }
     }
 
+    /**
+     * Make sure retries work
+     * 1. create a script that will fail two times before executing the command
+     * 2. create an ExternalArchiver that retries two times (this means we execute the script 3 times, meaning the last one will be successful)
+     * 3. make sure the file is on disk until the script has been executed 3 times
+     * 4. make sure the file is gone and that the command was executed successfully
+     */
     @Test
     public void testRetries() throws IOException, InterruptedException
     {
-        Pair<String, String> s = createFailingScript();
+        Pair<String, String> s = createFailingScript(2);
         String script = s.left;
         String moveDir = s.right;
         Path logdirectory = Files.createTempDirectory("logdirectory");
         File logfileToArchive = Files.createTempFile(logdirectory, "logfile", "xyz").toFile();
         Files.write(logfileToArchive.toPath(), "content".getBytes());
-        ExternalArchiver ea = new ExternalArchiver(script + " %path", null, 1000);
+        AtomicInteger tryCounter = new AtomicInteger();
+        AtomicBoolean success = new AtomicBoolean();
+        ExternalArchiver ea = new ExternalArchiver(script + " %path", null, 1000, 2, (cmd) ->
+        {
+            tryCounter.incrementAndGet();
+            ExternalArchiver.exec(cmd);
+            success.set(true);
+        });
         ea.onReleased(0, logfileToArchive);
-        Thread.sleep(500);
-        assertTrue(logfileToArchive.exists());
-        Thread.sleep(2000);
+        while (tryCounter.get() < 2) // while we have only executed this 0 or 1 times, the file should still be on disk
+        {
+            Thread.sleep(100);
+            assertTrue(logfileToArchive.exists());
+        }
+
+        while (!success.get())
+            Thread.sleep(100);
+
+        // there will be 3 attempts in total, 2 failing ones, then the successful one:
+        assertEquals(3, tryCounter.get());
         assertFalse(logfileToArchive.exists());
         File movedFile = new File(moveDir, logfileToArchive.getName());
         assertTrue(movedFile.exists());
+        ea.stop();
     }
+
+
+    /**
+     * Makes sure that max retries is honored
+     *
+     * 1. create a script that will fail 3 times before actually executing the command
+     * 2. create an external archiver that retries 2 times (this means that the script will get executed 3 times)
+     * 3. make sure the file is still on disk and that we have not successfully executed the script
+     *
+     */
+    @Test
+    public void testMaxRetries() throws IOException, InterruptedException
+    {
+        Pair<String, String> s = createFailingScript(3);
+        String script = s.left;
+        String moveDir = s.right;
+        Path logdirectory = Files.createTempDirectory("logdirectory");
+        File logfileToArchive = Files.createTempFile(logdirectory, "logfile", "xyz").toFile();
+        Files.write(logfileToArchive.toPath(), "content".getBytes());
+
+        AtomicInteger tryCounter = new AtomicInteger();
+        AtomicBoolean success = new AtomicBoolean();
+        ExternalArchiver ea = new ExternalArchiver(script + " %path", null, 1000, 2, (cmd) ->
+        {
+            try
+            {
+                ExternalArchiver.exec(cmd);
+                success.set(true);
+            }
+            catch (Throwable t)
+            {
+                tryCounter.incrementAndGet();
+                throw t;
+            }
+        });
+        ea.onReleased(0, logfileToArchive);
+        while (tryCounter.get() < 3)
+            Thread.sleep(500);
+        assertTrue(logfileToArchive.exists());
+        // and the file should not get moved:
+        Thread.sleep(5000);
+        assertTrue(logfileToArchive.exists());
+        assertFalse(success.get());
+        File [] fs = new File(moveDir).listFiles(f ->
+                                                 {
+                                                     if (f.getName().startsWith("file."))
+                                                     {
+                                                         f.deleteOnExit();
+                                                         return true;
+                                                     }
+                                                     throw new AssertionError("There should be no other files in the directory");
+                                                 });
+        assertEquals(3, fs.length); // maxRetries + the first try
+        ea.stop();
+    }
+
 
     private Pair<String, String> createScript() throws IOException
     {
@@ -161,7 +241,7 @@ public class ExternalArchiverTest
         return Pair.create(f.getAbsolutePath(), dir.getAbsolutePath());
     }
 
-    private Pair<String, String> createFailingScript() throws IOException
+    private Pair<String, String> createFailingScript(int failures) throws IOException
     {
         File f = Files.createTempFile("script", "", PosixFilePermissions.asFileAttribute(Sets.newHashSet(PosixFilePermission.OWNER_WRITE,
                                                                                                          PosixFilePermission.OWNER_READ,
@@ -169,18 +249,20 @@ public class ExternalArchiverTest
         f.deleteOnExit();
         File dir = Files.createTempDirectory("archive").toFile();
         dir.deleteOnExit();
-        // first time this script executes it will find that dir is empty, copy the file in to dir and exit with error status code to trigger a retry
-        // second time it will find that dir is not empty and just delete the old log file
-        String script = "#!/bin/sh%n"+
+        // this script counts files in dir.getAbsolutePath, then if there are more than failures files in there, it moves the actual file
+        String script = "#!/bin/bash%n" +
                         "DIR=%s%n" +
-                        "if [ $(ls -A $DIR) ]; then%n" +
-                        "   rm $1%n"+
-                        "else%n"+
-                        "   cp $1 $DIR%n"+
-                        "   exit 1%n"+
+                        "shopt -s nullglob%n" +
+                        "numfiles=($DIR/*)%n" +
+                        "numfiles=${#numfiles[@]}%n" +
+                        "if (( $numfiles < %d )); then%n" +
+                        "    mktemp $DIR/file.XXXXX%n" +
+                        "    exit 1%n" +
+                        "else%n" +
+                        "    mv $1 $DIR%n"+
                         "fi%n";
 
-        Files.write(f.toPath(), String.format(script, dir.getAbsolutePath()).getBytes());
+        Files.write(f.toPath(), String.format(script, dir.getAbsolutePath(), failures).getBytes());
         return Pair.create(f.getAbsolutePath(), dir.getAbsolutePath());
     }
 }

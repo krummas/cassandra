@@ -45,4 +45,9 @@ public class BinLogOptions
      * Maximum size of the rolled files to retain on disk before deleting the oldest file. For advanced configurations.
      */
     public long max_log_size = 16L * 1024L * 1024L * 1024L;
+
+    /**
+     * Limit the number of times to retry a command.
+     */
+    public int max_archive_retries = 10;
 }
