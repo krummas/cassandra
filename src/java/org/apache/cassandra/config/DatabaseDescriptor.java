@@ -2180,6 +2180,16 @@ public class DatabaseDescriptor
         return conf.commitlog_total_space_in_mb;
     }
 
+    public static boolean getInvalidateKeyCacheOnCompaction()
+    {
+        return conf.invalidate_cache_on_compaction;
+    }
+
+    public static void setInvalidateKeyCacheOnCompaction(boolean invalidateOnCompaction)
+    {
+        conf.invalidate_cache_on_compaction = invalidateOnCompaction;
+    }
+
     public static int getSSTablePreempiveOpenIntervalInMB()
     {
         return FBUtilities.isWindows ? -1 : conf.sstable_preemptive_open_interval_in_mb;

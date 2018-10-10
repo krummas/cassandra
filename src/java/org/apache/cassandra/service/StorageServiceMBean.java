@@ -556,6 +556,12 @@ public interface StorageServiceMBean extends NotificationEmitter
     public int getConcurrentValidators();
     public void setConcurrentValidators(int value);
 
+    public int getSSTablePreempiveOpenIntervalInMB();
+    public void setSSTablePreempiveOpenIntervalInMB(int intervalInMB);
+
+    public boolean getInvalidateKeyCacheOnCompaction();
+    public void setInvalidateKeyCacheOnCompaction(boolean invalidateKeyCacheOnCompaction);
+
     public int getConcurrentViewBuilders();
     public void setConcurrentViewBuilders(int value);
 
