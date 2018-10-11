@@ -42,10 +42,10 @@ public class EnableFullQueryLog extends NodeToolCmd
     private String path = null;
 
     @Option(title = "archive_command", name = {"--archive-command"}, description = "Command that will handle archiving rolled full query log files." +
-                                                                                   " Format is `/path/to/script.sh %path` where %path will be replaced with the file to archive")
+                                                                                   " Format is \"/path/to/script.sh %path\" where %path will be replaced with the file to archive")
     private String archiveCommand = null;
 
-    @Option(title = "archive_command", name = {"--max-archive-retries"}, description = "Max number of archive retries.")
+    @Option(title = "archive_retries", name = {"--max-archive-retries"}, description = "Max number of archive retries.")
     private int archiveRetries = Integer.MIN_VALUE;
 
     @Override
