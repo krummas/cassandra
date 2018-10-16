@@ -33,7 +33,7 @@ j8_par_executor: &j8_par_executor
 
 j8_seq_executor: &j8_seq_executor
   executor:
-    #name: java8-executor
+    name: java8-executor
     exec_resource_class: xlarge
   parallelism: 1 # sequential, single container tests: no parallelism benefits
 
