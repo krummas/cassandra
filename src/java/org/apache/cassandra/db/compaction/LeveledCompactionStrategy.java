@@ -360,6 +360,11 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy
         manifest.add(added);
     }
 
+    public void addSSTables(Iterable<SSTableReader> sstables)
+    {
+        manifest.addSSTables(sstables);
+    }
+
     @Override
     public void removeSSTable(SSTableReader sstable)
     {

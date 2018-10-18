@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableSet;
@@ -219,36 +220,17 @@ public class LeveledManifest
         if (logger.isTraceEnabled())
             logger.trace("Adding [{}]", toString(added));
 
-        for (SSTableReader ssTableReader : added)
-            add(ssTableReader);
+        addSSTables(added);
         lastCompactedKeys[minLevel] = SSTableReader.sstableOrdering.max(added).last;
     }
 
+    /**
+     * This should _only_ be called before this manifest can serve out any compaction candidates
+     */
     public synchronized void repairOverlappingSSTables(int level)
     {
-        SSTableReader previous = null;
         Collections.sort(generations[level], SSTableReader.sstableComparator);
-        List<SSTableReader> outOfOrderSSTables = new ArrayList<>();
-        for (SSTableReader current : generations[level])
-        {
-            if (previous != null && current.first.compareTo(previous.last) <= 0)
-            {
-                logger.warn("At level {}, {} [{}, {}] overlaps {} [{}, {}].  This could be caused by a bug in Cassandra 1.1.0 .. 1.1.3 or due to the fact that you have dropped sstables from another node into the data directory. " +
-                            "Sending back to L0.  If you didn't drop in sstables, and have not yet run scrub, you should do so since you may also have rows out-of-order within an sstable",
-                            level, previous, previous.first, previous.last, current, current.first, current.last);
-                outOfOrderSSTables.add(current);
-            }
-            else
-            {
-                previous = current;
-            }
-        }
-
-        if (!outOfOrderSSTables.isEmpty())
-        {
-            for (SSTableReader sstable : outOfOrderSSTables)
-                sendBackToL0(sstable);
-        }
+        sendOverlappingToL0(generations[level], true);
     }
 
     /**
@@ -266,29 +248,219 @@ public class LeveledManifest
         copyLevel.add(sstable);
         Collections.sort(copyLevel, SSTableReader.sstableComparator);
 
-        SSTableReader previous = null;
-        for (SSTableReader current : copyLevel)
-        {
-            if (previous != null && current.first.compareTo(previous.last) <= 0)
-                return false;
-            previous = current;
-        }
-        return true;
+        return !hasOverlaps(copyLevel);
     }
 
-    private synchronized void sendBackToL0(SSTableReader sstable)
+    private boolean hasOverlaps(Iterable<SSTableReader> sstables)
     {
-        remove(sstable);
+        SSTableReader previous = null;
+        for (SSTableReader current : sstables)
+        {
+            if (previous != null && current.first.compareTo(previous.last) <= 0)
+                return true;
+            previous = current;
+        }
+        return false;
+    }
+
+    /**
+     * sends overlapping sstables to L0, removeOld should be true if the sortedSSTables have already
+     * been added to the generations
+     *
+     * the sstables need to be sorted and all have the same sstable level
+     */
+    private List<SSTableReader> sendOverlappingToL0(List<SSTableReader> sortedSSTables, boolean removeOld)
+    {
+        if (sortedSSTables.isEmpty())
+            return Collections.emptyList();
+        int level = sortedSSTables.get(0).getSSTableLevel();
+        Preconditions.checkArgument(sortedSSTables.stream().allMatch(s -> s.getSSTableLevel() == level), "All sstables should have the same level");
+
+        List<SSTableReader> results = new ArrayList<>(sortedSSTables.size());
+        List<SSTableReader> overlapping = new ArrayList<>();
+        SSTableReader previous = null;
+        for (SSTableReader current : sortedSSTables)
+        {
+            if (previous != null && current.first.compareTo(previous.last) <= 0)
+            {
+                overlapping.add(current);
+            }
+            else
+            {
+                results.add(current);
+                previous = current;
+            }
+        }
+
+        for (SSTableReader overlap : overlapping)
+        {
+            if (removeOld)
+                remove(overlap);
+            mutateToLevel0(overlap);
+            add(overlap);
+        }
+        return results;
+    }
+
+    /**
+     * Add sstables to the manifest
+     *
+     * Groups the sstables by level, adds L0 sstables directly
+     *
+     * Adding to other levels rules;
+     * * No overlaps within a level.
+     * * Pre-existing sstables level will not change, otherwise we could just add all, sort and send any overlapping back
+     *   to L0, but sstables have to be marked compacting when getting sent to L0
+     *
+     *  Approach is to first make sure that none of the new sstables overlap, this can happen on startup or if someone
+     *  runs nodetool import with sstables that overlap.
+     *
+     *  Then, we sort the new sstables and find where we should insert the first one (the one with the smallest first token)
+     *  and then check that adding it there will not cause overlap with the adjacent sstables. For the rest of the sstables
+     *  we linearly scan the current level until we find the correct spot for it, this is done since when finishing
+     *  compactions the new sstables are all adjacent to eachother and will get added in a 'gap' in the current leveling,
+     *  so they will all get added to the same index in the level.
+     *
+     */
+    public synchronized void addSSTables(Iterable<SSTableReader> sstables)
+    {
+        Map<Integer, List<SSTableReader>> groupedSSTables = groupSSTablesByLevel(sstables);
+        for (Map.Entry<Integer, List<SSTableReader>> sstableGroup : groupedSSTables.entrySet())
+        {
+            int level = sstableGroup.getKey();
+            List<SSTableReader> newLevelSSTables = sstableGroup.getValue();
+            if (newLevelSSTables.isEmpty())
+                continue;
+
+            if (level == 0)
+            {
+                newLevelSSTables.forEach(this::add);
+                continue;
+            }
+
+            newLevelSSTables.sort(SSTableReader.sstableComparator);
+            newLevelSSTables = sendOverlappingToL0(newLevelSSTables, false);
+
+            List<SSTableReader> currentLevel = getLevel(level);
+            currentLevel.sort(SSTableReader.sstableComparator);
+            assert !hasOverlaps(currentLevel);
+
+            List<SSTableReader> toAdd = new ArrayList<>(newLevelSSTables.size());
+
+            // initialize to -1 to make findInsertIdx do a binary search for the starting point
+            int insertIdx = -1;
+            for (SSTableReader sstable : newLevelSSTables)
+            {
+                insertIdx = findInsertIdx(insertIdx, sstable, currentLevel);
+                if (adjacentOK(currentLevel, insertIdx, sstable))
+                    toAdd.add(sstable);
+                else
+                {
+                    mutateToLevel0(sstable);
+                    add(sstable);
+                }
+
+            }
+
+            generations[level].addAll(toAdd);
+            generations[level].sort(SSTableReader.sstableComparator);
+            assert !hasOverlaps(generations[level]);
+        }
+    }
+
+    /**
+     * Finds the insert index for sstable in sstables
+     *
+     * If startIdx == -1 we will binary search the index, then subsequent calls to this method
+     * can pass in the old startIdx to avoid additional binary searches - this uses the fact that
+     * finishing compactions will create sstables that are adjacent to eachother, and the insert idx
+     * for all those sstables will be the same - no need to re-search every time.
+     */
+    @VisibleForTesting
+    static int findInsertIdx(int startIdx, SSTableReader sstable, List<SSTableReader> sstables)
+    {
+        if (startIdx < 0)
+        {
+            startIdx = Collections.binarySearch(sstables, sstable, SSTableReader.sstableComparator);
+            if (startIdx >= 0) // this means the first token is already in sstables, adjacentOK will return false and the sstable gets sent to L0
+                return startIdx;
+            startIdx = -startIdx - 1;
+        }
+        while (true)
+        {
+            if (startIdx >= sstables.size())
+                return startIdx;
+            if (sstable.first.compareTo(sstables.get(startIdx).first) <= 0)
+                return startIdx;
+            startIdx++;
+        }
+    }
+
+    /**
+     * We know that the level itself does not contain any overlaps
+     *
+     * now we have 3 options:
+     * 1. first key is smaller than the first key of the current level
+     *    - make sure that the last key of the new sstable is smaller than the level first key
+     * 2. first key is bigger than the first key of the last sstable in the level
+     *    - make sure the last key of the last sstable is smaller than the first key of the new sstable
+     * 3. the sstable is added at some other place in the level
+     *    - say we have a 5 sstables in the level:
+     *      [0, 10], [20, 30], [40, 50], [60, 70], [80, 90]
+     *      adding sstable [12, 15] -> index = 1
+     *      now we need to check that it will not cause overlap with the sstables at position 0 (sstable0) and 1 (sstable1)
+     *      sstable0.last < newsstable.first && sstable1.first > newsstable.last => no overlap
+     */
+    @VisibleForTesting
+    static boolean adjacentOK(List<SSTableReader> currentLevel, int index, SSTableReader sstable)
+    {
+        if (currentLevel.isEmpty())
+            return true;
+        // add first - the last key of the sstable to add must be strictly smaller than the first key in the level
+        if (index == 0)
+            return currentLevel.get(0).first.compareTo(sstable.last) > 0;
+        // add last - the first key of the new sstable must be strictly smaller than the last key in the level
+        if (index == currentLevel.size()) // last in list
+            return currentLevel.get(currentLevel.size() - 1).last.compareTo(sstable.first) < 0;
+
+        SSTableReader before = currentLevel.get(index - 1);
+        SSTableReader after = currentLevel.get(index);
+
+        if (before.last.compareTo(sstable.first) >= 0)
+            return false;
+        return after.first.compareTo(sstable.last) > 0;
+    }
+
+    private void mutateToLevel0(SSTableReader sstable)
+    {
         try
         {
             sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 0);
             sstable.reloadSSTableMetadata();
-            add(sstable);
         }
         catch (IOException e)
         {
-            throw new RuntimeException("Could not reload sstable meta data", e);
+            throw new RuntimeException("Could not mutate metadata", e);
         }
+    }
+
+    private Map<Integer, List<SSTableReader>> groupSSTablesByLevel(Iterable<SSTableReader> sstables)
+    {
+        List<SSTableReader> [] groupArray = new List[MAX_LEVEL_COUNT];
+        for (SSTableReader sstable : sstables)
+        {
+            int level = sstable.getSSTableLevel();
+            if (groupArray[level] == null)
+                groupArray[level] = new ArrayList<>();
+            groupArray[level].add(sstable);
+        }
+        Map<Integer, List<SSTableReader>> groups = new HashMap<>();
+        for (int i = 0; i < groupArray.length; i++)
+        {
+            if (groupArray[i] != null)
+                groups.put(i, groupArray[i]);
+        }
+        return groups;
     }
 
     private String toString(Collection<SSTableReader> sstables)

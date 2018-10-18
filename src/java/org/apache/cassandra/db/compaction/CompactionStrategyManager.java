@@ -26,7 +26,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -302,11 +304,10 @@ public class CompactionStrategyManager implements INotificationConsumer
         writeLock.lock();
         try
         {
-            for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
-            {
-                if (sstable.openReason != SSTableReader.OpenReason.EARLY)
-                    compactionStrategyFor(sstable).addSSTable(sstable);
-            }
+            Map<AbstractCompactionStrategy, List<SSTableReader>> sstablesGrouped = groupByStrategy(cfs.getSSTables(SSTableSet.CANONICAL));
+            for (Map.Entry<AbstractCompactionStrategy, List<SSTableReader>> entry : sstablesGrouped.entrySet())
+                entry.getKey().addSSTables(entry.getValue());
+
             holders.forEach(AbstractStrategyHolder::startup);
             shouldDefragment = repaired.first().shouldDefragment();
             supportsEarlyOpen = repaired.first().supportsEarlyOpen();
@@ -319,6 +320,17 @@ public class CompactionStrategyManager implements INotificationConsumer
 
         if (repaired.first().logAll)
             compactionLogger.enable();
+    }
+
+    private Map<AbstractCompactionStrategy, List<SSTableReader>> groupByStrategy(Iterable<SSTableReader> sstables)
+    {
+        IdentityHashMap<AbstractCompactionStrategy, List<SSTableReader>> sstablesGrouped = new IdentityHashMap<>();
+        for (SSTableReader sstable : sstables)
+        {
+            AbstractCompactionStrategy strategy = compactionStrategyFor(sstable);
+            sstablesGrouped.computeIfAbsent(strategy, (k) -> new ArrayList<>()).add(sstable);
+        }
+        return sstablesGrouped;
     }
 
     /**
@@ -614,8 +626,9 @@ public class CompactionStrategyManager implements INotificationConsumer
         readLock.lock();
         try
         {
-            for (SSTableReader sstable : added)
-                compactionStrategyFor(sstable).addSSTable(sstable);
+            Map<AbstractCompactionStrategy, List<SSTableReader>> grouped = groupByStrategy(added);
+            for (Map.Entry<AbstractCompactionStrategy, List<SSTableReader>> entry : grouped.entrySet())
+                entry.getKey().addSSTables(entry.getValue());
         }
         finally
         {
