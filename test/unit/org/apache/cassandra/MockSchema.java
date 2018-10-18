@@ -69,6 +69,11 @@ public class MockSchema
         return new Memtable(cfs.metadata);
     }
 
+    public static SSTableReader sstableWithLevel(int generation, long first, long last, int level, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, 0, false, first, last, level, cfs);
+    }
+
     public static SSTableReader sstable(int generation, ColumnFamilyStore cfs)
     {
         return sstable(generation, false, cfs);
@@ -85,6 +90,16 @@ public class MockSchema
     }
 
     public static SSTableReader sstable(int generation, int size, boolean keepRef, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, size, keepRef, 0, cfs);
+    }
+
+    public static SSTableReader sstable(int generation, int size, boolean keepRef, int level, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, size, keepRef, generation, generation, level, cfs);
+    }
+
+    public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, int level, ColumnFamilyStore cfs)
     {
         Descriptor descriptor = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(),
                                                cfs.keyspace.getName(),
@@ -119,12 +134,15 @@ public class MockSchema
         }
         SerializationHeader header = SerializationHeader.make(cfs.metadata, Collections.emptyList());
         StatsMetadata metadata = (StatsMetadata) new MetadataCollector(cfs.metadata.comparator)
+                                                 .sstableLevel(level)
                                                  .finalizeMetadata(cfs.metadata.partitioner.getClass().getCanonicalName(), 0.01f, -1, header)
                                                  .get(MetadataType.STATS);
         SSTableReader reader = SSTableReader.internalOpen(descriptor, components, cfs.metadata,
                                                           segmentedFile.sharedCopy(), segmentedFile.sharedCopy(), indexSummary.sharedCopy(),
                                                           new AlwaysPresentFilter(), 1L, metadata, SSTableReader.OpenReason.NORMAL, header);
-        reader.first = reader.last = readerBounds(generation);
+
+        reader.first = readerBounds(firstToken);
+        reader.last = readerBounds(lastToken);
         if (!keepRef)
             reader.selfRef().release();
         return reader;
@@ -154,7 +172,7 @@ public class MockSchema
         return metadata;
     }
 
-    public static BufferDecoratedKey readerBounds(int generation)
+    public static BufferDecoratedKey readerBounds(long generation)
     {
         return new BufferDecoratedKey(new Murmur3Partitioner.LongToken(generation), ByteBufferUtil.EMPTY_BYTE_BUFFER);
     }

@@ -21,7 +21,7 @@ package org.apache.cassandra.db.compaction;
 import java.util.*;
 import java.util.concurrent.Callable;
 
-import com.google.common.collect.Iterables;
+import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,16 +126,27 @@ public class CompactionStrategyManager implements INotificationConsumer
         isActive = false;
     }
 
-
-    private void startup()
+    @VisibleForTesting
+    void startup()
     {
-        for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
+        Map<AbstractCompactionStrategy, Collection<SSTableReader>> groupedSSTables = groupSSTablesByStrategy(cfs.getSSTables(SSTableSet.CANONICAL));
+        for (Map.Entry<AbstractCompactionStrategy, Collection<SSTableReader>> entry : groupedSSTables.entrySet())
         {
-            if (sstable.openReason != SSTableReader.OpenReason.EARLY)
-                getCompactionStrategyFor(sstable).addSSTable(sstable);
+            AbstractCompactionStrategy strategy = entry.getKey();
+            Collection<SSTableReader> sstables = entry.getValue();
+            strategy.addSSTables(sstables);
         }
         repaired.startup();
         unrepaired.startup();
+    }
+
+    @VisibleForTesting
+    Map<AbstractCompactionStrategy, Collection<SSTableReader>> groupSSTablesByStrategy(Iterable<SSTableReader> sstables)
+    {
+        IdentityHashMap<AbstractCompactionStrategy, Collection<SSTableReader>> identities = new IdentityHashMap<>();
+        for (SSTableReader sstable : sstables)
+            identities.computeIfAbsent(getCompactionStrategyFor(sstable), (k) -> new ArrayList<>()).add(sstable);
+        return identities;
     }
 
     /**
@@ -288,8 +299,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             }
             else
             {
-                for (SSTableReader sstable : repairedAdded)
-                    repaired.addSSTable(sstable);
+                repaired.addSSTables(repairedAdded);
             }
 
             if (!unrepairedRemoved.isEmpty())
@@ -298,8 +308,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             }
             else
             {
-                for (SSTableReader sstable : unrepairedAdded)
-                    unrepaired.addSSTable(sstable);
+                unrepaired.addSSTables(unrepairedAdded);
             }
         }
         else if (notification instanceof SSTableRepairStatusChanged)

@@ -313,11 +313,16 @@ public abstract class AbstractCompactionStrategy
     {
         for (SSTableReader remove : removed)
             removeSSTable(remove);
-        for (SSTableReader add : added)
-            addSSTable(add);
+        addSSTables(added);
     }
 
     public abstract void addSSTable(SSTableReader added);
+
+    public synchronized void addSSTables(Iterable<SSTableReader> added)
+    {
+        for (SSTableReader sstable : added)
+            addSSTable(sstable);
+    }
 
     public abstract void removeSSTable(SSTableReader sstable);
 
