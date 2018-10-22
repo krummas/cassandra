@@ -70,15 +70,12 @@ public class StreamingTombstoneHistogramBuilder
     // voluntarily give up resolution for speed
     private final int roundSeconds;
 
-    public StreamingTombstoneHistogramBuilder(int maxBinSize, int maxSpoolSize, int roundSeconds)
+    public StreamingTombstoneHistogramBuilder(int maxBinSize, int roundSeconds, Spool spool)
     {
         this.roundSeconds = roundSeconds;
         this.bin = new DataHolder(maxBinSize + 1, roundSeconds);
         distances = new DistanceHolder(maxBinSize);
-
-        //for spool we need power-of-two cells
-        maxSpoolSize = maxSpoolSize == 0 ? 0 : IntMath.pow(2, IntMath.log2(maxSpoolSize, RoundingMode.CEILING));
-        spool = new Spool(maxSpoolSize);
+        this.spool = spool;
     }
 
     /**
@@ -512,7 +509,14 @@ public class StreamingTombstoneHistogramBuilder
         ACCUMULATED
     }
 
-    static class Spool
+    public static Spool createSpool(int maxSpoolSize)
+    {
+        //for spool we need power-of-two cells
+        maxSpoolSize = maxSpoolSize == 0 ? 0 : IntMath.pow(2, IntMath.log2(maxSpoolSize, RoundingMode.CEILING));
+        return new Spool(maxSpoolSize);
+    }
+
+    public static class Spool
     {
         // odd elements - points, even elements - values
         final int[] map;
@@ -592,6 +596,16 @@ public class StreamingTombstoneHistogramBuilder
                 return true;
             }
             return false;
+        }
+
+        public boolean isCleared()
+        {
+            if (size > 0)
+                return false;
+            for (int i = 0; i < map.length; i++)
+                if (map[i] != -1)
+                    return false;
+            return true;
         }
     }
 

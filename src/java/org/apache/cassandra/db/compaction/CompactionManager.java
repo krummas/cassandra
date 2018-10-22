@@ -35,6 +35,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.*;
 
+import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.apache.cassandra.locator.Replica;
 import org.slf4j.Logger;
@@ -80,6 +81,7 @@ import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Refs;
+import org.apache.cassandra.utils.streamhist.StreamingTombstoneHistogramBuilder;
 
 import static java.util.Collections.singleton;
 import static org.apache.cassandra.service.ActiveRepairService.NO_PENDING_REPAIR;
@@ -1422,7 +1424,8 @@ public class CompactionManager implements CompactionManagerMBean
                                     pendingRepair,
                                     isTransient,
                                     cfs.metadata,
-                                    new MetadataCollector(sstables, cfs.metadata().comparator, minLevel),
+                                    new MetadataCollector(sstables, cfs.metadata().comparator, minLevel,
+                                                          StreamingTombstoneHistogramBuilder.createSpool(SSTable.TOMBSTONE_HISTOGRAM_SPOOL_SIZE)),
                                     SerializationHeader.make(cfs.metadata(), sstables),
                                     cfs.indexManager.listIndexes(),
                                     txn);

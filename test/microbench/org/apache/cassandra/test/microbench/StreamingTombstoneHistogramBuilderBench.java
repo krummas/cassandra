@@ -69,7 +69,8 @@ public class StreamingTombstoneHistogramBuilderBench
     @Benchmark
     public void test()
     {
-        StreamingTombstoneHistogramBuilder histogram = new StreamingTombstoneHistogramBuilder(100, b_spoolSize, 1);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(b_spoolSize);
+        StreamingTombstoneHistogramBuilder histogram = new StreamingTombstoneHistogramBuilder(100, 1, spool);
         int[] data = selectWorkload(a_workLoad);
 
         for (int time : data)

@@ -110,7 +110,7 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
                 pendingRepair,
                 isTransient,
                 cfs.metadata,
-                new MetadataCollector(txn.originals(), cfs.metadata().comparator, currentLevel),
+                new MetadataCollector(txn.originals(), cfs.metadata().comparator, currentLevel, reusableSpool),
                 SerializationHeader.make(cfs.metadata(), txn.originals()),
                 cfs.indexManager.listIndexes(),
                 txn));

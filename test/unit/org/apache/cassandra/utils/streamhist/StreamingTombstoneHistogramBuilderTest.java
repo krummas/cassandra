@@ -25,6 +25,7 @@ import java.util.stream.IntStream;
 
 import org.junit.Test;
 
+import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 
@@ -35,7 +36,8 @@ public class StreamingTombstoneHistogramBuilderTest
     @Test
     public void testFunction() throws Exception
     {
-        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 0, 1);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(0);
+        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 1, spool);
         int[] samples = new int[]{ 23, 19, 10, 16, 36, 2, 9, 32, 30, 45 };
 
         // add 7 points to histogram of 5 bins
@@ -70,7 +72,8 @@ public class StreamingTombstoneHistogramBuilderTest
     @Test
     public void testSerDe() throws Exception
     {
-        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 0, 1);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(0);
+        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 1, spool);
         int[] samples = new int[]{ 23, 19, 10, 16, 36, 2, 9 };
 
         // add 7 points to histogram of 5 bins
@@ -106,7 +109,8 @@ public class StreamingTombstoneHistogramBuilderTest
     @Test
     public void testNumericTypes() throws Exception
     {
-        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 0, 1);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(0);
+        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 1, spool);
 
         builder.update(2);
         builder.update(2);
@@ -132,7 +136,8 @@ public class StreamingTombstoneHistogramBuilderTest
     @Test
     public void testOverflow() throws Exception
     {
-        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 10, 1);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(10);
+        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 1, spool);
         int[] samples = new int[]{ 23, 19, 10, 16, 36, 2, 9, 32, 30, 45, 31,
                                    32, 32, 33, 34, 35, 70, 78, 80, 90, 100,
                                    32, 32, 33, 34, 35, 70, 78, 80, 90, 100
@@ -150,7 +155,8 @@ public class StreamingTombstoneHistogramBuilderTest
     @Test
     public void testRounding() throws Exception
     {
-        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 10, 60);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(10);
+        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 60, spool);
         int[] samples = new int[]{ 59, 60, 119, 180, 181, 300 }; // 60, 60, 120, 180, 240, 300
         for (int i = 0; i < samples.length; i++)
             builder.update(samples[i]);
@@ -163,7 +169,8 @@ public class StreamingTombstoneHistogramBuilderTest
     @Test
     public void testLargeValues() throws Exception
     {
-        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 0, 1);
+        StreamingTombstoneHistogramBuilder.Spool spool = StreamingTombstoneHistogramBuilder.createSpool(0);
+        StreamingTombstoneHistogramBuilder builder = new StreamingTombstoneHistogramBuilder(5, 1, spool);
         IntStream.range(Integer.MAX_VALUE - 30, Integer.MAX_VALUE).forEach(builder::update);
     }
 

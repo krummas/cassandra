@@ -95,7 +95,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
     protected final MinMaxIntTracker localDeletionTimeTracker = new MinMaxIntTracker(Cell.NO_DELETION_TIME, Cell.NO_DELETION_TIME);
     protected final MinMaxIntTracker ttlTracker = new MinMaxIntTracker(Cell.NO_TTL, Cell.NO_TTL);
     protected double compressionRatio = NO_COMPRESSION_RATIO;
-    protected StreamingTombstoneHistogramBuilder estimatedTombstoneDropTime = new StreamingTombstoneHistogramBuilder(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE, SSTable.TOMBSTONE_HISTOGRAM_SPOOL_SIZE, SSTable.TOMBSTONE_HISTOGRAM_TTL_ROUND_SECONDS);
+    protected final StreamingTombstoneHistogramBuilder estimatedTombstoneDropTime;
     protected int sstableLevel;
     protected ByteBuffer[] minClusteringValues;
     protected ByteBuffer[] maxClusteringValues;
@@ -114,15 +114,22 @@ public class MetadataCollector implements PartitionStatisticsCollector
 
     public MetadataCollector(ClusteringComparator comparator)
     {
+        this(comparator, StreamingTombstoneHistogramBuilder.createSpool(SSTable.TOMBSTONE_HISTOGRAM_SPOOL_SIZE));
+    }
+
+    public MetadataCollector(ClusteringComparator comparator, StreamingTombstoneHistogramBuilder.Spool spool)
+    {
         this.comparator = comparator;
 
         this.minClusteringValues = new ByteBuffer[comparator.size()];
         this.maxClusteringValues = new ByteBuffer[comparator.size()];
+        assert spool.isCleared();
+        estimatedTombstoneDropTime = new StreamingTombstoneHistogramBuilder(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE, SSTable.TOMBSTONE_HISTOGRAM_TTL_ROUND_SECONDS, spool);
     }
 
-    public MetadataCollector(Iterable<SSTableReader> sstables, ClusteringComparator comparator, int level)
+    public MetadataCollector(Iterable<SSTableReader> sstables, ClusteringComparator comparator, int level, StreamingTombstoneHistogramBuilder.Spool spool)
     {
-        this(comparator);
+        this(comparator, spool);
 
         IntervalSet.Builder<CommitLogPosition> intervals = new IntervalSet.Builder<>();
         for (SSTableReader sstable : sstables)
