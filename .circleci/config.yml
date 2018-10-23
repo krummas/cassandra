@@ -43,101 +43,89 @@ j11_par_executor: &j11_par_executor
   #parallelism: 4
   parallelism: 100
 
-with_dtests_jobs: &with_dtest_jobs
-        jobs:
-            - build
-            # Java 8 unit tests will be run automatically
-            - j8_unit_tests:
-                requires:
-                  - build
-            # Java 11 unit tests (on request, currently not working)
-            - start_j11_unit_tests:
-                type: approval
-                requires:
-                  - build
-            - j11_unit_tests:
-                requires:
-                  - start_j11_unit_tests
-            # specialized unit tests (all run on request using Java 8)
-            - start_utests_long:
-                type: approval
-                requires:
-                  - build
-            - utests_long:
-                requires:
-                  - start_utests_long
-            - start_utests_burn:
-                type: approval
-                requires:
-                  - build
-            - utests_burn:
-                requires:
-                  - start_utests_burn
-            - start_utests_cql:
-                type: approval
-                requires:
-                  - build
-            - utests_cql:
-                requires:
-                  - start_utests_cql
-            - start_utests_compression:
-                type: approval
-                requires:
-                  - build
-            - utests_compression:
-                requires:
-                  - start_utests_compression
-            - start_utests_stress:
-                type: approval
-                requires:
-                  - build
-            - utests_stress:
-                requires:
-                  - start_utests_stress
-            - start_utests_fqltool:
-                type: approval
-                requires:
-                  - build
-            - utests_fqltool:
-                requires:
-                  - start_utests_fqltool
-            # Java 8 dtests (on request)
-            - start_j8_dtests:
-                type: approval
-                requires:
-                  - build
-            - j8_dtests-with-vnodes:
-                requires:
-                  - start_j8_dtests
-            - j8_dtests-no-vnodes:
-                requires:
-                  - start_j8_dtests
-            # Java 11 dtests (on request)
-            - start_j11_dtests:
-                type: approval
-                requires:
-                  - build
-            - j11_dtests-with-vnodes:
-                requires:
-                - start_j11_dtests
-            - j11_dtests-no-vnodes:
-                requires:
-                - start_j11_dtests
-
-with_dtest_jobs_only: &with_dtest_jobs_only
-        jobs:
-            - build
-            - j8_dtests-with-vnodes:
-                  requires:
-                      - build
-            - j8_dtests-no-vnodes:
-                  requires:
-                      - build
 
 workflows:
     version: 2
-    build_and_run_tests: *with_dtest_jobs
-    #build_and_run_tests: *with_dtest_jobs_only
+    build_and_run_tests:
+      jobs:
+        - build
+        # Java 8 unit tests will be run automatically
+        - j8_unit_tests:
+            requires:
+              - build
+            # Java 11 unit tests (on request, currently not working)
+        - start_j11_unit_tests:
+            type: approval
+            requires:
+              - build
+        - j11_unit_tests:
+            requires:
+              - start_j11_unit_tests
+        # specialized unit tests (all run on request using Java 8)
+        - start_utests_long:
+            type: approval
+            requires:
+              - build
+        - utests_long:
+            requires:
+              - start_utests_long
+        - start_utests_burn:
+            type: approval
+            requires:
+              - build
+        - utests_burn:
+            requires:
+              - start_utests_burn
+        - start_utests_cql:
+            type: approval
+            requires:
+              - build
+        - utests_cql:
+            requires:
+              - start_utests_cql
+        - start_utests_compression:
+            type: approval
+            requires:
+              - build
+        - utests_compression:
+            requires:
+              - start_utests_compression
+        - start_utests_stress:
+            type: approval
+            requires:
+              - build
+        - utests_stress:
+            requires:
+              - start_utests_stress
+        - start_utests_fqltool:
+            type: approval
+            requires:
+              - build
+        - utests_fqltool:
+            requires:
+              - start_utests_fqltool
+        # Java 8 dtests (on request)
+        - start_j8_dtests:
+            type: approval
+            requires:
+              - build
+        - j8_dtests-with-vnodes:
+            requires:
+              - start_j8_dtests
+        - j8_dtests-no-vnodes:
+            requires:
+              - start_j8_dtests
+        # Java 11 dtests (on request)
+        - start_j11_dtests:
+            type: approval
+            requires:
+              - build
+        - j11_dtests-with-vnodes:
+            requires:
+              - start_j11_dtests
+        - j11_dtests-no-vnodes:
+            requires:
+              - start_j11_dtests
 
 executors:
   java8-executor:
