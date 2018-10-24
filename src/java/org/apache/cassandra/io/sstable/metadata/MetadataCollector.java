@@ -95,7 +95,7 @@ public class MetadataCollector implements PartitionStatisticsCollector
     protected final MinMaxIntTracker localDeletionTimeTracker = new MinMaxIntTracker(Cell.NO_DELETION_TIME, Cell.NO_DELETION_TIME);
     protected final MinMaxIntTracker ttlTracker = new MinMaxIntTracker(Cell.NO_TTL, Cell.NO_TTL);
     protected double compressionRatio = NO_COMPRESSION_RATIO;
-    protected final StreamingTombstoneHistogramBuilder estimatedTombstoneDropTime;
+    public final StreamingTombstoneHistogramBuilder estimatedTombstoneDropTime;
     protected int sstableLevel;
     protected ByteBuffer[] minClusteringValues;
     protected ByteBuffer[] maxClusteringValues;

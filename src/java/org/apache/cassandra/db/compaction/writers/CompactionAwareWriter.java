@@ -38,6 +38,7 @@ import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Transactional;
 import org.apache.cassandra.db.compaction.OperationType;
@@ -66,7 +67,8 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     private final List<Directories.DataDirectory> locations;
     private final List<PartitionPosition> diskBoundaries;
     private int locationIndex;
-    protected final StreamingTombstoneHistogramBuilder.Spool reusableSpool;
+    private final StreamingTombstoneHistogramBuilder.Spool reusableSpool;
+    private MetadataCollector metadataCollector;
 
     @Deprecated
     public CompactionAwareWriter(ColumnFamilyStore cfs,
@@ -246,5 +248,13 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     {
         this.sstableWriter.setRepairedAt(repairedAt);
         return this;
+    }
+
+    MetadataCollector metadataCollector(int sstableLevel)
+    {
+        if (metadataCollector != null)
+            metadataCollector.estimatedTombstoneDropTime.flushHistogram();
+        metadataCollector = new MetadataCollector(txn.originals(), cfs.metadata().comparator, sstableLevel, reusableSpool);
+        return metadataCollector;
     }
 }
