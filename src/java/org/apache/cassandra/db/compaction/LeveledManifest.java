@@ -23,8 +23,10 @@ import java.util.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 
@@ -99,10 +101,7 @@ public class LeveledManifest
         LeveledManifest manifest = new LeveledManifest(cfs, maxSSTableSize, fanoutSize, options);
 
         // ensure all SSTables are in the manifest
-        for (SSTableReader ssTableReader : sstables)
-        {
-            manifest.add(ssTableReader);
-        }
+        manifest.addSSTables(sstables);
         for (int i = 1; i < manifest.getAllLevelSize().length; i++)
         {
             manifest.repairOverlappingSSTables(i);
@@ -139,50 +138,6 @@ public class LeveledManifest
         }
     }
 
-    public synchronized void add(SSTableReader reader)
-    {
-        int level = reader.getSSTableLevel();
-
-        assert level < generations.length : "Invalid level " + level + " out of " + (generations.length - 1);
-        logDistribution();
-        if (canAddSSTable(reader))
-        {
-            // adding the sstable does not cause overlap in the level
-            logger.trace("Adding {} to L{}", reader, level);
-            generations[level].add(reader);
-        }
-        else
-        {
-            // this can happen if:
-            // * a compaction has promoted an overlapping sstable to the given level, or
-            //   was also supposed to add an sstable at the given level.
-            // * we are moving sstables from unrepaired to repaired and the sstable
-            //   would cause overlap
-            //
-            // The add(..):ed sstable will be sent to level 0
-            try
-            {
-                reader.descriptor.getMetadataSerializer().mutateLevel(reader.descriptor, 0);
-                reader.reloadSSTableMetadata();
-            }
-            catch (IOException e)
-            {
-                logger.error("Could not change sstable level - adding it at level 0 anyway, we will find it at restart.", e);
-            }
-            if (!contains(reader))
-            {
-                generations[0].add(reader);
-            }
-            else
-            {
-                // An SSTable being added multiple times to this manifest indicates a programming error, but we don't
-                // throw an AssertionError because this shouldn't break the compaction strategy. Instead we log it
-                // together with a RuntimeException so the stack is print for troubleshooting if this ever happens.
-                logger.warn("SSTable {} is already present on leveled manifest and should not be re-added.", reader, new RuntimeException());
-            }
-        }
-    }
-
     private boolean contains(SSTableReader reader)
     {
         for (int i = 0; i < generations.length; i++)
@@ -195,7 +150,7 @@ public class LeveledManifest
 
     public synchronized void replace(Collection<SSTableReader> removed, Collection<SSTableReader> added)
     {
-        assert !removed.isEmpty(); // use add() instead of promote when adding new sstables
+        assert !removed.isEmpty(); // use addSSTables() instead of replace when adding new sstables
         logDistribution();
         if (logger.isTraceEnabled())
             logger.trace("Replacing [{}]", toString(removed));
@@ -217,8 +172,7 @@ public class LeveledManifest
         if (logger.isTraceEnabled())
             logger.trace("Adding [{}]", toString(added));
 
-        for (SSTableReader ssTableReader : added)
-            add(ssTableReader);
+        addSSTables(added);
         lastCompactedKeys[minLevel] = SSTableReader.sstableOrdering.max(added).last;
     }
 
@@ -250,43 +204,109 @@ public class LeveledManifest
     }
 
     /**
-     * Checks if adding the sstable creates an overlap in the level
-     * @param sstable the sstable to add
-     * @return true if it is safe to add the sstable in the level.
+     * Adds sstables to the manifest level-by-level, making sure that we don't create any overlaps in the levels
+     *
+     * If the level > 0, we create a TreeSet containing the level, then we find the position in the set for each
+     * new sstable and make sure that we don't create an overlap with the adjacent sstables.
+     *
+     * The new sstable is then added to both the sorted set and to the level, this makes sure that the new
+     * sstables don't contain any overlap.
+     *
+     * New sstables could contain overlap on startup if sstables have been copied in or if nodetool import
+     * has been used with overlapping sstables.
      */
-    private boolean canAddSSTable(SSTableReader sstable)
+    public synchronized void addSSTables(Iterable<SSTableReader> sstables)
     {
-        int level = sstable.getSSTableLevel();
-        if (level == 0)
-            return true;
-
-        List<SSTableReader> copyLevel = new ArrayList<>(generations[level]);
-        copyLevel.add(sstable);
-        Collections.sort(copyLevel, SSTableReader.sstableComparator);
-
-        SSTableReader previous = null;
-        for (SSTableReader current : copyLevel)
+        logDistribution();
+        Map<Integer, Collection<SSTableReader>> groupedSSTables = groupSSTablesByLevel(sstables);
+        for (Map.Entry<Integer, Collection<SSTableReader>> group : groupedSSTables.entrySet())
         {
-            if (previous != null && current.first.compareTo(previous.last) <= 0)
-                return false;
-            previous = current;
+            int level = group.getKey();
+            Collection<SSTableReader> newLevelSSTables = group.getValue();
+
+            assert level < generations.length : "Invalid level " + level + " out of " + (generations.length - 1);
+            logger.trace("Adding {} to L{}", newLevelSSTables, level);
+
+            if (level == 0)
+            {
+                generations[0].addAll(newLevelSSTables);
+                continue;
+            }
+
+            TreeSet<SSTableReader> sortedLevel = new TreeSet<>(SSTableReader.sstableComparator);
+            sortedLevel.addAll(generations[level]);
+
+            for (SSTableReader sstable : newLevelSSTables)
+            {
+                SSTableReader after = sortedLevel.ceiling(sstable);
+                SSTableReader before = sortedLevel.floor(sstable);
+
+                if (before != null && before.last.compareTo(sstable.first) >= 0 ||
+                    after != null && after.first.compareTo(sstable.last) <= 0)
+                {
+                    sendToL0(sstable);
+                }
+                else
+                {
+                    sortedLevel.add(sstable); // to make sure the new sstables don't have overlaps
+                    generations[level].add(sstable);
+                }
+            }
         }
-        return true;
     }
 
-    private synchronized void sendBackToL0(SSTableReader sstable)
+    @VisibleForTesting
+    static Map<Integer, Collection<SSTableReader>> groupSSTablesByLevel(Iterable<SSTableReader> sstables)
     {
-        remove(sstable);
+        Multimap<Integer, SSTableReader> res = ArrayListMultimap.create();
+        for (SSTableReader sstable : sstables)
+            res.put(sstable.getSSTableLevel(), sstable);
+
+        return res.asMap();
+    }
+
+    /**
+     * sends sstable to L0 by mutating its level in the sstable metadata.
+     *
+     * SSTable should not exist in the manifest
+     */
+    private synchronized void sendToL0(SSTableReader sstable)
+    {
+        assert !generations[sstable.getSSTableLevel()].contains(sstable);
         try
         {
             sstable.descriptor.getMetadataSerializer().mutateLevel(sstable.descriptor, 0);
             sstable.reloadSSTableMetadata();
-            add(sstable);
         }
         catch (IOException e)
         {
-            throw new RuntimeException("Could not reload sstable meta data", e);
+            // Adding it to L0 and marking suspect is probably the best we can do here - it won't create overlap
+            // and we won't pick it for later compactions.
+            logger.error("Failed mutating sstable metadata for {} - adding it to L0 to avoid overlap. Marking suspect", sstable, e);
+            sstable.markSuspect();
         }
+
+        if (!contains(sstable))
+        {
+            generations[0].add(sstable);
+        }
+        else
+        {
+            // An SSTable being added multiple times to this manifest indicates a programming error, but we don't
+            // throw an AssertionError because this shouldn't break the compaction strategy. Instead we log it
+            // together with a RuntimeException so the stack is print for troubleshooting if this ever happens.
+            logger.warn("SSTable {} is already present on leveled manifest and should not be re-added.", sstable, new RuntimeException());
+        }
+
+    }
+
+    /**
+     * Sends an existing sstable to L0
+     */
+    private synchronized void sendBackToL0(SSTableReader sstable)
+    {
+        remove(sstable);
+        sendToL0(sstable);
     }
 
     private String toString(Collection<SSTableReader> sstables)

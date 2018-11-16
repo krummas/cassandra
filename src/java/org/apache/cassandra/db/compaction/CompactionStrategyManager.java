@@ -201,18 +201,20 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             writeLock.unlock();
         }
-
     }
 
-    private void startup()
+    @VisibleForTesting
+    void startup()
     {
         writeLock.lock();
         try
         {
-            for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
+            Map<AbstractCompactionStrategy, Collection<SSTableReader>> groupedSSTables = groupSSTablesByStrategy(cfs.getSSTables(SSTableSet.CANONICAL));
+            for (Map.Entry<AbstractCompactionStrategy, Collection<SSTableReader>> entry : groupedSSTables.entrySet())
             {
-                if (sstable.openReason != SSTableReader.OpenReason.EARLY)
-                    compactionStrategyFor(sstable).addSSTable(sstable);
+                AbstractCompactionStrategy strategy = entry.getKey();
+                Collection<SSTableReader> sstables = entry.getValue();
+                strategy.addSSTables(sstables);
             }
             repaired.forEach(AbstractCompactionStrategy::startup);
             unrepaired.forEach(AbstractCompactionStrategy::startup);
@@ -228,6 +230,15 @@ public class CompactionStrategyManager implements INotificationConsumer
         unrepaired.forEach(AbstractCompactionStrategy::startup);
         if (Stream.concat(repaired.stream(), unrepaired.stream()).anyMatch(cs -> cs.logAll))
             compactionLogger.enable();
+    }
+
+    @VisibleForTesting
+    Map<AbstractCompactionStrategy, Collection<SSTableReader>> groupSSTablesByStrategy(Iterable<SSTableReader> sstables)
+    {
+        IdentityHashMap<AbstractCompactionStrategy, Collection<SSTableReader>> identities = new IdentityHashMap<>();
+        for (SSTableReader sstable : sstables)
+            identities.computeIfAbsent(getCompactionStrategyFor(sstable), (k) -> new ArrayList<>()).add(sstable);
+        return identities;
     }
 
     /**

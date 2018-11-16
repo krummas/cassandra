@@ -19,9 +19,14 @@
 package org.apache.cassandra.db.compaction;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import com.google.common.io.Files;
@@ -29,6 +34,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.cassandra.MockSchema;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -36,17 +42,18 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.DiskBoundaries;
-import org.apache.cassandra.db.DiskBoundaryManager;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableDeletingNotification;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
 
 import static org.junit.Assert.assertEquals;
@@ -72,6 +79,11 @@ public class CompactionStrategyManagerTest
          * disk assignment based on its generation - See {@link this#getSSTableIndex(Integer[], SSTableReader)}
          */
         originalPartitioner = StorageService.instance.setPartitionerUnsafe(ByteOrderedPartitioner.instance);
+
+        SchemaLoader.createKeyspace(KS_PREFIX,
+                                    KeyspaceParams.simple(1),
+                                    SchemaLoader.standardCFMD(KS_PREFIX, TABLE_PREFIX)
+                                                .compaction(CompactionParams.scts(Collections.emptyMap())));
     }
 
     @AfterClass
@@ -86,10 +98,7 @@ public class CompactionStrategyManagerTest
     {
         // Creates 100 SSTables with keys 0-99
         int numSSTables = 100;
-        SchemaLoader.createKeyspace(KS_PREFIX,
-                                    KeyspaceParams.simple(1),
-                                    SchemaLoader.standardCFMD(KS_PREFIX, TABLE_PREFIX)
-                                                .compaction(CompactionParams.scts(Collections.emptyMap())));
+
         ColumnFamilyStore cfs = Keyspace.open(KS_PREFIX).getColumnFamilyStore(TABLE_PREFIX);
         cfs.disableAutoCompaction();
         for (int i = 0; i < numSSTables; i++)
@@ -158,22 +167,109 @@ public class CompactionStrategyManagerTest
         }
     }
 
+    @Test
+    public void testStartup() throws IOException
+    {
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        CompactionStrategyManager csm = new CompactionStrategyManager(cfs);
+        List<SSTableReader> sstables = new ArrayList<>();
+
+        int gen = 0;
+        for (int i = 0; i < 10; i++)
+        {
+            SSTableReader sstable = MockSchema.sstable(++gen, cfs);
+            sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
+            sstable.reloadSSTableMetadata();
+
+            sstables.add(sstable);
+        }
+        for (int i = 0; i < 10; i++)
+        {
+            SSTableReader sstable = MockSchema.sstable(++gen, cfs);
+            sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, System.currentTimeMillis());
+            sstable.reloadSSTableMetadata();
+
+            sstables.add(sstable);
+        }
+        cfs.getTracker().addInitialSSTables(sstables);
+
+        // make sure compaction strategies are empty before csm.startup():
+        for (List<AbstractCompactionStrategy> strategies : csm.getStrategies())
+            for (AbstractCompactionStrategy strategy : strategies)
+                assertTrue(((SizeTieredCompactionStrategy)strategy).sstables.isEmpty());
+
+        // and make sure the new sstables are added to the correct strategy on startup:
+        csm.startup();
+        for (List<AbstractCompactionStrategy> strategies : csm.getStrategies())
+            for (AbstractCompactionStrategy strategy : strategies)
+                assertFalse(((SizeTieredCompactionStrategy)strategy).sstables.isEmpty());
+    }
+
+    @Test
+    public void testGroupByStrategy() throws IOException
+    {
+        long [] tokens = new long [] {0, Long.MAX_VALUE / 2, Long.MAX_VALUE};
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        DiskBoundaries db = new DiskBoundaries(createDirs(3),
+                                               Arrays.stream(tokens).mapToObj(l -> new Murmur3Partitioner.LongToken(l).maxKeyBound()).collect(Collectors.toList()), 0, 0);
+        CompactionStrategyManager csm = new CompactionStrategyManager(cfs, () -> db, true);
+        List<SSTableReader> sstables = new ArrayList<>();
+
+        int gen = 0;
+        for (int i = 0; i < 9; i++)
+        {
+            long token = tokens[i % tokens.length];
+            SSTableReader sstable = MockSchema.sstable(++gen, 0, false, token, token + 10, 0, cfs);
+            sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE);
+            sstable.reloadSSTableMetadata();
+            sstables.add(sstable);
+        }
+        // group 9 unrepaired sstables on different disks, 3 on each disk:
+        Map<AbstractCompactionStrategy, Collection<SSTableReader>> group = csm.groupSSTablesByStrategy(sstables);
+        assertEquals(3, group.size()); // only unrepaired ones
+        for (int i = 0; i < 9; i++)
+        {
+            long token = tokens[i % tokens.length];
+            SSTableReader sstable = MockSchema.sstable(++gen, 0, false, token, token + 10, 0, cfs);
+            sstable.descriptor.getMetadataSerializer().mutateRepairedAt(sstable.descriptor, System.currentTimeMillis());
+            sstable.reloadSSTableMetadata();
+            sstables.add(sstable);
+        }
+        // group 18 sstables: 9 repaired, 9 unrepaired, on 3 different disks -> 6 groups with 3 sstables in each
+        group = csm.groupSSTablesByStrategy(sstables);
+        assertEquals(6, group.size());
+        for (Map.Entry<AbstractCompactionStrategy, Collection<SSTableReader>> groupEntry : group.entrySet())
+        {
+            Collection<SSTableReader> groupSSTables = groupEntry.getValue();
+            assertEquals(3, groupSSTables.size());
+            SSTableReader first = groupSSTables.iterator().next();
+            assertTrue(groupSSTables.stream().allMatch(s -> s.isRepaired() == first.isRepaired()));
+            assertTrue(groupSSTables.stream().allMatch(s -> s.first.equals(first.first)));
+        }
+    }
+
     private MockCFS createJBODMockCFS(int disks)
     {
         // Create #disks data directories to simulate JBOD
-        Directories.DataDirectory[] directories = new Directories.DataDirectory[disks];
-        for (int i = 0; i < disks; ++i)
-        {
-            File tempDir = Files.createTempDir();
-            tempDir.deleteOnExit();
-            directories[i] = new Directories.DataDirectory(tempDir);
-        }
+        Directories.DataDirectory[] directories = createDirs(disks);
 
         ColumnFamilyStore cfs = Keyspace.open(KS_PREFIX).getColumnFamilyStore(TABLE_PREFIX);
         MockCFS mockCFS = new MockCFS(cfs, new Directories(cfs.metadata, directories));
         mockCFS.disableAutoCompaction();
         mockCFS.addSSTables(cfs.getLiveSSTables());
         return mockCFS;
+    }
+
+    private Directories.DataDirectory[] createDirs(int count)
+    {
+        Directories.DataDirectory[] directories = new Directories.DataDirectory[count];
+        for (int i = 0; i < count; ++i)
+        {
+            File tempDir = Files.createTempDir();
+            tempDir.deleteOnExit();
+            directories[i] = new Directories.DataDirectory(tempDir);
+        }
+        return directories;
     }
 
     /**
