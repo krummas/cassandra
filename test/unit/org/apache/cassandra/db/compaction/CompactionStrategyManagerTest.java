@@ -22,12 +22,14 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.Iterables;
@@ -55,11 +57,14 @@ import org.apache.cassandra.db.RowUpdateBuilder;
 import org.apache.cassandra.db.compaction.AbstractStrategyHolder.GroupedSSTableContainer;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableDeletingNotification;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.schema.MockSchema;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.UUIDGen;
@@ -365,13 +370,13 @@ public class CompactionStrategyManagerTest
 
         CompactionStrategyManager csm = new CompactionStrategyManager(cfs, () -> boundaries, true);
 
-        List<GroupedSSTableContainer> grouped = csm.groupSSTables(Iterables.concat( transientRepairs, pendingRepair, repaired, unrepaired));
+        List<GroupedSSTableContainer> grouped = csm.groupSSTables(Iterables.concat(transientRepairs, pendingRepair, repaired, unrepaired));
 
-        for (int x=0; x<grouped.size(); x++)
+        for (int x = 0; x < grouped.size(); x++)
         {
             GroupedSSTableContainer group = grouped.get(x);
             AbstractStrategyHolder holder = csm.getHolders().get(x);
-            for (int y=0; y<numDir; y++)
+            for (int y = 0; y < numDir; y++)
             {
                 SSTableReader sstable = Iterables.getOnlyElement(group.getGroup(y));
                 assertTrue(holder.managesSSTable(sstable));
@@ -395,6 +400,75 @@ public class CompactionStrategyManagerTest
                 assertSame(expected, sstable);
             }
         }
+    }
+
+    @Test
+    public void testStartup() throws IOException
+    {
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        CompactionStrategyManager csm = new CompactionStrategyManager(cfs);
+        List<SSTableReader> sstables = new ArrayList<>();
+
+        int gen = 0;
+        for (int i = 0; i < 10; i++)
+        {
+            SSTableReader sstable = MockSchema.sstable(++gen, cfs);
+            sstable.descriptor.getMetadataSerializer().mutateRepairMetadata(sstable.descriptor, ActiveRepairService.UNREPAIRED_SSTABLE, null, false);
+            sstable.reloadSSTableMetadata();
+
+            sstables.add(sstable);
+        }
+
+        UUID pendingId = UUID.randomUUID();
+        for (int i = 0; i < 3; i++)
+        {
+            boolean pending = i > 0;
+            boolean trans = i == 2;
+            for (int j = 0; j < 10; j++)
+            {
+                SSTableReader sstable = MockSchema.sstable(++gen, cfs);
+                sstable.descriptor.getMetadataSerializer().mutateRepairMetadata(sstable.descriptor, pending ? ActiveRepairService.UNREPAIRED_SSTABLE : System.currentTimeMillis(), pending ? pendingId : null, trans);
+                sstable.reloadSSTableMetadata();
+                sstables.add(sstable);
+            }
+        }
+        cfs.getTracker().addInitialSSTables(sstables);
+
+        // make sure compaction strategies are empty before csm.startup():
+        for (List<AbstractCompactionStrategy> strategies : csm.getStrategies())
+            for (AbstractCompactionStrategy strategy : strategies)
+                assertTrue(((SizeTieredCompactionStrategy)strategy).sstables.isEmpty());
+
+        // and make sure the new sstables are added to the correct strategy on startup:
+        csm.startup();
+        boolean seenRepaired = false;
+        boolean seenPending = false;
+        boolean seenUnrepaired = false;
+        boolean seenTransient = false;
+        for (List<AbstractCompactionStrategy> strategies : csm.getStrategies())
+        {
+            for (AbstractCompactionStrategy strategy : strategies)
+            {
+                SSTableReader first = strategy.getSSTables().iterator().next();
+                if (first.isTransient())
+                    seenTransient = true;
+                else if (first.isPendingRepair())
+                    seenPending = true;
+                else if (first.isRepaired())
+                    seenRepaired = true;
+                else
+                    seenUnrepaired = true;
+                assertEquals(10, strategy.getSSTables().size());
+                assertTrue(strategy.getSSTables().stream().allMatch(s -> s.isRepaired() == first.isRepaired()
+                                                                         && s.isPendingRepair() == first.isPendingRepair()
+                                                                         && s.isTransient() == first.isTransient()));
+            }
+        }
+        assertTrue(seenRepaired);
+        assertTrue(seenPending);
+        assertTrue(seenUnrepaired);
+        assertTrue(seenTransient);
+
     }
 
     private MockCFS createJBODMockCFS(int disks)

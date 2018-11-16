@@ -68,6 +68,11 @@ public class MockSchema
         return new Memtable(cfs.metadata());
     }
 
+    public static SSTableReader sstableWithLevel(int generation, long first, long last, int level, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, 0, false, first, last, level, cfs);
+    }
+
     public static SSTableReader sstable(int generation, ColumnFamilyStore cfs)
     {
         return sstable(generation, false, cfs);
@@ -75,7 +80,7 @@ public class MockSchema
 
     public static SSTableReader sstable(int generation, long first, long last, ColumnFamilyStore cfs)
     {
-        return sstable(generation, 0, false, first, last, cfs);
+        return sstable(generation, 0, false, first, last, 0, cfs);
     }
 
     public static SSTableReader sstable(int generation, boolean keepRef, ColumnFamilyStore cfs)
@@ -89,10 +94,10 @@ public class MockSchema
     }
     public static SSTableReader sstable(int generation, int size, boolean keepRef, ColumnFamilyStore cfs)
     {
-        return sstable(generation, size, keepRef, generation, generation, cfs);
+        return sstable(generation, size, keepRef, generation, generation, 0, cfs);
     }
 
-    public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, ColumnFamilyStore cfs)
+    public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, int level, ColumnFamilyStore cfs)
     {
         Descriptor descriptor = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(),
                                                cfs.keyspace.getName(),
@@ -126,7 +131,7 @@ public class MockSchema
             }
         }
         SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
-        StatsMetadata metadata = (StatsMetadata) new MetadataCollector(cfs.metadata().comparator)
+        StatsMetadata metadata = (StatsMetadata) new MetadataCollector(cfs.metadata().comparator).sstableLevel(level)
                                                  .finalizeMetadata(cfs.metadata().partitioner.getClass().getCanonicalName(), 0.01f, -1, null, false, header)
                                                  .get(MetadataType.STATS);
         SSTableReader reader = SSTableReader.internalOpen(descriptor, components, cfs.metadata,

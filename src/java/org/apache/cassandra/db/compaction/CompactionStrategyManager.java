@@ -294,19 +294,17 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             writeLock.unlock();
         }
-
     }
 
-    private void startup()
+    @VisibleForTesting
+    void startup()
     {
         writeLock.lock();
         try
         {
-            for (SSTableReader sstable : cfs.getSSTables(SSTableSet.CANONICAL))
-            {
-                if (sstable.openReason != SSTableReader.OpenReason.EARLY)
-                    compactionStrategyFor(sstable).addSSTable(sstable);
-            }
+            List<GroupedSSTableContainer> sstableGroups = groupSSTables(cfs.getSSTables(SSTableSet.CANONICAL));
+            for (int i = 0; i < sstableGroups.size(); i++)
+                holders.get(i).addSSTables(sstableGroups.get(i));
             holders.forEach(AbstractStrategyHolder::startup);
             shouldDefragment = repaired.first().shouldDefragment();
             supportsEarlyOpen = repaired.first().supportsEarlyOpen();
@@ -689,7 +687,6 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             classified.get(getHolderIndex(sstable)).add(sstable);
         }
-
         return classified;
     }
 
@@ -1059,7 +1056,8 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             return Arrays.asList(Lists.newArrayList(repaired.allStrategies()),
                                  Lists.newArrayList(unrepaired.allStrategies()),
-                                 Lists.newArrayList(pendingRepairs.allStrategies()));
+                                 Lists.newArrayList(pendingRepairs.allStrategies()),
+                                 Lists.newArrayList(transientRepairs.allStrategies()));
         }
         finally
         {

@@ -215,16 +215,26 @@ public class CompactionStrategyManagerPendingRepairTest extends AbstractPendingR
         List<List<AbstractCompactionStrategy>> strategies;
 
         strategies = csm.getStrategies();
-        Assert.assertEquals(3, strategies.size());
+        // unrepaired, repaired, pending, transient
+        Assert.assertEquals(4, strategies.size());
         Assert.assertTrue(strategies.get(2).isEmpty());
+        Assert.assertTrue(strategies.get(3).isEmpty());
 
         SSTableReader sstable = makeSSTable(true);
         mutateRepaired(sstable, repairID, false);
         csm.handleNotification(new SSTableAddedNotification(Collections.singleton(sstable), null), cfs.getTracker());
 
         strategies = csm.getStrategies();
-        Assert.assertEquals(3, strategies.size());
+        Assert.assertEquals(4, strategies.size());
         Assert.assertFalse(strategies.get(2).isEmpty());
+
+        SSTableReader sstable2 = makeSSTable(true);
+        mutateRepaired(sstable2, repairID, true);
+        csm.handleNotification(new SSTableAddedNotification(Collections.singleton(sstable2), null), cfs.getTracker());
+
+        strategies = csm.getStrategies();
+        Assert.assertEquals(4, strategies.size());
+        Assert.assertFalse(strategies.get(3).isEmpty());
     }
 
     /**
