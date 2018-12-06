@@ -92,7 +92,7 @@ public class SimpleSSTableMultiWriter implements SSTableMultiWriter
 
     public Throwable abort(Throwable accumulate)
     {
-        txn.untrackNew(writer);
+//        txn.untrackNew(writer);
         return writer.abort(accumulate);
     }
 
