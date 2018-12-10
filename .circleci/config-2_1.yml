@@ -264,6 +264,7 @@ jobs:
     steps:
     - attach_workspace:
         at: /home/cassandra
+    - log_environment
     - clone_dtest
     - create_venv
     - create_dtest_containers:
@@ -292,6 +293,7 @@ jobs:
     steps:
     - attach_workspace:
         at: /home/cassandra
+    - log_environment
     - clone_dtest
     - create_venv
     - create_dtest_containers:
@@ -323,6 +325,9 @@ commands:
           mount
           echo '*** env ***'
           env
+          echo '*** java ***'
+          which java
+          java -version
 
   clone_cassandra:
     steps:
@@ -519,7 +524,7 @@ commands:
 
             source ~/env/bin/activate
             export PATH=$JAVA_HOME/bin:$PATH
-
+            java -version
             cd ~/cassandra-dtest
             mkdir -p /tmp/dtest
 

@@ -55,6 +55,9 @@ jobs:
           mount
           echo '*** env ***'
           env
+          echo '*** java ***'
+          which java
+          java -version
     - run:
         name: Run Unit Tests (testclasslist)
         command: |
@@ -120,6 +123,9 @@ jobs:
           mount
           echo '*** env ***'
           env
+          echo '*** java ***'
+          which java
+          java -version
     - run:
         name: Clone Cassandra Repository (via git)
         command: |
@@ -183,6 +189,28 @@ jobs:
     - attach_workspace:
         at: /home/cassandra
     - run:
+        name: Log Environment Information
+        command: |
+          echo '*** id ***'
+          id
+          echo '*** cat /proc/cpuinfo ***'
+          cat /proc/cpuinfo
+          echo '*** free -m ***'
+          free -m
+          echo '*** df -m ***'
+          df -m
+          echo '*** ifconfig -a ***'
+          ifconfig -a
+          echo '*** uname -a ***'
+          uname -a
+          echo '*** mount ***'
+          mount
+          echo '*** env ***'
+          env
+          echo '*** java ***'
+          which java
+          java -version
+    - run:
         name: Clone Cassandra dtest Repository (via git)
         command: |
           git clone --single-branch --branch $DTEST_BRANCH --depth 1 $DTEST_REPO ~/cassandra-dtest
@@ -228,7 +256,7 @@ jobs:
 
           source ~/env/bin/activate
           export PATH=$JAVA_HOME/bin:$PATH
-
+          java -version
           cd ~/cassandra-dtest
           mkdir -p /tmp/dtest
 
@@ -320,7 +348,7 @@ jobs:
 
           source ~/env/bin/activate
           export PATH=$JAVA_HOME/bin:$PATH
-
+          java -version
           cd ~/cassandra-dtest
           mkdir -p /tmp/dtest
 
@@ -499,6 +527,9 @@ jobs:
           mount
           echo '*** env ***'
           env
+          echo '*** java ***'
+          which java
+          java -version
     - run:
         name: Run Unit Tests (testclasslist)
         command: |
@@ -593,7 +624,7 @@ jobs:
 
           source ~/env/bin/activate
           export PATH=$JAVA_HOME/bin:$PATH
-
+          java -version
           cd ~/cassandra-dtest
           mkdir -p /tmp/dtest
 
@@ -728,6 +759,28 @@ jobs:
     - attach_workspace:
         at: /home/cassandra
     - run:
+        name: Log Environment Information
+        command: |
+          echo '*** id ***'
+          id
+          echo '*** cat /proc/cpuinfo ***'
+          cat /proc/cpuinfo
+          echo '*** free -m ***'
+          free -m
+          echo '*** df -m ***'
+          df -m
+          echo '*** ifconfig -a ***'
+          ifconfig -a
+          echo '*** uname -a ***'
+          uname -a
+          echo '*** mount ***'
+          mount
+          echo '*** env ***'
+          env
+          echo '*** java ***'
+          which java
+          java -version
+    - run:
         name: Clone Cassandra dtest Repository (via git)
         command: |
           git clone --single-branch --branch $DTEST_BRANCH --depth 1 $DTEST_REPO ~/cassandra-dtest
@@ -773,7 +826,7 @@ jobs:
 
           source ~/env/bin/activate
           export PATH=$JAVA_HOME/bin:$PATH
-
+          java -version
           cd ~/cassandra-dtest
           mkdir -p /tmp/dtest
 
@@ -1242,6 +1295,7 @@ workflows:
 #     steps:
 #     - attach_workspace:
 #         at: /home/cassandra
+#     - log_environment
 #     - clone_dtest
 #     - create_venv
 #     - create_dtest_containers:
@@ -1270,6 +1324,7 @@ workflows:
 #     steps:
 #     - attach_workspace:
 #         at: /home/cassandra
+#     - log_environment
 #     - clone_dtest
 #     - create_venv
 #     - create_dtest_containers:
@@ -1301,6 +1356,9 @@ workflows:
 #           mount
 #           echo '*** env ***'
 #           env
+#           echo '*** java ***'
+#           which java
+#           java -version
 # 
 #   clone_cassandra:
 #     steps:
@@ -1497,7 +1555,7 @@ workflows:
 # 
 #             source ~/env/bin/activate
 #             export PATH=$JAVA_HOME/bin:$PATH
-# 
+#             java -version
 #             cd ~/cassandra-dtest
 #             mkdir -p /tmp/dtest
 # 
