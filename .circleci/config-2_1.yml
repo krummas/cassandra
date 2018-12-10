@@ -185,16 +185,16 @@ jobs:
           at: /home/cassandra
       - create_junit_containers
       - log_environment
-      - run_junit_tests
+      - run_parallel_junit_tests
 
   j11_unit_tests:
     <<: *j11_par_executor
     steps:
-    - attach_workspace:
-        at: /home/cassandra
-    - create_junit_containers
-    - log_environment
-    - run_junit_tests
+      - attach_workspace:
+          at: /home/cassandra
+      - create_junit_containers
+      - log_environment
+      - run_parallel_junit_tests
 
   utests_long:
     <<: *j8_seq_executor
@@ -383,32 +383,67 @@ commands:
 
           # get all of our unit test filenames
           set -eo pipefail && circleci tests glob "$HOME/cassandra/test/unit/**/*.java" > /tmp/all_java_unit_tests.txt
+          # append distributed tests
+          set -eo pipefail && circleci tests glob "$HOME/cassandra/test/distributed/**/*.java" > /tmp/all_java_distributed_tests.txt
 
           # split up the unit tests into groups based on the number of containers we have
           set -eo pipefail && circleci tests split --split-by=timings --timings-type=filename --index=${CIRCLE_NODE_INDEX} --total=${CIRCLE_NODE_TOTAL} /tmp/all_java_unit_tests.txt > /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt
           set -eo pipefail && cat /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt | cut -c 37-1000000 | grep "Test\.java$" > /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
           echo "** /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt"
           cat /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
+
+          set -eo pipefail && circleci tests split --split-by=timings --timings-type=filename --index=${CIRCLE_NODE_INDEX} --total=${CIRCLE_NODE_TOTAL} /tmp/all_java_distributed_tests.txt > /tmp/java_dtests_${CIRCLE_NODE_INDEX}.txt
+          set +eo pipefail && cat /tmp/java_dtests_${CIRCLE_NODE_INDEX}.txt | cut -c 44-1000000 | grep "Test\.java$" > /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt
+          echo "** /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt"
+          cat /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt
         no_output_timeout: 15m
 
   run_junit_tests:
     parameters:
       target:
         type: string
-        default: testclasslist
       no_output_timeout:
         type: string
         default: 15m
     steps:
     - run:
         name: Run Unit Tests (<<parameters.target>>)
-        # Please note that we run `clean` ant therefore rebuild the project, as we can't run tests on Java 8 in case
+        # Please note that we run `clean` and therefore rebuild the project, as we can't run tests on Java 8 in case
         # based on Java 11 builds.
         command: |
           export PATH=$JAVA_HOME/bin:$PATH
           time mv ~/cassandra /tmp
           cd /tmp/cassandra
-          ant clean <<parameters.target>> -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
+          ant clean <<parameters.target>>
+        no_output_timeout: <<parameters.no_output_timeout>>
+    - store_test_results:
+        path: /tmp/cassandra/build/test/output/
+    - store_artifacts:
+        path: /tmp/cassandra/build/test/output
+        destination: junitxml
+    - store_artifacts:
+        path: /tmp/cassandra/build/test/logs
+        destination: logs
+
+  run_parallel_junit_tests:
+    parameters:
+      no_output_timeout:
+        type: string
+        default: 15m
+    steps:
+    - run:
+        name: Run Unit Tests (testclasslist)
+        # Please note that we run `clean` and therefore rebuild the project, as we can't run tests on Java 8 in case
+        # based on Java 11 builds.
+        command: |
+          export PATH=$JAVA_HOME/bin:$PATH
+          time mv ~/cassandra /tmp
+          cd /tmp/cassandra
+          ant clean testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
+          # todo; move this to its own target?
+          if [ -s "/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt" ]; then
+            ant testclasslist -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
+          fi
         no_output_timeout: <<parameters.no_output_timeout>>
     - store_test_results:
         path: /tmp/cassandra/build/test/output/
