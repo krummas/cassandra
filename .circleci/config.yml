@@ -64,7 +64,7 @@ jobs:
           export PATH=$JAVA_HOME/bin:$PATH
           time mv ~/cassandra /tmp
           cd /tmp/cassandra
-          ant clean testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
+          ant testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
           # todo; move this to its own target?
           if [ -s "/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt" ]; then
             ant testclasslist -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
@@ -384,50 +384,6 @@ jobs:
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
-  utests_burn:
-    docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11:20181210
-    resource_class: xlarge
-    working_directory: ~/
-    shell: /bin/bash -eo pipefail -l
-    parallelism: 1
-    steps:
-    - attach_workspace:
-        at: /home/cassandra
-    - run:
-        name: Run Unit Tests (test-burn)
-        command: |
-          export PATH=$JAVA_HOME/bin:$PATH
-          time mv ~/cassandra /tmp
-          cd /tmp/cassandra
-          ant clean test-burn
-        no_output_timeout: 45m
-    - store_test_results:
-        path: /tmp/cassandra/build/test/output/
-    - store_artifacts:
-        path: /tmp/cassandra/build/test/output
-        destination: junitxml
-    - store_artifacts:
-        path: /tmp/cassandra/build/test/logs
-        destination: logs
-    environment:
-    - JAVA8_HOME: /usr/lib/jvm/java-8-openjdk-amd64
-    - JAVA11_HOME: /usr/lib/jvm/java-11-openjdk-amd64
-    - ANT_HOME: /usr/share/ant
-    - LANG: en_US.UTF-8
-    - KEEP_TEST_DIR: true
-    - DEFAULT_DIR: /home/cassandra/cassandra-dtest
-    - PYTHONIOENCODING: utf-8
-    - PYTHONUNBUFFERED: true
-    - CASS_DRIVER_NO_EXTENSIONS: true
-    - CASS_DRIVER_NO_CYTHON: true
-    - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
-    - CCM_MAX_HEAP_SIZE: 2048M
-    - CCM_HEAP_NEWSIZE: 512M
-    - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
-    - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   utests_stress:
     docker:
     - image: spod/cassandra-testing-ubuntu1810-java11:20181210
@@ -536,7 +492,7 @@ jobs:
           export PATH=$JAVA_HOME/bin:$PATH
           time mv ~/cassandra /tmp
           cd /tmp/cassandra
-          ant clean testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
+          ant testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
           # todo; move this to its own target?
           if [ -s "/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt" ]; then
             ant testclasslist -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
@@ -868,61 +824,69 @@ jobs:
     resource_class: xlarge
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
-    parallelism: 1
+    parallelism: 100
     steps:
     - attach_workspace:
         at: /home/cassandra
     - run:
-        name: Run Unit Tests (test-compression)
+        name: Determine Unit Tests to Run
         command: |
-          export PATH=$JAVA_HOME/bin:$PATH
-          time mv ~/cassandra /tmp
-          cd /tmp/cassandra
-          ant clean test-compression
+          # reminder: this code (along with all the steps) is independently executed on every circle container
+          # so the goal here is to get the circleci script to return the tests *this* container will run
+          # which we do via the `circleci` cli tool.
+
+          rm -fr ~/cassandra-dtest/upgrade_tests
+          echo "***java tests***"
+
+          # get all of our unit test filenames
+          set -eo pipefail && circleci tests glob "$HOME/cassandra/test/unit/**/*.java" > /tmp/all_java_unit_tests.txt
+          # append distributed tests
+          set -eo pipefail && circleci tests glob "$HOME/cassandra/test/distributed/**/*.java" > /tmp/all_java_distributed_tests.txt
+
+          # split up the unit tests into groups based on the number of containers we have
+          set -eo pipefail && circleci tests split --split-by=timings --timings-type=filename --index=${CIRCLE_NODE_INDEX} --total=${CIRCLE_NODE_TOTAL} /tmp/all_java_unit_tests.txt > /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt
+          set -eo pipefail && cat /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt | cut -c 37-1000000 | grep "Test\.java$" > /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
+          echo "** /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt"
+          cat /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
+
+          set -eo pipefail && circleci tests split --split-by=timings --timings-type=filename --index=${CIRCLE_NODE_INDEX} --total=${CIRCLE_NODE_TOTAL} /tmp/all_java_distributed_tests.txt > /tmp/java_dtests_${CIRCLE_NODE_INDEX}.txt
+          set +eo pipefail && cat /tmp/java_dtests_${CIRCLE_NODE_INDEX}.txt | cut -c 44-1000000 | grep "Test\.java$" > /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt
+          echo "** /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt"
+          cat /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt
         no_output_timeout: 15m
-    - store_test_results:
-        path: /tmp/cassandra/build/test/output/
-    - store_artifacts:
-        path: /tmp/cassandra/build/test/output
-        destination: junitxml
-    - store_artifacts:
-        path: /tmp/cassandra/build/test/logs
-        destination: logs
-    environment:
-    - JAVA8_HOME: /usr/lib/jvm/java-8-openjdk-amd64
-    - JAVA11_HOME: /usr/lib/jvm/java-11-openjdk-amd64
-    - ANT_HOME: /usr/share/ant
-    - LANG: en_US.UTF-8
-    - KEEP_TEST_DIR: true
-    - DEFAULT_DIR: /home/cassandra/cassandra-dtest
-    - PYTHONIOENCODING: utf-8
-    - PYTHONUNBUFFERED: true
-    - CASS_DRIVER_NO_EXTENSIONS: true
-    - CASS_DRIVER_NO_CYTHON: true
-    - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
-    - CCM_MAX_HEAP_SIZE: 2048M
-    - CCM_HEAP_NEWSIZE: 512M
-    - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
-    - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
-  utests_cql:
-    docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11:20181210
-    resource_class: xlarge
-    working_directory: ~/
-    shell: /bin/bash -eo pipefail -l
-    parallelism: 1
-    steps:
-    - attach_workspace:
-        at: /home/cassandra
     - run:
-        name: Run Unit Tests (cql-test)
+        name: Log Environment Information
+        command: |
+          echo '*** id ***'
+          id
+          echo '*** cat /proc/cpuinfo ***'
+          cat /proc/cpuinfo
+          echo '*** free -m ***'
+          free -m
+          echo '*** df -m ***'
+          df -m
+          echo '*** ifconfig -a ***'
+          ifconfig -a
+          echo '*** uname -a ***'
+          uname -a
+          echo '*** mount ***'
+          mount
+          echo '*** env ***'
+          env
+          echo '*** java ***'
+          which java
+          java -version
+    - run:
+        name: Run Unit Tests (testclasslist-compression)
         command: |
           export PATH=$JAVA_HOME/bin:$PATH
           time mv ~/cassandra /tmp
           cd /tmp/cassandra
-          ant clean cql-test
+          ant testclasslist-compression -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
+          # todo; move this to its own target?
+          if [ -s "/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt" ]; then
+            ant testclasslist-compression -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
+          fi
         no_output_timeout: 15m
     - store_test_results:
         path: /tmp/cassandra/build/test/output/
@@ -972,20 +936,6 @@ workflows:
     - utests_long:
         requires:
         - start_utests_long
-    - start_utests_burn:
-        type: approval
-        requires:
-        - build
-    - utests_burn:
-        requires:
-        - start_utests_burn
-    - start_utests_cql:
-        type: approval
-        requires:
-        - build
-    - utests_cql:
-        requires:
-        - start_utests_cql
     - start_utests_compression:
         type: approval
         requires:
@@ -1090,20 +1040,6 @@ workflows:
 #             - utests_long:
 #                 requires:
 #                   - start_utests_long
-#             - start_utests_burn:
-#                 type: approval
-#                 requires:
-#                   - build
-#             - utests_burn:
-#                 requires:
-#                   - start_utests_burn
-#             - start_utests_cql:
-#                 type: approval
-#                 requires:
-#                   - build
-#             - utests_cql:
-#                 requires:
-#                   - start_utests_cql
 #             - start_utests_compression:
 #                 type: approval
 #                 requires:
@@ -1235,30 +1171,15 @@ workflows:
 #       - run_junit_tests:
 #           target: long-test
 # 
-#   utests_burn:
-#     <<: *j8_seq_executor
-#     steps:
-#       - attach_workspace:
-#           at: /home/cassandra
-#       - run_junit_tests:
-#           target: test-burn
-#           no_output_timeout: 45m
-# 
-#   utests_cql:
-#     <<: *j8_seq_executor
-#     steps:
-#       - attach_workspace:
-#           at: /home/cassandra
-#       - run_junit_tests:
-#           target: cql-test
-# 
 #   utests_compression:
-#     <<: *j8_seq_executor
+#     <<: *j8_par_executor
 #     steps:
 #       - attach_workspace:
 #           at: /home/cassandra
-#       - run_junit_tests:
-#           target: test-compression
+#       - create_junit_containers
+#       - log_environment
+#       - run_parallel_junit_tests:
+#           target: testclasslist-compression
 # 
 #   utests_stress:
 #     <<: *j8_seq_executor
@@ -1463,22 +1384,25 @@ workflows:
 # 
 #   run_parallel_junit_tests:
 #     parameters:
+#       target:
+#         type: string
+#         default: testclasslist
 #       no_output_timeout:
 #         type: string
 #         default: 15m
 #     steps:
 #     - run:
-#         name: Run Unit Tests (testclasslist)
+#         name: Run Unit Tests (<<parameters.target>>)
 #         # Please note that we run `clean` and therefore rebuild the project, as we can't run tests on Java 8 in case
 #         # based on Java 11 builds.
 #         command: |
 #           export PATH=$JAVA_HOME/bin:$PATH
 #           time mv ~/cassandra /tmp
 #           cd /tmp/cassandra
-#           ant clean testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
+#           ant <<parameters.target>> -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
 #           # todo; move this to its own target?
 #           if [ -s \"/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt\" ]; then
-#             ant testclasslist -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
+#             ant <<parameters.target>> -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
 #           fi
 #         no_output_timeout: <<parameters.no_output_timeout>>
 #     - store_test_results:

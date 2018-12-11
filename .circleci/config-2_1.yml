@@ -59,20 +59,6 @@ with_dtests_jobs: &with_dtest_jobs
             - utests_long:
                 requires:
                   - start_utests_long
-            - start_utests_burn:
-                type: approval
-                requires:
-                  - build
-            - utests_burn:
-                requires:
-                  - start_utests_burn
-            - start_utests_cql:
-                type: approval
-                requires:
-                  - build
-            - utests_cql:
-                requires:
-                  - start_utests_cql
             - start_utests_compression:
                 type: approval
                 requires:
@@ -204,30 +190,15 @@ jobs:
       - run_junit_tests:
           target: long-test
 
-  utests_burn:
-    <<: *j8_seq_executor
-    steps:
-      - attach_workspace:
-          at: /home/cassandra
-      - run_junit_tests:
-          target: test-burn
-          no_output_timeout: 45m
-
-  utests_cql:
-    <<: *j8_seq_executor
-    steps:
-      - attach_workspace:
-          at: /home/cassandra
-      - run_junit_tests:
-          target: cql-test
-
   utests_compression:
-    <<: *j8_seq_executor
+    <<: *j8_par_executor
     steps:
       - attach_workspace:
           at: /home/cassandra
-      - run_junit_tests:
-          target: test-compression
+      - create_junit_containers
+      - log_environment
+      - run_parallel_junit_tests:
+          target: testclasslist-compression
 
   utests_stress:
     <<: *j8_seq_executor
@@ -432,22 +403,25 @@ commands:
 
   run_parallel_junit_tests:
     parameters:
+      target:
+        type: string
+        default: testclasslist
       no_output_timeout:
         type: string
         default: 15m
     steps:
     - run:
-        name: Run Unit Tests (testclasslist)
+        name: Run Unit Tests (<<parameters.target>>)
         # Please note that we run `clean` and therefore rebuild the project, as we can't run tests on Java 8 in case
         # based on Java 11 builds.
         command: |
           export PATH=$JAVA_HOME/bin:$PATH
           time mv ~/cassandra /tmp
           cd /tmp/cassandra
-          ant clean testclasslist -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
+          ant <<parameters.target>> -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
           # todo; move this to its own target?
           if [ -s "/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt" ]; then
-            ant testclasslist -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
+            ant <<parameters.target>> -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
           fi
         no_output_timeout: <<parameters.no_output_timeout>>
     - store_test_results:
