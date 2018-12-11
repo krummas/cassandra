@@ -176,8 +176,8 @@ jobs:
     - DTEST_BRANCH: master
     - CCM_MAX_HEAP_SIZE: 1024M
     - CCM_HEAP_NEWSIZE: 256M
-    - JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
-    - JDK_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+    - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
+    - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   j11_dtests-with-vnodes:
     docker:
     - image: spod/cassandra-testing-ubuntu1810-java11:20181210
@@ -1132,7 +1132,7 @@ workflows:
 # 
 # jobs:
 #   build:
-#     executor: java11-executor
+#     executor: java8-executor
 #     parallelism: 1 # This job doesn't benefit from parallelism
 #     steps:
 #       - log_environment

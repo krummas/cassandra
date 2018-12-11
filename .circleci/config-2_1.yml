@@ -151,7 +151,7 @@ executors:
 
 jobs:
   build:
-    executor: java11-executor
+    executor: java8-executor
     parallelism: 1 # This job doesn't benefit from parallelism
     steps:
       - log_environment
