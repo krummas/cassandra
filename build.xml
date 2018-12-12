@@ -1247,7 +1247,8 @@
      includeantruntime="true"
      source="${source.version}"
      target="${target.version}"
-     encoding="utf-8">
+     encoding="utf-8"
+     executable="${env.JAVA8_HOME}/bin/javac">
      <classpath>
         <path refid="cassandra.classpath"/>
      </classpath>
