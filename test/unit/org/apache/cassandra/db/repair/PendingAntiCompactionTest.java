@@ -25,13 +25,24 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nullable;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListenableFutureTask;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -44,10 +55,16 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.schema.CreateTableStatement;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.compaction.CompactionController;
+import org.apache.cassandra.db.compaction.CompactionInterruptedException;
+import org.apache.cassandra.db.compaction.CompactionIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.compaction.OperationType;
+import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.RangesAtEndpoint;
@@ -62,14 +79,15 @@ import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.UUIDGen;
+import org.apache.cassandra.utils.WrappedRunnable;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
 public class PendingAntiCompactionTest
 {
     private static final Logger logger = LoggerFactory.getLogger(PendingAntiCompactionTest.class);
     private static final Collection<Range<Token>> FULL_RANGE;
-    private static final Collection<Range<Token>> NO_RANGES = Collections.emptyList();
-    private static InetAddressAndPort local;
+    static final Collection<Range<Token>> NO_RANGES = Collections.emptyList();
+    static InetAddressAndPort local;
 
     static
     {
@@ -80,8 +98,11 @@ public class PendingAntiCompactionTest
 
     private String ks;
     private final String tbl = "tbl";
+    private final String tbl2 = "tbl2";
+
     private TableMetadata cfm;
-    private ColumnFamilyStore cfs;
+    ColumnFamilyStore cfs;
+    ColumnFamilyStore cfs2;
 
     @BeforeClass
     public static void setupClass() throws Throwable
@@ -96,18 +117,24 @@ public class PendingAntiCompactionTest
     {
         ks = "ks_" + System.currentTimeMillis();
         cfm = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl), ks).build();
-        SchemaLoader.createKeyspace(ks, KeyspaceParams.simple(1), cfm);
+        TableMetadata cfm2 = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl2), ks).build();
+        SchemaLoader.createKeyspace(ks, KeyspaceParams.simple(1), cfm, cfm2);
         cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.id);
-
+        cfs2 = Schema.instance.getColumnFamilyStoreInstance(cfm2.id);
     }
 
-    private void makeSSTables(int num)
+    void makeSSTables(int num)
+    {
+        makeSSTables(num, cfs, 2);
+    }
+
+    void makeSSTables(int num, ColumnFamilyStore cfs, int rowsPerSSTable)
     {
         for (int i = 0; i < num; i++)
         {
-            int val = i * 2;  // multiplied to prevent ranges from overlapping
-            QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), val, val);
-            QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), val+1, val+1);
+            int val = i * rowsPerSSTable;  // multiplied to prevent ranges from overlapping
+            for (int j = 0; j < rowsPerSSTable; j++)
+                QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, cfs.getTableName()), val + j, val + j);
             cfs.forceBlockingFlush();
         }
         Assert.assertEquals(num, cfs.getLiveSSTables().size());
@@ -130,7 +157,7 @@ public class PendingAntiCompactionTest
         }
     }
 
-    private UUID prepareSession()
+    UUID prepareSession()
     {
         UUID sessionID = AbstractRepairTest.registerSession(cfs, true, true);
         LocalSessionAccessor.prepareUnsafe(sessionID, AbstractRepairTest.COORDINATOR, Sets.newHashSet(AbstractRepairTest.COORDINATOR));
@@ -403,6 +430,161 @@ public class PendingAntiCompactionTest
                                                                  PreviewKind.NONE);
         CompactionManager.instance.performAnticompaction(result.cfs, atEndpoint(FULL_RANGE, NO_RANGES), result.refs, result.txn, sessionID);
 
+    }
+
+    /**
+     * Makes sure that PendingAntiCompaction fails when anticompaction throws exception
+     */
+    @Test
+    public void antiCompactionException()
+    {
+        cfs.disableAutoCompaction();
+        makeSSTables(2);
+        UUID prsid = UUID.randomUUID();
+        ListeningExecutorService es = MoreExecutors.listeningDecorator(MoreExecutors.newDirectExecutorService());
+        PendingAntiCompaction pac = new PendingAntiCompaction(prsid, Collections.singleton(cfs), atEndpoint(FULL_RANGE, NO_RANGES), es) {
+            @Override
+            protected AcquisitionCallback getAcquisitionCallback(UUID prsId, RangesAtEndpoint tokenRanges)
+            {
+                return new AcquisitionCallback(prsid, tokenRanges)
+                {
+                    @Override
+                    ListenableFuture<?> submitPendingAntiCompaction(AcquireResult result)
+                    {
+                        Runnable r = new WrappedRunnable()
+                        {
+                            protected void runMayThrow()
+                            {
+                                throw new CompactionInterruptedException(null);
+                            }
+                        };
+                        return es.submit(r);
+                    }
+                };
+            }
+        };
+        ListenableFuture<?> fut = pac.run();
+        try
+        {
+            fut.get();
+            Assert.fail("Should throw exception");
+        }
+        catch(Throwable t)
+        {
+        }
+    }
+
+    @Test
+    public void testBlockedAcquisition() throws ExecutionException, InterruptedException
+    {
+        cfs.disableAutoCompaction();
+        ExecutorService es = Executors.newFixedThreadPool(1);
+
+        makeSSTables(2);
+        UUID prsid = UUID.randomUUID();
+        Set<SSTableReader> sstables = cfs.getLiveSSTables();
+        List<ISSTableScanner> scanners = sstables.stream().map(SSTableReader::getScanner).collect(Collectors.toList());
+        try
+        {
+            try (LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.ANTICOMPACTION);
+                 CompactionController controller = new CompactionController(cfs, sstables, 0);
+                 CompactionIterator ci = CompactionManager.getAntiCompactionIterator(scanners, controller, 0, UUID.randomUUID(), CompactionManager.instance.getMetrics()))
+            {
+                // `ci` is our imaginary ongoing anticompaction which makes no progress until after 30s
+                // now we try to start a new AC, which will try to cancel all ongoing compactions
+
+                CompactionManager.instance.getMetrics().beginCompaction(ci);
+                PendingAntiCompaction pac = new PendingAntiCompaction(prsid, Collections.singleton(cfs), atEndpoint(FULL_RANGE, NO_RANGES), es);
+                ListenableFuture fut = pac.run();
+                try
+                {
+                    fut.get(30, TimeUnit.SECONDS);
+                }
+                catch (TimeoutException e)
+                {
+                    // expected, we wait 1 minute for compactions to get cancelled in runWithCompactionsDisabled
+                }
+                Assert.assertTrue(ci.hasNext());
+                ci.next(); // this would throw exception if the CompactionIterator was abortable
+                try
+                {
+                    fut.get();
+                    Assert.fail("We should get exception when trying to start a new anticompaction with the same sstables");
+                }
+                catch (Throwable t)
+                {
+
+                }
+            }
+        }
+        finally
+        {
+            es.shutdown();
+            ISSTableScanner.closeAllAndPropagate(scanners, null);
+        }
+    }
+
+    @Test
+    public void testUnblockedAcquisition() throws ExecutionException, InterruptedException
+    {
+        cfs.disableAutoCompaction();
+        ExecutorService es = Executors.newFixedThreadPool(1);
+        makeSSTables(2);
+        UUID prsid = prepareSession();
+        Set<SSTableReader> sstables = cfs.getLiveSSTables();
+        List<ISSTableScanner> scanners = sstables.stream().map(SSTableReader::getScanner).collect(Collectors.toList());
+        try
+        {
+            try (LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.ANTICOMPACTION);
+                 CompactionController controller = new CompactionController(cfs, sstables, 0);
+                 CompactionIterator ci = new CompactionIterator(OperationType.COMPACTION, scanners, controller, 0, UUID.randomUUID()))
+            {
+                // `ci` is our imaginary ongoing anticompaction which makes no progress until after 5s
+                // now we try to start a new AC, which will try to cancel all ongoing compactions
+
+                CompactionManager.instance.getMetrics().beginCompaction(ci);
+                PendingAntiCompaction pac = new PendingAntiCompaction(prsid, Collections.singleton(cfs), atEndpoint(FULL_RANGE, NO_RANGES), es);
+                ListenableFuture fut = pac.run();
+                try
+                {
+                    fut.get(5, TimeUnit.SECONDS);
+                }
+                catch (TimeoutException e)
+                {
+                    // expected, we wait 1 minute for compactions to get cancelled in runWithCompactionsDisabled, but we are not iterating
+                    // CompactionIterator so the compaction is not actually cancelled
+                }
+                try
+                {
+                    Assert.assertTrue(ci.hasNext());
+                    ci.next();
+                    Assert.fail("CompactionIterator should be abortable");
+                }
+                catch (CompactionInterruptedException e)
+                {
+                    CompactionManager.instance.getMetrics().finishCompaction(ci);
+                    txn.abort();
+                    // expected
+                }
+                CountDownLatch cdl = new CountDownLatch(1);
+                Futures.addCallback(fut, new FutureCallback<Object>()
+                {
+                    public void onSuccess(@Nullable Object o)
+                    {
+                        cdl.countDown();
+                    }
+
+                    public void onFailure(Throwable throwable)
+                    {
+                    }
+                });
+                Assert.assertTrue(cdl.await(1, TimeUnit.MINUTES));
+            }
+        }
+        finally
+        {
+            es.shutdown();
+        }
     }
 
     private static RangesAtEndpoint atEndpoint(Collection<Range<Token>> full, Collection<Range<Token>> trans)
