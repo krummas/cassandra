@@ -20,6 +20,8 @@ package org.apache.cassandra.index.internal;
 import java.util.Set;
 import java.util.UUID;
 
+import com.google.common.collect.ImmutableSet;
+
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.compaction.CompactionInfo;
@@ -28,6 +30,7 @@ import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.index.SecondaryIndexBuilder;
 import org.apache.cassandra.io.sstable.ReducingKeyIterator;
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.utils.UUIDGen;
 
 /**
@@ -39,13 +42,15 @@ public class CollatedViewIndexBuilder extends SecondaryIndexBuilder
     private final Set<Index> indexers;
     private final ReducingKeyIterator iter;
     private final UUID compactionId;
+    private final ImmutableSet<SSTableReader> sstables;
 
-    public CollatedViewIndexBuilder(ColumnFamilyStore cfs, Set<Index> indexers, ReducingKeyIterator iter)
+    public CollatedViewIndexBuilder(ColumnFamilyStore cfs, Set<Index> indexers, ReducingKeyIterator iter, ImmutableSet<SSTableReader> sstables)
     {
         this.cfs = cfs;
         this.indexers = indexers;
         this.iter = iter;
         this.compactionId = UUIDGen.getTimeUUID();
+        this.sstables = sstables;
     }
 
     public CompactionInfo getCompactionInfo()
@@ -54,7 +59,8 @@ public class CollatedViewIndexBuilder extends SecondaryIndexBuilder
                 OperationType.INDEX_BUILD,
                 iter.getBytesRead(),
                 iter.getTotalBytes(),
-                compactionId);
+                compactionId,
+                sstables);
     }
 
     public void build()

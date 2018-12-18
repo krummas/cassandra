@@ -26,6 +26,8 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.BiFunction;
 
+import com.google.common.collect.ImmutableSet;
+
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.db.*;
@@ -159,7 +161,7 @@ public interface Index
         @SuppressWarnings("resource")
         public SecondaryIndexBuilder getIndexBuildTask(ColumnFamilyStore cfs, Set<Index> indexes, Collection<SSTableReader> sstables)
         {
-            return new CollatedViewIndexBuilder(cfs, indexes, new ReducingKeyIterator(sstables));
+            return new CollatedViewIndexBuilder(cfs, indexes, new ReducingKeyIterator(sstables), ImmutableSet.copyOf(sstables));
         }
     }
 

@@ -29,6 +29,7 @@ import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -321,7 +322,8 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
                                       0,
                                       keysEstimate,
                                       Unit.KEYS,
-                                      UUIDGen.getTimeUUID());
+                                      UUIDGen.getTimeUUID(),
+                                      ImmutableSet.of());
         }
 
         public CacheService.CacheType cacheType()

@@ -24,6 +24,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import com.google.common.collect.ImmutableSet;
+
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
@@ -127,7 +129,8 @@ class SASIIndexBuilder extends SecondaryIndexBuilder
                                   OperationType.INDEX_BUILD,
                                   bytesProcessed,
                                   totalSizeInBytes,
-                                  compactionId);
+                                  compactionId,
+                                  ImmutableSet.copyOf(sstables.keySet()));
     }
 
     private long getPrimaryIndexLength(SSTable sstable)

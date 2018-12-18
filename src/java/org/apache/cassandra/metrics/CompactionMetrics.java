@@ -168,6 +168,6 @@ public class CompactionMetrics implements CompactionManager.CompactionExecutorSt
 
     public static List<CompactionInfo.Holder> getCompactions()
     {
-        return new ArrayList<CompactionInfo.Holder>(compactions);
+        return new ArrayList<>(compactions);
     }
 }

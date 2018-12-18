@@ -19,9 +19,12 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.*;
 import java.util.function.LongPredicate;
+import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Ordering;
 
+import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ColumnFilter;
@@ -32,7 +35,6 @@ import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.index.transactions.CompactionTransaction;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
-import org.apache.cassandra.metrics.CompactionMetrics;
 import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 
 /**
@@ -58,6 +60,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
     private final OperationType type;
     private final CompactionController controller;
     private final List<ISSTableScanner> scanners;
+    private final ImmutableSet<SSTableReader> sstables;
     private final int nowInSec;
     private final UUID compactionId;
 
@@ -114,6 +117,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             compacted = Transformation.apply(merged, new AbortableUnfilteredPartitionTransformation(this));
         else
             compacted = merged;
+        sstables = scanners.stream().map(ISSTableScanner::getBackingSSTables).flatMap(Collection::stream).collect(ImmutableSet.toImmutableSet());
     }
 
     public TableMetadata metadata()
@@ -127,7 +131,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
                                   type,
                                   bytesRead,
                                   totalBytes,
-                                  compactionId);
+                                  compactionId,
+                                  sstables);
     }
 
     private void updateCounterFor(int rows)
