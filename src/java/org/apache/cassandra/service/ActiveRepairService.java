@@ -19,9 +19,26 @@ package org.apache.cassandra.service;
 
 import java.io.IOException;
 import java.net.UnknownHostException;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.management.openmbean.CompositeData;
 
 import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
@@ -30,11 +47,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.AbstractFuture;
-
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
-import org.apache.cassandra.locator.EndpointsByRange;
-import org.apache.cassandra.locator.EndpointsForRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,10 +66,12 @@ import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.gms.Gossiper;
-import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.IFailureDetectionEventListener;
+import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.gms.VersionedValue;
+import org.apache.cassandra.locator.EndpointsByRange;
+import org.apache.cassandra.locator.EndpointsForRange;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.net.IAsyncCallbackWithFailure;
@@ -63,14 +79,23 @@ import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.repair.CommonRange;
-import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.RepairSession;
 import org.apache.cassandra.repair.consistent.CoordinatorSessions;
 import org.apache.cassandra.repair.consistent.LocalSessions;
-import org.apache.cassandra.repair.messages.*;
+import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
+import org.apache.cassandra.repair.consistent.admin.PendingStats;
+import org.apache.cassandra.repair.consistent.admin.RepairStats;
+import org.apache.cassandra.repair.consistent.RepairedState;
+import org.apache.cassandra.repair.consistent.admin.SchemaArgsParser;
+import org.apache.cassandra.repair.messages.PrepareMessage;
+import org.apache.cassandra.repair.messages.RepairMessage;
+import org.apache.cassandra.repair.messages.RepairOption;
+import org.apache.cassandra.repair.messages.SyncComplete;
+import org.apache.cassandra.repair.messages.ValidationComplete;
 import org.apache.cassandra.schema.TableId;
+import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.CassandraVersion;
 import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.FBUtilities;
@@ -178,9 +203,10 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     }
 
     @Override
-    public List<Map<String, String>> getSessions(boolean all)
+    public List<Map<String, String>> getSessions(boolean all, String rangesStr)
     {
-        return consistent.local.sessionInfo(all);
+        Set<Range<Token>> ranges = RepairOption.parseRanges(rangesStr, DatabaseDescriptor.getPartitioner());
+        return consistent.local.sessionInfo(all, ranges);
     }
 
     @Override
@@ -188,6 +214,66 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     {
         UUID sessionID = UUID.fromString(session);
         consistent.local.cancelSession(sessionID, force);
+    }
+
+    @Override
+    public List<CompositeData> getRepairStats(List<String> schemaArgs, String rangeString)
+    {
+        List<CompositeData> stats = new ArrayList<>();
+        Collection<Range<Token>> userRanges = rangeString != null
+                                              ? RepairOption.parseRanges(rangeString, DatabaseDescriptor.getPartitioner())
+                                              : null;
+
+        for (ColumnFamilyStore cfs : SchemaArgsParser.parse(schemaArgs))
+        {
+            String keyspace = cfs.keyspace.getName();
+            Collection<Range<Token>> ranges = userRanges != null
+                                              ? userRanges
+                                              : StorageService.instance.getLocalReplicas(keyspace).ranges();
+            RepairedState.Stats cfStats = consistent.local.getRepairedStats(cfs.metadata().id, ranges);
+            stats.add(RepairStats.fromRepairState(keyspace, cfs.name, cfStats).toComposite());
+        }
+
+        return stats;
+    }
+
+    @Override
+    public List<CompositeData> getPendingStats(List<String> schemaArgs, String rangeString)
+    {
+        List<CompositeData> stats = new ArrayList<>();
+        Collection<Range<Token>> userRanges = rangeString != null
+                                              ? RepairOption.parseRanges(rangeString, DatabaseDescriptor.getPartitioner())
+                                              : null;
+        for (ColumnFamilyStore cfs : SchemaArgsParser.parse(schemaArgs))
+        {
+            String keyspace = cfs.keyspace.getName();
+            Collection<Range<Token>> ranges = userRanges != null
+                                              ? userRanges
+                                              : StorageService.instance.getLocalReplicas(keyspace).ranges();
+            PendingStats cfStats = consistent.local.getPendingStats(cfs.metadata().id, ranges);
+            stats.add(cfStats.toComposite());
+        }
+
+        return stats;
+    }
+
+    @Override
+    public List<CompositeData> cleanupPending(List<String> schemaArgs, String rangeString, boolean force)
+    {
+        List<CompositeData> stats = new ArrayList<>();
+        Collection<Range<Token>> userRanges = rangeString != null
+                                              ? RepairOption.parseRanges(rangeString, DatabaseDescriptor.getPartitioner())
+                                              : null;
+        for (ColumnFamilyStore cfs : SchemaArgsParser.parse(schemaArgs))
+        {
+            String keyspace = cfs.keyspace.getName();
+            Collection<Range<Token>> ranges = userRanges != null
+                                              ? userRanges
+                                              : StorageService.instance.getLocalReplicas(keyspace).ranges();
+            CleanupSummary summary = consistent.local.cleanup(cfs.metadata().id, ranges, force);
+            stats.add(summary.toComposite());
+        }
+        return stats;
     }
 
     /**

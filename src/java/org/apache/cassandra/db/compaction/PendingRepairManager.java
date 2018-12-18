@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -46,6 +47,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.Pair;
@@ -263,10 +265,51 @@ class PendingRepairManager
     @SuppressWarnings("resource")
     private RepairFinishedCompactionTask getRepairFinishedCompactionTask(UUID sessionID)
     {
+        Preconditions.checkState(canCleanup(sessionID));
         Set<SSTableReader> sstables = get(sessionID).getSSTables();
         long repairedAt = ActiveRepairService.instance.consistent.local.getFinalSessionRepairedAt(sessionID);
         LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.COMPACTION);
         return txn == null ? null : new RepairFinishedCompactionTask(cfs, txn, sessionID, repairedAt);
+    }
+
+    public Callable<CleanupSummary> releaseSessionData(Collection<UUID> sessionIDs)
+    {
+        List<Pair<UUID, Runnable>> tasks = new ArrayList<>(sessionIDs.size());
+        for (UUID session : sessionIDs)
+        {
+            if (hasDataForSession(session))
+            {
+                tasks.add(Pair.create(session, getRepairFinishedCompactionTask(session)));
+            }
+        }
+        return () -> {
+            Set<UUID> successful = new HashSet<>();
+            Set<UUID> unsuccessful = new HashSet<>();
+            for (Pair<UUID, Runnable> pair : tasks)
+            {
+                UUID session = pair.left;
+                Runnable task = pair.right;
+
+                if (task != null)
+                {
+                    try
+                    {
+                        task.run();
+                        successful.add(session);
+                    }
+                    catch (Exception e)
+                    {
+                        logger.error("Failed cleaning up " + session, e);
+                        unsuccessful.add(session);
+                    }
+                }
+                else
+                {
+                    unsuccessful.add(session);
+                }
+            }
+            return new CleanupSummary(cfs, successful, unsuccessful);
+        };
     }
 
     synchronized int getNumPendingRepairFinishedTasks()

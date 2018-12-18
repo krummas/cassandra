@@ -75,6 +75,8 @@ import org.apache.cassandra.metrics.Sampler.Sample;
 import org.apache.cassandra.metrics.Sampler.SamplerType;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.repair.TableRepairManager;
+import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
+import org.apache.cassandra.repair.consistent.admin.PendingStat;
 import org.apache.cassandra.schema.*;
 import org.apache.cassandra.schema.CompactionParams.TombstoneOption;
 import org.apache.cassandra.service.CacheService;
@@ -1557,6 +1559,49 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public Iterable<SSTableReader> getUncompactingSSTables()
     {
         return data.getUncompacting();
+    }
+
+    public Map<UUID, PendingStat> getPendingRepairStats()
+    {
+        Map<UUID, PendingStat.Builder> builders = new HashMap<>();
+        for (SSTableReader sstable : getLiveSSTables())
+        {
+            if (!sstable.isPendingRepair())
+                continue;
+
+            UUID session = sstable.getPendingRepair();
+            if (!builders.containsKey(session))
+                builders.put(session, new PendingStat.Builder());
+
+            builders.get(session).addSSTable(sstable);
+        }
+
+        Map<UUID, PendingStat> stats = new HashMap<>();
+        for (Map.Entry<UUID, PendingStat.Builder> entry : builders.entrySet())
+        {
+            stats.put(entry.getKey(), entry.getValue().build());
+        }
+        return stats;
+    }
+
+    /**
+     * promotes (or demotes) data attached to an incremental repair session that has either completed successfully,
+     * or failed
+     *
+     * @return session ids whose data could not be released
+     */
+    public CleanupSummary releaseRepairData(Collection<UUID> sessions, boolean force)
+    {
+        if (force)
+        {
+            return runWithCompactionsDisabled(() -> compactionStrategyManager.releaseRepairData(sessions),
+                                              sst -> sst.isPendingRepair() && sessions.contains(sst.getPendingRepair()),
+                                              false, true);
+        }
+        else
+        {
+            return compactionStrategyManager.releaseRepairData(sessions);
+        }
     }
 
     public boolean isFilterFullyCoveredBy(ClusteringIndexFilter filter,

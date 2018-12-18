@@ -69,6 +69,7 @@ import org.apache.cassandra.notifications.SSTableDeletingNotification;
 import org.apache.cassandra.notifications.SSTableListChangedNotification;
 import org.apache.cassandra.notifications.SSTableMetadataChanged;
 import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
+import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
 import org.apache.cassandra.schema.CompactionParams;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
@@ -1225,5 +1226,35 @@ public class CompactionStrategyManager implements INotificationConsumer
                 writeLock.unlock();
             }
         }
+    }
+
+    public CleanupSummary releaseRepairData(Collection<UUID> sessions)
+    {
+        List<Callable<CleanupSummary>> callables = new ArrayList<>();
+        readLock.lock();
+        try
+        {
+            for (PendingRepairManager prm : Iterables.concat(pendingRepairs.getManagers(), transientRepairs.getManagers()))
+            {
+                callables.add(prm.releaseSessionData(sessions));
+            }
+        }
+        finally
+        {
+            readLock.unlock();
+        }
+        CleanupSummary summary = new CleanupSummary(cfs, Collections.emptySet(), Collections.emptySet());
+        for (Callable<CleanupSummary> callable : callables)
+        {
+            try
+            {
+                summary = CleanupSummary.add(summary, callable.call());
+            }
+            catch (Exception e)
+            {
+                throw new AssertionError(e);
+            }
+        }
+        return summary;
     }
 }

@@ -39,10 +39,12 @@ import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Verify;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -56,6 +58,9 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.repair.KeyspaceRepairManager;
+import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
+import org.apache.cassandra.repair.consistent.admin.PendingStat;
+import org.apache.cassandra.repair.consistent.admin.PendingStats;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -139,6 +144,7 @@ public class LocalSessions
     private final String table = SystemKeyspace.REPAIRS;
     private boolean started = false;
     private volatile ImmutableMap<UUID, LocalSession> sessions = ImmutableMap.of();
+    private volatile ImmutableMap<TableId, RepairedState> repairedStates = ImmutableMap.of();
 
     @VisibleForTesting
     int getNumSessions()
@@ -164,14 +170,134 @@ public class LocalSessions
         return StorageService.instance.isInitialized();
     }
 
-    public List<Map<String, String>> sessionInfo(boolean all)
+    public List<Map<String, String>> sessionInfo(boolean all, Set<Range<Token>> ranges)
     {
         Iterable<LocalSession> currentSessions = sessions.values();
+
         if (!all)
-        {
             currentSessions = Iterables.filter(currentSessions, s -> !s.isCompleted());
-        }
+
+        if (!ranges.isEmpty())
+            currentSessions = Iterables.filter(currentSessions, s -> s.intersects(ranges));
+
         return Lists.newArrayList(Iterables.transform(currentSessions, LocalSessionInfo::sessionToMap));
+    }
+
+    private RepairedState getRepairedState(TableId tid)
+    {
+        if (!repairedStates.containsKey(tid))
+        {
+            synchronized (this)
+            {
+                if (!repairedStates.containsKey(tid))
+                {
+                    repairedStates = ImmutableMap.<TableId, RepairedState>builder()
+                                     .putAll(repairedStates)
+                                     .put(tid, new RepairedState())
+                                     .build();
+                }
+            }
+        }
+        return Verify.verifyNotNull(repairedStates.get(tid));
+    }
+
+    private void maybeUpdateRepairedState(LocalSession session)
+    {
+        if (session.getState() != FINALIZED)
+            return;
+
+        Verify.verify(session.repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE);
+
+        for (TableId tid : session.tableIds)
+        {
+            RepairedState state = getRepairedState(tid);
+            state.add(session.ranges, session.repairedAt);
+        }
+    }
+
+    /**
+     * Determine if all ranges and tables covered by this session
+     * have since been re-repaired by a more recent session
+     */
+    private boolean isSuperseded(LocalSession session)
+    {
+        for (TableId tid : session.tableIds)
+        {
+            RepairedState state = repairedStates.get(tid);
+
+            if (state == null)
+                return false;
+
+            long minRepaired = state.minRepairedAt(session.ranges);
+            if (minRepaired <= session.repairedAt)
+                return false;
+        }
+
+        return true;
+    }
+
+    public RepairedState.Stats getRepairedStats(TableId tid, Collection<Range<Token>> ranges)
+    {
+        RepairedState state = repairedStates.get(tid);
+
+        if (state == null)
+            return RepairedState.Stats.EMPTY;
+
+        return state.getRepairedStats(ranges);
+    }
+
+    public PendingStats getPendingStats(TableId tid, Collection<Range<Token>> ranges)
+    {
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(tid);
+        Preconditions.checkArgument(cfs != null);
+
+        PendingStat.Builder pending = new PendingStat.Builder();
+        PendingStat.Builder finalized = new PendingStat.Builder();
+        PendingStat.Builder failed = new PendingStat.Builder();
+
+        Map<UUID, PendingStat> stats = cfs.getPendingRepairStats();
+        Set<UUID> sessionIds = new HashSet<>();
+        for (Map.Entry<UUID, PendingStat> entry : stats.entrySet())
+        {
+            UUID sessionID = entry.getKey();
+            PendingStat stat = entry.getValue();
+            Verify.verify(sessionID.equals(Iterables.getOnlyElement(stat.sessions)));
+
+            LocalSession session = sessions.get(sessionID);
+
+            if (!Iterables.any(ranges, r -> r.intersects(session.ranges)))
+                continue;
+
+            Verify.verifyNotNull(session);
+            switch (session.getState())
+            {
+                case FINALIZED:
+                    finalized.addStat(stat);
+                    break;
+                case FAILED:
+                    failed.addStat(stat);
+                    break;
+                default:
+                    pending.addStat(stat);
+            }
+            sessionIds.add(session.sessionID);
+        }
+
+        return new PendingStats(cfs.keyspace.getName(), cfs.name, pending.build(), finalized.build(), failed.build());
+    }
+
+    public CleanupSummary cleanup(TableId tid, Collection<Range<Token>> ranges, boolean force)
+    {
+        Iterable<LocalSession> candidates = Iterables.filter(sessions.values(),
+                                                             ls -> ls.isCompleted()
+                                                                   && ls.tableIds.contains(tid)
+                                                                   && Range.intersects(ls.ranges, ranges));
+
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(tid);
+        Set<UUID> sessionIds = Sets.newHashSet(Iterables.transform(candidates, s -> s.sessionID));
+
+
+        return cfs.releaseRepairData(sessionIds, force);
     }
 
     /**
@@ -209,6 +335,7 @@ public class LocalSessions
             try
             {
                 LocalSession session = load(row);
+                maybeUpdateRepairedState(session);
                 loadedSessions.put(session.sessionID, session);
             }
             catch (IllegalArgumentException | NullPointerException e)
@@ -265,7 +392,12 @@ public class LocalSessions
                 }
                 else if (shouldDelete(session, now))
                 {
-                    if (!sessionHasData(session))
+                    if (session.getState() == FINALIZED && !isSuperseded(session))
+                    {
+                        logger.info("Skipping delete of FINALIZED LocalSession {} because it has " +
+                                    "not been superseded by a more recent session", session.sessionID);
+                    }
+                    else if (!sessionHasData(session))
                     {
                         logger.debug("Auto deleting repair session {}", session);
                         deleteSession(session.sessionID);
@@ -360,6 +492,8 @@ public class LocalSessions
                                        session.participants.stream().map(participant -> participant.toString()).collect(Collectors.toSet()),
                                        serializeRanges(session.ranges),
                                        tableIdToUuid(session.tableIds));
+
+        maybeUpdateRepairedState(session);
     }
 
     private static int dateToSeconds(Date d)
