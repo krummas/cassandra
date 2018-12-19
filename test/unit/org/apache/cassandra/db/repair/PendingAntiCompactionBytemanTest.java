@@ -44,7 +44,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @RunWith(BMUnitRunner.class)
-public class PendingAntiCompactionBytemanTest extends PendingAntiCompactionTest
+public class PendingAntiCompactionBytemanTest extends AbstractPendingAntiCompactionTest
 {
     @BMRules(rules = { @BMRule(name = "Throw exception anticompaction",
                                targetClass = "Range$OrderedRangeContainmentChecker",

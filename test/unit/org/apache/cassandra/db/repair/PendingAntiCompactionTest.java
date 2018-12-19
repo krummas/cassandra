@@ -36,7 +36,6 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -44,16 +43,12 @@ import com.google.common.util.concurrent.ListenableFutureTask;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.cql3.statements.schema.CreateTableStatement;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionController;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
@@ -69,12 +64,9 @@ import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.apache.cassandra.locator.Replica;
-import org.apache.cassandra.repair.AbstractRepairTest;
 import org.apache.cassandra.repair.consistent.LocalSessionAccessor;
-import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableId;
-import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -82,63 +74,9 @@ import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
-public class PendingAntiCompactionTest
+public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
 {
-    private static final Logger logger = LoggerFactory.getLogger(PendingAntiCompactionTest.class);
-    private static final Collection<Range<Token>> FULL_RANGE;
-    static final Collection<Range<Token>> NO_RANGES = Collections.emptyList();
-    static InetAddressAndPort local;
-
-    static
-    {
-        DatabaseDescriptor.daemonInitialization();
-        Token minToken = DatabaseDescriptor.getPartitioner().getMinimumToken();
-        FULL_RANGE = Collections.singleton(new Range<>(minToken, minToken));
-    }
-
-    private String ks;
-    private final String tbl = "tbl";
-    private final String tbl2 = "tbl2";
-
-    private TableMetadata cfm;
-    ColumnFamilyStore cfs;
-    ColumnFamilyStore cfs2;
-
-    @BeforeClass
-    public static void setupClass() throws Throwable
-    {
-        SchemaLoader.prepareServer();
-        local = InetAddressAndPort.getByName("127.0.0.1");
-        ActiveRepairService.instance.consistent.local.start();
-    }
-
-    @Before
-    public void setup()
-    {
-        ks = "ks_" + System.currentTimeMillis();
-        cfm = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl), ks).build();
-        TableMetadata cfm2 = CreateTableStatement.parse(String.format("CREATE TABLE %s.%s (k INT PRIMARY KEY, v INT)", ks, tbl2), ks).build();
-        SchemaLoader.createKeyspace(ks, KeyspaceParams.simple(1), cfm, cfm2);
-        cfs = Schema.instance.getColumnFamilyStoreInstance(cfm.id);
-        cfs2 = Schema.instance.getColumnFamilyStoreInstance(cfm2.id);
-    }
-
-    void makeSSTables(int num)
-    {
-        makeSSTables(num, cfs, 2);
-    }
-
-    void makeSSTables(int num, ColumnFamilyStore cfs, int rowsPerSSTable)
-    {
-        for (int i = 0; i < num; i++)
-        {
-            int val = i * rowsPerSSTable;  // multiplied to prevent ranges from overlapping
-            for (int j = 0; j < rowsPerSSTable; j++)
-                QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, cfs.getTableName()), val + j, val + j);
-            cfs.forceBlockingFlush();
-        }
-        Assert.assertEquals(num, cfs.getLiveSSTables().size());
-    }
+    static final Logger logger = LoggerFactory.getLogger(PendingAntiCompactionTest.class);
 
     private static class InstrumentedAcquisitionCallback extends PendingAntiCompaction.AcquisitionCallback
     {
@@ -155,13 +93,6 @@ public class PendingAntiCompactionTest
             result.abort();  // prevent ref leak complaints
             return ListenableFutureTask.create(() -> {}, null);
         }
-    }
-
-    UUID prepareSession()
-    {
-        UUID sessionID = AbstractRepairTest.registerSession(cfs, true, true);
-        LocalSessionAccessor.prepareUnsafe(sessionID, AbstractRepairTest.COORDINATOR, Sets.newHashSet(AbstractRepairTest.COORDINATOR));
-        return sessionID;
     }
 
     /**
