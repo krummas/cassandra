@@ -128,6 +128,8 @@ public class CompactionManager implements CompactionManagerMBean
     @VisibleForTesting
     final Multiset<ColumnFamilyStore> compactingCF = ConcurrentHashMultiset.create();
 
+    public final ActiveCompactions active = new ActiveCompactions();
+
     private final RateLimiter compactionRateLimiter = RateLimiter.create(Double.MAX_VALUE);
 
     public CompactionMetrics getMetrics()
@@ -224,7 +226,7 @@ public class CompactionManager implements CompactionManagerMBean
         cacheCleanupExecutor.shutdown();
 
         // interrupt compactions and validations
-        for (Holder compactionHolder : CompactionMetrics.getCompactions())
+        for (Holder compactionHolder : active.getCompactions())
         {
             compactionHolder.stop();
         }
@@ -286,7 +288,7 @@ public class CompactionManager implements CompactionManagerMBean
                 }
                 else
                 {
-                    task.execute(metrics);
+                    task.execute(active);
                     ranCompaction = true;
                 }
             }
@@ -308,7 +310,7 @@ public class CompactionManager implements CompactionManagerMBean
                     AbstractCompactionTask upgradeTask = strategy.findUpgradeSSTableTask();
                     if (upgradeTask != null)
                     {
-                        upgradeTask.execute(metrics);
+                        upgradeTask.execute(active);
                         return true;
                     }
                 }
@@ -495,7 +497,7 @@ public class CompactionManager implements CompactionManagerMBean
                 AbstractCompactionTask task = cfs.getCompactionStrategyManager().getCompactionTask(txn, NO_GC, Long.MAX_VALUE);
                 task.setUserDefined(true);
                 task.setCompactionType(OperationType.UPGRADE_SSTABLES);
-                task.execute(metrics);
+                task.execute(active);
             }
         }, jobs, OperationType.UPGRADE_SSTABLES);
     }
@@ -566,7 +568,7 @@ public class CompactionManager implements CompactionManagerMBean
                 };
                 task.setUserDefined(true);
                 task.setCompactionType(OperationType.GARBAGE_COLLECT);
-                task.execute(metrics);
+                task.execute(active);
             }
         }, jobs, OperationType.GARBAGE_COLLECT);
     }
@@ -638,7 +640,7 @@ public class CompactionManager implements CompactionManagerMBean
                 AbstractCompactionTask task = cfs.getCompactionStrategyManager().getCompactionTask(txn, NO_GC, Long.MAX_VALUE);
                 task.setUserDefined(true);
                 task.setCompactionType(OperationType.RELOCATE);
-                task.execute(metrics);
+                task.execute(active);
             }
         }, jobs, OperationType.RELOCATE);
     }
@@ -831,7 +833,7 @@ public class CompactionManager implements CompactionManagerMBean
             {
                 protected void runMayThrow()
                 {
-                    task.execute(metrics);
+                    task.execute(active);
                 }
             };
 
@@ -868,7 +870,7 @@ public class CompactionManager implements CompactionManagerMBean
             {
                 for (AbstractCompactionTask task : tasks)
                     if (task != null)
-                        task.execute(metrics);
+                        task.execute(active);
             }
         };
 
@@ -1011,7 +1013,7 @@ public class CompactionManager implements CompactionManagerMBean
                     for (AbstractCompactionTask task : tasks)
                     {
                         if (task != null)
-                            task.execute(metrics);
+                            task.execute(active);
                     }
                 }
             }
@@ -1054,13 +1056,13 @@ public class CompactionManager implements CompactionManagerMBean
         try (Scrubber scrubber = new Scrubber(cfs, modifier, skipCorrupted, checkData, reinsertOverflowedTTL))
         {
             scrubInfo = scrubber.getScrubInfo();
-            metrics.beginCompaction(scrubInfo);
+            active.beginCompaction(scrubInfo);
             scrubber.scrub();
         }
         finally
         {
             if (scrubInfo != null)
-                metrics.finishCompaction(scrubInfo);
+                active.finishCompaction(scrubInfo);
         }
     }
 
@@ -1071,13 +1073,13 @@ public class CompactionManager implements CompactionManagerMBean
         try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
             verifyInfo = verifier.getVerifyInfo();
-            metrics.beginCompaction(verifyInfo);
+            active.beginCompaction(verifyInfo);
             verifier.verify();
         }
         finally
         {
             if (verifyInfo != null)
-                metrics.finishCompaction(verifyInfo);
+                active.finishCompaction(verifyInfo);
         }
     }
 
@@ -1198,7 +1200,7 @@ public class CompactionManager implements CompactionManagerMBean
              ISSTableScanner scanner = cleanupStrategy.getScanner(sstable);
              CompactionController controller = new CompactionController(cfs, txn.originals(), getDefaultGcBefore(cfs, nowInSec));
              Refs<SSTableReader> refs = Refs.ref(Collections.singleton(sstable));
-             CompactionIterator ci = new CompactionIterator(OperationType.CLEANUP, Collections.singletonList(scanner), controller, nowInSec, UUIDGen.getTimeUUID(), metrics))
+             CompactionIterator ci = new CompactionIterator(OperationType.CLEANUP, Collections.singletonList(scanner), controller, nowInSec, UUIDGen.getTimeUUID(), active))
         {
             StatsMetadata metadata = sstable.getSSTableMetadata();
             writer.switchWriter(createWriter(cfs, compactionFileLocation, expectedBloomFilterSize, metadata.repairedAt, metadata.pendingRepair, metadata.isTransient, sstable, txn));
@@ -1495,7 +1497,7 @@ public class CompactionManager implements CompactionManagerMBean
 
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(txn.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
-             CompactionIterator ci = getAntiCompactionIterator(scanners.scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics))
+             CompactionIterator ci = getAntiCompactionIterator(scanners.scanners, controller, nowInSec, UUIDGen.getTimeUUID(), active))
         {
             int expectedBloomFilterSize = Math.max(cfs.metadata().params.minIndexInterval, (int)(SSTableReader.getApproximateKeyCount(sstableAsSet)));
 
@@ -1556,9 +1558,9 @@ public class CompactionManager implements CompactionManagerMBean
     }
 
     @VisibleForTesting
-    public static CompactionIterator getAntiCompactionIterator(List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID timeUUID, CompactionMetrics metrics)
+    public static CompactionIterator getAntiCompactionIterator(List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID timeUUID, ActiveCompactions active)
     {
-        return new CompactionIterator(OperationType.ANTICOMPACTION, scanners, controller, nowInSec, timeUUID, metrics, false);
+        return new CompactionIterator(OperationType.ANTICOMPACTION, scanners, controller, nowInSec, timeUUID, active, false);
     }
 
     /**
@@ -1570,14 +1572,14 @@ public class CompactionManager implements CompactionManagerMBean
         {
             public void run()
             {
-                metrics.beginCompaction(builder);
+                active.beginCompaction(builder);
                 try
                 {
                     builder.build();
                 }
                 finally
                 {
-                    metrics.finishCompaction(builder);
+                    active.finishCompaction(builder);
                 }
             }
         };
@@ -1598,14 +1600,14 @@ public class CompactionManager implements CompactionManagerMBean
                 }
                 try
                 {
-                    metrics.beginCompaction(writer);
+                    active.beginCompaction(writer);
                     try
                     {
                         writer.saveCache();
                     }
                     finally
                     {
-                        metrics.finishCompaction(writer);
+                        active.finishCompaction(writer);
                     }
                 }
                 finally
@@ -1620,7 +1622,7 @@ public class CompactionManager implements CompactionManagerMBean
 
     public List<SSTableReader> runIndexSummaryRedistribution(IndexSummaryRedistribution redistribution) throws IOException
     {
-        metrics.beginCompaction(redistribution);
+        active.beginCompaction(redistribution);
 
         try
         {
@@ -1628,7 +1630,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
         finally
         {
-            metrics.finishCompaction(redistribution);
+            active.finishCompaction(redistribution);
         }
     }
 
@@ -1642,21 +1644,21 @@ public class CompactionManager implements CompactionManagerMBean
     public ListenableFuture<Long> submitViewBuilder(final ViewBuilderTask task)
     {
         return viewBuildExecutor.submitIfRunning(() -> {
-            metrics.beginCompaction(task);
+            active.beginCompaction(task);
             try
             {
                 return task.call();
             }
             finally
             {
-                metrics.finishCompaction(task);
+                active.finishCompaction(task);
             }
         }, "view build");
     }
 
     public int getActiveCompactions()
     {
-        return CompactionMetrics.getCompactions().size();
+        return active.getCompactions().size();
     }
 
     static class CompactionExecutor extends JMXEnabledThreadPoolExecutor
@@ -1779,13 +1781,6 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    public interface CompactionExecutorStatsCollector
-    {
-        void beginCompaction(CompactionInfo.Holder ci);
-
-        void finishCompaction(CompactionInfo.Holder ci);
-    }
-
     public void incrementAborted()
     {
         metrics.compactionsAborted.inc();
@@ -1804,7 +1799,7 @@ public class CompactionManager implements CompactionManagerMBean
 
     public List<Map<String, String>> getCompactions()
     {
-        List<Holder> compactionHolders = CompactionMetrics.getCompactions();
+        List<Holder> compactionHolders = active.getCompactions();
         List<Map<String, String>> out = new ArrayList<Map<String, String>>(compactionHolders.size());
         for (CompactionInfo.Holder ci : compactionHolders)
             out.add(ci.getCompactionInfo().asMap());
@@ -1813,7 +1808,7 @@ public class CompactionManager implements CompactionManagerMBean
 
     public List<String> getCompactionSummary()
     {
-        List<Holder> compactionHolders = CompactionMetrics.getCompactions();
+        List<Holder> compactionHolders = active.getCompactions();
         List<String> out = new ArrayList<String>(compactionHolders.size());
         for (CompactionInfo.Holder ci : compactionHolders)
             out.add(ci.getCompactionInfo().toString());
@@ -1855,7 +1850,7 @@ public class CompactionManager implements CompactionManagerMBean
     public void stopCompaction(String type)
     {
         OperationType operation = OperationType.valueOf(type);
-        for (Holder holder : CompactionMetrics.getCompactions())
+        for (Holder holder : active.getCompactions())
         {
             if (holder.getCompactionInfo().getTaskType() == operation)
                 holder.stop();
@@ -1864,7 +1859,7 @@ public class CompactionManager implements CompactionManagerMBean
 
     public void stopCompactionById(String compactionId)
     {
-        for (Holder holder : CompactionMetrics.getCompactions())
+        for (Holder holder : active.getCompactions())
         {
             UUID holderId = holder.getCompactionInfo().getTaskId();
             if (holderId != null && holderId.equals(UUID.fromString(compactionId)))
@@ -2012,7 +2007,7 @@ public class CompactionManager implements CompactionManagerMBean
         assert columnFamilies != null;
 
         // interrupt in-progress compactions
-        for (Holder compactionHolder : CompactionMetrics.getCompactions())
+        for (Holder compactionHolder : active.getCompactions())
         {
             CompactionInfo info = compactionHolder.getCompactionInfo();
             if ((info.getTaskType() == OperationType.VALIDATION) && !interruptValidation)
@@ -2047,12 +2042,12 @@ public class CompactionManager implements CompactionManagerMBean
 
     public List<CompactionInfo> getSSTableTasks()
     {
-        return CompactionMetrics.getCompactions()
-                                .stream()
-                                .map(CompactionInfo.Holder::getCompactionInfo)
-                                .filter(task -> task.getTaskType() != OperationType.COUNTER_CACHE_SAVE
-                                             && task.getTaskType() != OperationType.KEY_CACHE_SAVE
-                                             && task.getTaskType() != OperationType.ROW_CACHE_SAVE)
-                                .collect(Collectors.toList());
+        return active.getCompactions()
+                     .stream()
+                     .map(CompactionInfo.Holder::getCompactionInfo)
+                     .filter(task -> task.getTaskType() != OperationType.COUNTER_CACHE_SAVE
+                                     && task.getTaskType() != OperationType.KEY_CACHE_SAVE
+                                     && task.getTaskType() != OperationType.ROW_CACHE_SAVE)
+                     .collect(Collectors.toList());
     }
 }

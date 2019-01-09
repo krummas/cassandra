@@ -419,12 +419,12 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         {
             try (LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.ANTICOMPACTION);
                  CompactionController controller = new CompactionController(cfs, sstables, 0);
-                 CompactionIterator ci = CompactionManager.getAntiCompactionIterator(scanners, controller, 0, UUID.randomUUID(), CompactionManager.instance.getMetrics()))
+                 CompactionIterator ci = CompactionManager.getAntiCompactionIterator(scanners, controller, 0, UUID.randomUUID(), CompactionManager.instance.active))
             {
                 // `ci` is our imaginary ongoing anticompaction which makes no progress until after 30s
                 // now we try to start a new AC, which will try to cancel all ongoing compactions
 
-                CompactionManager.instance.getMetrics().beginCompaction(ci);
+                CompactionManager.instance.active.beginCompaction(ci);
                 PendingAntiCompaction pac = new PendingAntiCompaction(prsid, Collections.singleton(cfs), atEndpoint(FULL_RANGE, NO_RANGES), es);
                 ListenableFuture fut = pac.run();
                 try
@@ -473,7 +473,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                 // `ci` is our imaginary ongoing anticompaction which makes no progress until after 5s
                 // now we try to start a new AC, which will try to cancel all ongoing compactions
 
-                CompactionManager.instance.getMetrics().beginCompaction(ci);
+                CompactionManager.instance.active.beginCompaction(ci);
                 PendingAntiCompaction pac = new PendingAntiCompaction(prsid, Collections.singleton(cfs), atEndpoint(FULL_RANGE, NO_RANGES), es);
                 ListenableFuture fut = pac.run();
                 try
@@ -493,7 +493,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                 }
                 catch (CompactionInterruptedException e)
                 {
-                    CompactionManager.instance.getMetrics().finishCompaction(ci);
+                    CompactionManager.instance.active.finishCompaction(ci);
                     txn.abort();
                     // expected
                 }

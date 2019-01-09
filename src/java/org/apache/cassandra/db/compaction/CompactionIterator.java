@@ -19,7 +19,6 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.*;
 import java.util.function.LongPredicate;
-import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Ordering;
@@ -76,20 +75,20 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
     private final long[] mergeCounters;
 
     private final UnfilteredPartitionIterator compacted;
-    private final CompactionMetrics metrics;
+    private final ActiveCompactionsTracker tracker;
 
     public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId)
     {
-        this(type, scanners, controller, nowInSec, compactionId, null, true);
+        this(type, scanners, controller, nowInSec, compactionId, ActiveCompactionsTracker.NOOP, true);
     }
 
-    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, CompactionMetrics metrics)
+    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, ActiveCompactionsTracker tracker)
     {
-        this(type, scanners, controller, nowInSec, compactionId, metrics, true);
+        this(type, scanners, controller, nowInSec, compactionId, tracker, true);
     }
 
     @SuppressWarnings("resource") // We make sure to close mergedIterator in close() and CompactionIterator is itself an AutoCloseable
-    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, CompactionMetrics metrics, boolean abortable)
+    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, ActiveCompactionsTracker tracker, boolean abortable)
     {
         this.controller = controller;
         this.type = type;
@@ -103,10 +102,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             bytes += scanner.getLengthInBytes();
         this.totalBytes = bytes;
         this.mergeCounters = new long[scanners.size()];
-        this.metrics = metrics;
-
-        if (metrics != null)
-            metrics.beginCompaction(this);
+        this.tracker = tracker == null ? ActiveCompactionsTracker.NOOP : tracker;
+        this.tracker.beginCompaction(this); // note that CompactionTask also calls this, but CT only creates CompactionIterator with a NOOP tracker
 
         UnfilteredPartitionIterator merged = scanners.isEmpty()
                                            ? EmptyIterators.unfilteredPartition(controller.cfs.metadata())
@@ -259,8 +256,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         }
         finally
         {
-            if (metrics != null)
-                metrics.finishCompaction(this);
+            tracker.finishCompaction(this);
         }
     }
 
