@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
@@ -48,6 +49,7 @@ public final class CompactionInfo
     private final Unit unit;
     private final UUID compactionId;
     private final ImmutableSet<SSTableReader> sstables;
+    private final CancellationType cancellationType;
 
     public CompactionInfo(TableMetadata metadata, OperationType tasktype, long bytesComplete, long totalBytes, UUID compactionId, ImmutableSet<SSTableReader> sstables)
     {
@@ -61,6 +63,11 @@ public final class CompactionInfo
 
     public CompactionInfo(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, ImmutableSet<SSTableReader> sstables)
     {
+        this(metadata, tasktype, completed, total, unit, compactionId, sstables, CancellationType.SSTABLE);
+    }
+
+    private CompactionInfo(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, ImmutableSet<SSTableReader> sstables, CancellationType cancellationType)
+    {
         this.tasktype = tasktype;
         this.completed = completed;
         this.total = total;
@@ -68,6 +75,16 @@ public final class CompactionInfo
         this.unit = unit;
         this.compactionId = compactionId;
         this.sstables = sstables;
+        this.cancellationType = cancellationType;
+    }
+
+    /**
+     * Special compaction info where we always need to cancel the compaction - for example ViewBuilderTask and AutoSavingCache where we don't know
+     * the sstables at construction
+     */
+    public static CompactionInfo withoutSSTables(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId)
+    {
+        return new CompactionInfo(metadata, tasktype, completed, total, unit, compactionId, ImmutableSet.of(), CancellationType.ALL);
     }
 
     /** @return A copy of this CompactionInfo with updated progress. */
@@ -116,6 +133,11 @@ public final class CompactionInfo
         return unit;
     }
 
+    public Set<SSTableReader> getSSTables()
+    {
+        return sstables;
+    }
+
     public String toString()
     {
         StringBuilder buff = new StringBuilder();
@@ -159,6 +181,15 @@ public final class CompactionInfo
         return ret;
     }
 
+    boolean shouldStop(Predicate<SSTableReader> sstablePredicate)
+    {
+        if (cancellationType == CompactionInfo.CancellationType.ALL || sstables.isEmpty())
+        {
+            return true;
+        }
+        return sstables.stream().anyMatch(sstablePredicate);
+    }
+
     public static abstract class Holder
     {
         private volatile boolean stopRequested = false;
@@ -196,5 +227,10 @@ public final class CompactionInfo
         {
             return BYTES.toString().equals(unit);
         }
+    }
+
+    private enum CancellationType
+    {
+        ALL, SSTABLE
     }
 }

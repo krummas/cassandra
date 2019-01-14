@@ -28,7 +28,10 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
+
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.AsyncFunction;
@@ -41,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -101,11 +105,11 @@ public class PendingAntiCompaction
             this.sessionID = sessionID;
         }
 
-        private Iterable<SSTableReader> getSSTables()
+        private Set<SSTableReader> getSSTables()
         {
             Set<UUID> conflictingSessions = new HashSet<>();
-
-            Iterable<SSTableReader> sstables = cfs.getLiveSSTables().stream().filter(sstable -> {
+            Set<UUID> conflictingAnticompactions = new HashSet<>();
+            Set<SSTableReader> sstables = cfs.getLiveSSTables().stream().filter(sstable -> {
                 if (!sstable.intersects(ranges))
                     return false;
 
@@ -125,9 +129,14 @@ public class PendingAntiCompaction
                     }
                     return false;
                 }
-
+                CompactionInfo ci = CompactionManager.instance.active.getCompactionForSSTable(sstable);
+                if (ci != null && ci.getTaskType() == OperationType.ANTICOMPACTION)
+                {
+                    conflictingAnticompactions.add(ci.getTaskId());
+                    return false;
+                }
                 return true;
-            }).collect(Collectors.toList());
+            }).collect(Collectors.toSet());
 
             // If there are sstables we'd like to acquire that are currently held by other sessions, we need to bail out. If we
             // didn't bail out here and the other repair sessions we're seeing were to fail, incremental repair behavior would be
@@ -143,13 +152,27 @@ public class PendingAntiCompaction
                 throw new SSTableAcquisitionException();
             }
 
+            if (!conflictingAnticompactions.isEmpty())
+            {
+                // todo: track which parent session id created which anticompaction tasks to be able to give a better error message;
+                //       see callers of CompactionManager#getAntiCompactionIterator
+                logger.warn("Prepare phase for incremental repair session {} has failed because there are ongoing "+
+                            "conflicting anticompactions. This is caused by starting an incremental repair session before " +
+                            "a previous one has completed. Check nodetool repair_admin for hung sessions and fix them", sessionID);
+                throw new SSTableAcquisitionException();
+            }
+
             return sstables;
         }
 
         @SuppressWarnings("resource")
         private AcquireResult acquireTuple()
         {
-            List<SSTableReader> sstables = Lists.newArrayList(getSSTables());
+            // note that we re-fetch the sstables here - any intersecting compactions should be cancelled
+            // but we can't use the sstables we fetched in call() below because some might be missing (compactions
+            // actually finishing for example) and some might be early opened since we use getLiveSSTables()
+            // and those will also be gone after cancelling the compaction
+            Set<SSTableReader> sstables = getSSTables();
             if (sstables.isEmpty())
                 return new AcquireResult(cfs, null, null);
 
@@ -160,23 +183,26 @@ public class PendingAntiCompaction
                 return null;
         }
 
-        public AcquireResult call() throws Exception
+        public AcquireResult call()
         {
             logger.debug("acquiring sstables for pending anti compaction on session {}", sessionID);
+            Set<SSTableReader> sstables;
             try
             {
-                AcquireResult refTxn = acquireTuple();
-                if (refTxn != null)
-                    return refTxn;
+                sstables = getSSTables();
             }
             catch (SSTableAcquisitionException e)
             {
                 return null;
             }
-
-            // try to modify after cancelling running compactions. This will attempt to cancel in flight compactions for
+            catch (Throwable t)
+            {
+                logger.error("Failure acquiring sstables for anticompaction", t);
+                throw t;
+            }
+            // try to modify after cancelling running compactions. This will attempt to cancel in flight compactions including the given sstables for
             // up to a minute, after which point, null will be returned
-            return cfs.runWithCompactionsDisabled(this::acquireTuple, false, false);
+            return cfs.runWithCompactionsDisabled(this::acquireTuple, sstables::contains, false, false);
         }
     }
 

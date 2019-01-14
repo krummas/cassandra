@@ -24,6 +24,8 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.cassandra.io.sstable.format.SSTableReader;
+
 public class ActiveCompactions implements ActiveCompactionsTracker
 {
     // a synchronized identity set of running tasks to their compaction info
@@ -44,5 +46,21 @@ public class ActiveCompactions implements ActiveCompactionsTracker
         compactions.remove(ci);
         CompactionManager.instance.getMetrics().bytesCompacted.inc(ci.getCompactionInfo().getTotal());
         CompactionManager.instance.getMetrics().totalCompactionsCompleted.mark();
+    }
+
+    public CompactionInfo getCompactionForSSTable(SSTableReader sstable)
+    {
+        CompactionInfo toReturn = null;
+        for (CompactionInfo.Holder holder : compactions)
+        {
+            // todo: change compactions datastructure to avoid iterating all active compactions
+            if (holder.getCompactionInfo().getSSTables().contains(sstable))
+            {
+                if (toReturn != null)
+                    throw new IllegalStateException("SSTable "+sstable+" involved in several compactions");
+                toReturn = holder.getCompactionInfo();
+            }
+        }
+        return toReturn;
     }
 }

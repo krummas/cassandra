@@ -317,13 +317,12 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
             else
                 type = OperationType.UNKNOWN;
 
-            info = new CompactionInfo(TableMetadata.minimal(SchemaConstants.SYSTEM_KEYSPACE_NAME, cacheType.toString()),
-                                      type,
-                                      0,
-                                      keysEstimate,
-                                      Unit.KEYS,
-                                      UUIDGen.getTimeUUID(),
-                                      ImmutableSet.of());
+            info = CompactionInfo.withoutSSTables(TableMetadata.minimal(SchemaConstants.SYSTEM_KEYSPACE_NAME, cacheType.toString()),
+                                                  type,
+                                                  0,
+                                                  keysEstimate,
+                                                  Unit.KEYS,
+                                                  UUIDGen.getTimeUUID());
         }
 
         public CacheService.CacheType cacheType()

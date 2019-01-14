@@ -51,6 +51,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionController;
+import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
 import org.apache.cassandra.db.compaction.CompactionIterator;
 import org.apache.cassandra.db.compaction.CompactionManager;
@@ -73,6 +74,11 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
 import org.apache.cassandra.utils.concurrent.Transactional;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
 {
@@ -115,7 +121,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
             QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v) VALUES (?, ?)", ks, tbl), i, i);
         }
         cfs.forceBlockingFlush();
-        Assert.assertEquals(2, cfs.getLiveSSTables().size());
+        assertEquals(2, cfs.getLiveSSTables().size());
 
         Token left = ByteOrderedPartitioner.instance.getToken(ByteBufferUtil.bytes((int) 6));
         Token right = ByteOrderedPartitioner.instance.getToken(ByteBufferUtil.bytes((int) 16));
@@ -138,14 +144,14 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
             executor.shutdown();
         }
 
-        Assert.assertEquals(3, cfs.getLiveSSTables().size());
+        assertEquals(3, cfs.getLiveSSTables().size());
         int pendingRepair = 0;
         for (SSTableReader sstable : cfs.getLiveSSTables())
         {
             if (sstable.isPendingRepair())
                 pendingRepair++;
         }
-        Assert.assertEquals(2, pendingRepair);
+        assertEquals(2, pendingRepair);
     }
 
     @Test
@@ -168,14 +174,14 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         PendingAntiCompaction.AcquireResult result = acquisitionCallable.call();
         Assert.assertNotNull(result);
         logger.info("Originals: {}", result.txn.originals());
-        Assert.assertEquals(3, result.txn.originals().size());
+        assertEquals(3, result.txn.originals().size());
         for (SSTableReader sstable : expected)
         {
             logger.info("Checking {}", sstable);
-            Assert.assertTrue(result.txn.originals().contains(sstable));
+            assertTrue(result.txn.originals().contains(sstable));
         }
 
-        Assert.assertEquals(Transactional.AbstractTransactional.State.IN_PROGRESS, result.txn.state());
+        assertEquals(Transactional.AbstractTransactional.State.IN_PROGRESS, result.txn.state());
         result.abort();
     }
 
@@ -186,11 +192,11 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         makeSSTables(2);
 
         List<SSTableReader> sstables = new ArrayList<>(cfs.getLiveSSTables());
-        Assert.assertEquals(2, sstables.size());
+        assertEquals(2, sstables.size());
         SSTableReader repaired = sstables.get(0);
         SSTableReader unrepaired = sstables.get(1);
-        Assert.assertTrue(repaired.intersects(FULL_RANGE));
-        Assert.assertTrue(unrepaired.intersects(FULL_RANGE));
+        assertTrue(repaired.intersects(FULL_RANGE));
+        assertTrue(unrepaired.intersects(FULL_RANGE));
 
         repaired.descriptor.getMetadataSerializer().mutateRepairMetadata(repaired.descriptor, 1, null, false);
         repaired.reloadSSTableMetadata();
@@ -200,8 +206,8 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         Assert.assertNotNull(result);
 
         logger.info("Originals: {}", result.txn.originals());
-        Assert.assertEquals(1, result.txn.originals().size());
-        Assert.assertTrue(result.txn.originals().contains(unrepaired));
+        assertEquals(1, result.txn.originals().size());
+        assertTrue(result.txn.originals().contains(unrepaired));
         result.abort(); // release sstable refs
     }
 
@@ -212,25 +218,25 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         makeSSTables(2);
 
         List<SSTableReader> sstables = new ArrayList<>(cfs.getLiveSSTables());
-        Assert.assertEquals(2, sstables.size());
+        assertEquals(2, sstables.size());
         SSTableReader repaired = sstables.get(0);
         SSTableReader unrepaired = sstables.get(1);
-        Assert.assertTrue(repaired.intersects(FULL_RANGE));
-        Assert.assertTrue(unrepaired.intersects(FULL_RANGE));
+        assertTrue(repaired.intersects(FULL_RANGE));
+        assertTrue(unrepaired.intersects(FULL_RANGE));
 
         UUID sessionId = prepareSession();
         LocalSessionAccessor.finalizeUnsafe(sessionId);
         repaired.descriptor.getMetadataSerializer().mutateRepairMetadata(repaired.descriptor, 0, sessionId, false);
         repaired.reloadSSTableMetadata();
-        Assert.assertTrue(repaired.isPendingRepair());
+        assertTrue(repaired.isPendingRepair());
 
         PendingAntiCompaction.AcquisitionCallable acquisitionCallable = new PendingAntiCompaction.AcquisitionCallable(cfs, FULL_RANGE, UUIDGen.getTimeUUID());
         PendingAntiCompaction.AcquireResult result = acquisitionCallable.call();
         Assert.assertNotNull(result);
 
         logger.info("Originals: {}", result.txn.originals());
-        Assert.assertEquals(1, result.txn.originals().size());
-        Assert.assertTrue(result.txn.originals().contains(unrepaired));
+        assertEquals(1, result.txn.originals().size());
+        assertTrue(result.txn.originals().contains(unrepaired));
         result.abort();  // releases sstable refs
     }
 
@@ -241,16 +247,16 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         makeSSTables(2);
 
         List<SSTableReader> sstables = new ArrayList<>(cfs.getLiveSSTables());
-        Assert.assertEquals(2, sstables.size());
+        assertEquals(2, sstables.size());
         SSTableReader repaired = sstables.get(0);
         SSTableReader unrepaired = sstables.get(1);
-        Assert.assertTrue(repaired.intersects(FULL_RANGE));
-        Assert.assertTrue(unrepaired.intersects(FULL_RANGE));
+        assertTrue(repaired.intersects(FULL_RANGE));
+        assertTrue(unrepaired.intersects(FULL_RANGE));
 
         UUID sessionId = prepareSession();
         repaired.descriptor.getMetadataSerializer().mutateRepairMetadata(repaired.descriptor, 0, sessionId, false);
         repaired.reloadSSTableMetadata();
-        Assert.assertTrue(repaired.isPendingRepair());
+        assertTrue(repaired.isPendingRepair());
 
         PendingAntiCompaction.AcquisitionCallable acquisitionCallable = new PendingAntiCompaction.AcquisitionCallable(cfs, FULL_RANGE, UUIDGen.getTimeUUID());
         PendingAntiCompaction.AcquireResult result = acquisitionCallable.call();
@@ -262,7 +268,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
     {
         cfs.disableAutoCompaction();
 
-        Assert.assertEquals(0, cfs.getLiveSSTables().size());
+        assertEquals(0, cfs.getLiveSSTables().size());
 
         PendingAntiCompaction.AcquisitionCallable acquisitionCallable = new PendingAntiCompaction.AcquisitionCallable(cfs, FULL_RANGE, UUIDGen.getTimeUUID());
         PendingAntiCompaction.AcquireResult result = acquisitionCallable.call();
@@ -285,11 +291,11 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         Assert.assertNotNull(result);
 
         InstrumentedAcquisitionCallback cb = new InstrumentedAcquisitionCallback(UUIDGen.getTimeUUID(), atEndpoint(FULL_RANGE, NO_RANGES));
-        Assert.assertTrue(cb.submittedCompactions.isEmpty());
+        assertTrue(cb.submittedCompactions.isEmpty());
         cb.apply(Lists.newArrayList(result));
 
-        Assert.assertEquals(1, cb.submittedCompactions.size());
-        Assert.assertTrue(cb.submittedCompactions.contains(cfm.id));
+        assertEquals(1, cb.submittedCompactions.size());
+        assertTrue(cb.submittedCompactions.contains(cfm.id));
     }
 
     /**
@@ -306,14 +312,14 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         PendingAntiCompaction.AcquisitionCallable acquisitionCallable = new PendingAntiCompaction.AcquisitionCallable(cfs, FULL_RANGE, UUIDGen.getTimeUUID());
         PendingAntiCompaction.AcquireResult result = acquisitionCallable.call();
         Assert.assertNotNull(result);
-        Assert.assertEquals(Transactional.AbstractTransactional.State.IN_PROGRESS, result.txn.state());
+        assertEquals(Transactional.AbstractTransactional.State.IN_PROGRESS, result.txn.state());
 
         InstrumentedAcquisitionCallback cb = new InstrumentedAcquisitionCallback(UUIDGen.getTimeUUID(), atEndpoint(FULL_RANGE, Collections.emptyList()));
-        Assert.assertTrue(cb.submittedCompactions.isEmpty());
+        assertTrue(cb.submittedCompactions.isEmpty());
         cb.apply(Lists.newArrayList(result, null));
 
-        Assert.assertTrue(cb.submittedCompactions.isEmpty());
-        Assert.assertEquals(Transactional.AbstractTransactional.State.ABORTED, result.txn.state());
+        assertTrue(cb.submittedCompactions.isEmpty());
+        assertEquals(Transactional.AbstractTransactional.State.ABORTED, result.txn.state());
     }
 
     /**
@@ -334,12 +340,12 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         PendingAntiCompaction.AcquireResult fakeResult = new PendingAntiCompaction.AcquireResult(cfs2, null, null);
 
         InstrumentedAcquisitionCallback cb = new InstrumentedAcquisitionCallback(UUIDGen.getTimeUUID(), atEndpoint(FULL_RANGE, NO_RANGES));
-        Assert.assertTrue(cb.submittedCompactions.isEmpty());
+        assertTrue(cb.submittedCompactions.isEmpty());
         cb.apply(Lists.newArrayList(result, fakeResult));
 
-        Assert.assertEquals(1, cb.submittedCompactions.size());
-        Assert.assertTrue(cb.submittedCompactions.contains(cfm.id));
-        Assert.assertFalse(cb.submittedCompactions.contains(cfs2.metadata.id));
+        assertEquals(1, cb.submittedCompactions.size());
+        assertTrue(cb.submittedCompactions.contains(cfm.id));
+        assertFalse(cb.submittedCompactions.contains(cfs2.metadata.id));
     }
 
 
@@ -398,7 +404,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         try
         {
             fut.get();
-            Assert.fail("Should throw exception");
+            fail("Should throw exception");
         }
         catch(Throwable t)
         {
@@ -406,7 +412,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
     }
 
     @Test
-    public void testBlockedAcquisition() throws ExecutionException, InterruptedException
+    public void testBlockedAcquisition() throws ExecutionException, InterruptedException, TimeoutException
     {
         cfs.disableAutoCompaction();
         ExecutorService es = Executors.newFixedThreadPool(1);
@@ -430,22 +436,16 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                 try
                 {
                     fut.get(30, TimeUnit.SECONDS);
+                    fail("the future should throw exception since we try to start a new anticompaction when one is already running");
                 }
-                catch (TimeoutException e)
+                catch (ExecutionException e)
                 {
-                    // expected, we wait 1 minute for compactions to get cancelled in runWithCompactionsDisabled
+                    assertTrue(e.getCause() instanceof PendingAntiCompaction.SSTableAcquisitionException);
                 }
-                Assert.assertTrue(ci.hasNext());
-                ci.next(); // this would throw exception if the CompactionIterator was abortable
-                try
-                {
-                    fut.get();
-                    Assert.fail("We should get exception when trying to start a new anticompaction with the same sstables");
-                }
-                catch (Throwable t)
-                {
 
-                }
+                assertEquals(1, CompactionManager.instance.active.getCompactions().size());
+                for (CompactionInfo.Holder holder : CompactionManager.instance.active.getCompactions())
+                    assertFalse(holder.isStopRequested());
             }
         }
         finally
@@ -487,9 +487,9 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                 }
                 try
                 {
-                    Assert.assertTrue(ci.hasNext());
+                    assertTrue(ci.hasNext());
                     ci.next();
-                    Assert.fail("CompactionIterator should be abortable");
+                    fail("CompactionIterator should be abortable");
                 }
                 catch (CompactionInterruptedException e)
                 {
@@ -509,7 +509,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                     {
                     }
                 });
-                Assert.assertTrue(cdl.await(1, TimeUnit.MINUTES));
+                assertTrue(cdl.await(1, TimeUnit.MINUTES));
             }
         }
         finally

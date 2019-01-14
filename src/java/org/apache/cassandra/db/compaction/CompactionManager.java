@@ -205,10 +205,10 @@ public class CompactionManager implements CompactionManagerMBean
         return futures;
     }
 
-    public boolean isCompacting(Iterable<ColumnFamilyStore> cfses)
+    public boolean isCompacting(Iterable<ColumnFamilyStore> cfses, Predicate<SSTableReader> sstablePredicate)
     {
         for (ColumnFamilyStore cfs : cfses)
-            if (!cfs.getTracker().getCompacting().isEmpty())
+            if (cfs.getTracker().getCompacting().stream().anyMatch(sstablePredicate))
                 return true;
         return false;
     }
@@ -445,7 +445,7 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public void execute(LifecycleTransaction input)
             {
-                scrubOne(cfs, input, skipCorrupted, checkData, reinsertOverflowedTTL);
+                scrubOne(cfs, input, skipCorrupted, checkData, reinsertOverflowedTTL, active);
             }
         }, jobs, OperationType.SCRUB);
     }
@@ -464,7 +464,7 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public void execute(LifecycleTransaction input)
             {
-                verifyOne(cfs, input.onlyOne(), options);
+                verifyOne(cfs, input.onlyOne(), options, active);
             }
         }, 0, OperationType.VERIFY);
     }
@@ -859,7 +859,7 @@ public class CompactionManager implements CompactionManagerMBean
                            return null;
                        }
                        return cfStore.getCompactionStrategyManager().getUserDefinedTasks(sstables, getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()));
-                   }, false, false);
+                   }, (sstable) -> new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(ranges), false, false);
 
         if (tasks == null)
             return;
@@ -1049,37 +1049,39 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    private void scrubOne(ColumnFamilyStore cfs, LifecycleTransaction modifier, boolean skipCorrupted, boolean checkData, boolean reinsertOverflowedTTL)
+    @VisibleForTesting
+    void scrubOne(ColumnFamilyStore cfs, LifecycleTransaction modifier, boolean skipCorrupted, boolean checkData, boolean reinsertOverflowedTTL, ActiveCompactionsTracker tracker)
     {
         CompactionInfo.Holder scrubInfo = null;
 
         try (Scrubber scrubber = new Scrubber(cfs, modifier, skipCorrupted, checkData, reinsertOverflowedTTL))
         {
             scrubInfo = scrubber.getScrubInfo();
-            active.beginCompaction(scrubInfo);
+            tracker.beginCompaction(scrubInfo);
             scrubber.scrub();
         }
         finally
         {
             if (scrubInfo != null)
-                active.finishCompaction(scrubInfo);
+                tracker.finishCompaction(scrubInfo);
         }
     }
 
-    private void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, Verifier.Options options)
+    @VisibleForTesting
+    void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, Verifier.Options options, ActiveCompactionsTracker tracker)
     {
         CompactionInfo.Holder verifyInfo = null;
 
         try (Verifier verifier = new Verifier(cfs, sstable, false, options))
         {
             verifyInfo = verifier.getVerifyInfo();
-            active.beginCompaction(verifyInfo);
+            tracker.beginCompaction(verifyInfo);
             verifier.verify();
         }
         finally
         {
             if (verifyInfo != null)
-                active.finishCompaction(verifyInfo);
+                tracker.finishCompaction(verifyInfo);
         }
     }
 
@@ -1563,23 +1565,21 @@ public class CompactionManager implements CompactionManagerMBean
         return new CompactionIterator(OperationType.ANTICOMPACTION, scanners, controller, nowInSec, timeUUID, active, false);
     }
 
-    /**
-     * Is not scheduled, because it is performing disjoint work from sstable compaction.
-     */
-    public ListenableFuture<?> submitIndexBuild(final SecondaryIndexBuilder builder)
+    @VisibleForTesting
+    ListenableFuture<?> submitIndexBuild(final SecondaryIndexBuilder builder, ActiveCompactionsTracker compactionsTracker)
     {
         Runnable runnable = new Runnable()
         {
             public void run()
             {
-                active.beginCompaction(builder);
+                compactionsTracker.beginCompaction(builder);
                 try
                 {
                     builder.build();
                 }
                 finally
                 {
-                    active.finishCompaction(builder);
+                    compactionsTracker.finishCompaction(builder);
                 }
             }
         };
@@ -1587,7 +1587,20 @@ public class CompactionManager implements CompactionManagerMBean
         return executor.submitIfRunning(runnable, "index build");
     }
 
+    /**
+     * Is not scheduled, because it is performing disjoint work from sstable compaction.
+     */
+    public ListenableFuture<?> submitIndexBuild(final SecondaryIndexBuilder builder)
+    {
+        return submitIndexBuild(builder, active);
+    }
+
     public Future<?> submitCacheWrite(final AutoSavingCache.Writer writer)
+    {
+        return submitCacheWrite(writer, active);
+    }
+
+    Future<?> submitCacheWrite(final AutoSavingCache.Writer writer, ActiveCompactionsTracker tracker)
     {
         Runnable runnable = new Runnable()
         {
@@ -1600,14 +1613,14 @@ public class CompactionManager implements CompactionManagerMBean
                 }
                 try
                 {
-                    active.beginCompaction(writer);
+                    tracker.beginCompaction(writer);
                     try
                     {
                         writer.saveCache();
                     }
                     finally
                     {
-                        active.finishCompaction(writer);
+                        tracker.finishCompaction(writer);
                     }
                 }
                 finally
@@ -1622,15 +1635,20 @@ public class CompactionManager implements CompactionManagerMBean
 
     public List<SSTableReader> runIndexSummaryRedistribution(IndexSummaryRedistribution redistribution) throws IOException
     {
-        active.beginCompaction(redistribution);
+        return runIndexSummaryRedistribution(redistribution, active);
+    }
 
+    @VisibleForTesting
+    List<SSTableReader> runIndexSummaryRedistribution(IndexSummaryRedistribution redistribution, ActiveCompactionsTracker compactionsTracker) throws IOException
+    {
+        compactionsTracker.beginCompaction(redistribution);
         try
         {
             return redistribution.redistributeSummaries();
         }
         finally
         {
-            active.finishCompaction(redistribution);
+            compactionsTracker.finishCompaction(redistribution);
         }
     }
 
@@ -1643,15 +1661,21 @@ public class CompactionManager implements CompactionManagerMBean
 
     public ListenableFuture<Long> submitViewBuilder(final ViewBuilderTask task)
     {
+        return submitViewBuilder(task, active);
+    }
+
+    @VisibleForTesting
+    ListenableFuture<Long> submitViewBuilder(final ViewBuilderTask task, ActiveCompactionsTracker compactionsTracker)
+    {
         return viewBuildExecutor.submitIfRunning(() -> {
-            active.beginCompaction(task);
+            compactionsTracker.beginCompaction(task);
             try
             {
                 return task.call();
             }
             finally
             {
-                active.finishCompaction(task);
+                compactionsTracker.finishCompaction(task);
             }
         }, "view build");
     }
@@ -1999,10 +2023,10 @@ public class CompactionManager implements CompactionManagerMBean
      * isCompacting if you want that behavior.
      *
      * @param columnFamilies The ColumnFamilies to try to stop compaction upon.
+     * @param sstablePredicate the sstable predicate to match on
      * @param interruptValidation true if validation operations for repair should also be interrupted
-     *
      */
-    public void interruptCompactionFor(Iterable<TableMetadata> columnFamilies, boolean interruptValidation)
+    public void interruptCompactionFor(Iterable<TableMetadata> columnFamilies, Predicate<SSTableReader> sstablePredicate, boolean interruptValidation)
     {
         assert columnFamilies != null;
 
@@ -2014,26 +2038,30 @@ public class CompactionManager implements CompactionManagerMBean
                 continue;
 
             if (Iterables.contains(columnFamilies, info.getTableMetadata()))
-                compactionHolder.stop(); // signal compaction to stop
+            {
+                if (info.shouldStop(sstablePredicate))
+                    compactionHolder.stop();
+            }
         }
     }
 
-    public void interruptCompactionForCFs(Iterable<ColumnFamilyStore> cfss, boolean interruptValidation)
+    public void interruptCompactionForCFs(Iterable<ColumnFamilyStore> cfss, Predicate<SSTableReader> sstablePredicate, boolean interruptValidation)
     {
         List<TableMetadata> metadata = new ArrayList<>();
         for (ColumnFamilyStore cfs : cfss)
             metadata.add(cfs.metadata());
 
-        interruptCompactionFor(metadata, interruptValidation);
+        interruptCompactionFor(metadata, sstablePredicate, interruptValidation);
     }
 
-    public void waitForCessation(Iterable<ColumnFamilyStore> cfss)
+    public void waitForCessation(Iterable<ColumnFamilyStore> cfss, Predicate<SSTableReader> sstablePredicate)
     {
         long start = System.nanoTime();
         long delay = TimeUnit.MINUTES.toNanos(1);
+
         while (System.nanoTime() - start < delay)
         {
-            if (CompactionManager.instance.isCompacting(cfss))
+            if (CompactionManager.instance.isCompacting(cfss, sstablePredicate))
                 Uninterruptibles.sleepUninterruptibly(1, TimeUnit.MILLISECONDS);
             else
                 break;
