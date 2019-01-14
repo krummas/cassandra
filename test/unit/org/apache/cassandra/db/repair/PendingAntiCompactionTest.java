@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -50,6 +51,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.compaction.AbstractPendingRepairTest;
 import org.apache.cassandra.db.compaction.CompactionController;
 import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
@@ -58,6 +60,7 @@ import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
+import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
@@ -66,6 +69,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.repair.consistent.LocalSessionAccessor;
+import org.apache.cassandra.schema.MockSchema;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.ActiveRepairService;
@@ -515,6 +519,74 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         finally
         {
             es.shutdown();
+        }
+    }
+
+    @Test
+    public void testSSTablePredicateOngoingAntiCompaction()
+    {
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        cfs.disableAutoCompaction();
+        List<SSTableReader> sstables = new ArrayList<>();
+        List<SSTableReader> repairedSSTables = new ArrayList<>();
+        List<SSTableReader> pendingSSTables = new ArrayList<>();
+        for (int i = 1; i <= 10; i++)
+        {
+            SSTableReader sstable = MockSchema.sstable(i, i * 10, i * 10 + 9, cfs);
+            sstables.add(sstable);
+        }
+        for (int i = 1; i <= 10; i++)
+        {
+            SSTableReader sstable = MockSchema.sstable(i + 10, i * 10, i * 10 + 9, cfs);
+            AbstractPendingRepairTest.mutateRepaired(sstable, System.currentTimeMillis());
+            repairedSSTables.add(sstable);
+        }
+        for (int i = 1; i <= 10; i++)
+        {
+            SSTableReader sstable = MockSchema.sstable(i + 20, i * 10, i * 10 + 9, cfs);
+            AbstractPendingRepairTest.mutateRepaired(sstable, UUID.randomUUID(), false);
+            pendingSSTables.add(sstable);
+        }
+
+        cfs.addSSTables(sstables);
+        cfs.addSSTables(repairedSSTables);
+
+        // if we are compacting the non-repaired non-pending sstables, we should get an error
+        tryPredicate(cfs, sstables, null, true);
+        // make sure we don't try to grab pending or repaired sstables;
+        tryPredicate(cfs, repairedSSTables, sstables, false);
+        tryPredicate(cfs, pendingSSTables, sstables, false);
+        cfs.truncateBlocking();
+    }
+
+    private void tryPredicate(ColumnFamilyStore cfs, List<SSTableReader> compacting, List<SSTableReader> expectedLive, boolean shouldFail)
+    {
+        CompactionInfo.Holder holder = new CompactionInfo.Holder()
+        {
+            public CompactionInfo getCompactionInfo()
+            {
+                return new CompactionInfo(cfs.metadata(), OperationType.ANTICOMPACTION, 0, 1000, UUID.randomUUID(), ImmutableSet.copyOf(compacting));
+            }
+        };
+        CompactionManager.instance.active.beginCompaction(holder);
+        try
+        {
+            PendingAntiCompaction.AntiCompactionPredicate predicate =
+            new PendingAntiCompaction.AntiCompactionPredicate(Collections.singleton(new Range<>(new Murmur3Partitioner.LongToken(0), new Murmur3Partitioner.LongToken(100))),
+                                                              UUID.randomUUID());
+            Set<SSTableReader> live = cfs.getLiveSSTables().stream().filter(predicate).collect(Collectors.toSet());
+            if (shouldFail)
+                fail("should fail - we try to grab already anticompacting sstables for anticompaction");
+            assertEquals(live, new HashSet<>(expectedLive));
+        }
+        catch (PendingAntiCompaction.SSTableAcquisitionException e)
+        {
+            if (!shouldFail)
+                fail("We should fail filtering sstables");
+        }
+        finally
+        {
+            CompactionManager.instance.active.finishCompaction(holder);
         }
     }
 
