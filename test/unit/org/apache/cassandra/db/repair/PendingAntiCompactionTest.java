@@ -556,7 +556,6 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         // make sure we don't try to grab pending or repaired sstables;
         tryPredicate(cfs, repairedSSTables, sstables, false);
         tryPredicate(cfs, pendingSSTables, sstables, false);
-        cfs.truncateBlocking();
     }
 
     private void tryPredicate(ColumnFamilyStore cfs, List<SSTableReader> compacting, List<SSTableReader> expectedLive, boolean shouldFail)

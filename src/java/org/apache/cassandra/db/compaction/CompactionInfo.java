@@ -141,10 +141,7 @@ public final class CompactionInfo
     public String toString()
     {
         StringBuilder buff = new StringBuilder();
-        buff.append(getTaskType())
-            .append('[')
-            .append(compactionId)
-            .append(']');
+        buff.append(getTaskType());
 
         if (metadata != null)
         {
@@ -159,9 +156,7 @@ public final class CompactionInfo
             .append('/')
             .append(getTotal())
             .append(')')
-            .append(unit)
-            .append("sstables: ")
-            .append(Joiner.on(',').join(sstables));
+            .append(unit);
 
         return buff.toString();
     }
