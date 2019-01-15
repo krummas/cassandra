@@ -102,6 +102,14 @@ with_dtests_jobs: &with_dtest_jobs
             - j11_dtests-no-vnodes:
                 requires:
                 - start_j11_dtests
+            # Java 8 upgrade tests
+            - start_upgrade_tests:
+                type: approval
+                requires:
+                  - build
+            - j8_upgradetests-no-vnodes:
+                requires:
+                  - start_upgrade_tests
 
 with_dtest_jobs_only: &with_dtest_jobs_only
         jobs:
@@ -275,6 +283,22 @@ jobs:
     - run_dtests:
         file_tag: j11_without_vnodes
         pytest_extra_args: '--skip-resource-intensive-tests'
+
+  j8_upgradetests-no-vnodes:
+    <<: *j8_par_executor
+    steps:
+      - attach_workspace:
+          at: /home/cassandra
+      - clone_dtest
+      - create_venv
+      - create_dtest_containers:
+          file_tag: j8_upgradetests_without_vnodes
+          run_dtests_extra_args: '--execute-upgrade-tests'
+          extra_env_args: 'RUN_STATIC_UPGRADE_MATRIX=true'
+          tests_filter_pattern: '^upgrade_tests'
+      - run_dtests:
+          file_tag: j8_upgradetests_without_vnodes
+          pytest_extra_args: '--execute-upgrade-tests'
 
 commands:
   log_environment:
@@ -464,6 +488,9 @@ commands:
       run_dtests_extra_args:
         type: string
         default: ''
+      extra_env_args:
+        type: string
+        default: ''
       tests_filter_pattern:
         type: string
         default: ''
@@ -480,8 +507,12 @@ commands:
           source ~/env/bin/activate
           export PATH=$JAVA_HOME/bin:$PATH
 
+          if [ -z '<<parameters.extra_env_args>>' ]; then
+            export <<parameters.extra_env_args>>
+          fi
+
           echo "***Collected DTests (<<parameters.file_tag>>)***"
-          set -eo pipefail && ./run_dtests.py <<parameters.run_dtests_extra_args>> --dtest-print-tests-only --dtest-print-tests-output=/tmp/all_dtest_tests_<<parameters.file_tag>>_raw
+          set -eo pipefail && ./run_dtests.py <<parameters.run_dtests_extra_args>> --dtest-print-tests-only --dtest-print-tests-output=/tmp/all_dtest_tests_<<parameters.file_tag>>_raw --cassandra-dir=../cassandra
           if [ -z '<<parameters.tests_filter_pattern>>' ]; then
             mv /tmp/all_dtest_tests_<<parameters.file_tag>>_raw /tmp/all_dtest_tests_<<parameters.file_tag>>
           else
@@ -498,6 +529,9 @@ commands:
       pytest_extra_args:
         type: string
         default: ''
+      extra_env_args:
+        type: string
+        default: ''
     steps:
       - run:
           name: Run dtests (<<parameters.file_tag>>)
@@ -508,6 +542,10 @@ commands:
 
             source ~/env/bin/activate
             export PATH=$JAVA_HOME/bin:$PATH
+            if [ -z '<<parameters.extra_env_args>>' ]; then
+              export <<parameters.extra_env_args>>
+            fi
+
             java -version
             cd ~/cassandra-dtest
             mkdir -p /tmp/dtest
