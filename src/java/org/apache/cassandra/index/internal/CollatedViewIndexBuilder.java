@@ -17,10 +17,9 @@
  */
 package org.apache.cassandra.index.internal;
 
+import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
-
-import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
@@ -42,9 +41,9 @@ public class CollatedViewIndexBuilder extends SecondaryIndexBuilder
     private final Set<Index> indexers;
     private final ReducingKeyIterator iter;
     private final UUID compactionId;
-    private final ImmutableSet<SSTableReader> sstables;
+    private final Collection<SSTableReader> sstables;
 
-    public CollatedViewIndexBuilder(ColumnFamilyStore cfs, Set<Index> indexers, ReducingKeyIterator iter, ImmutableSet<SSTableReader> sstables)
+    public CollatedViewIndexBuilder(ColumnFamilyStore cfs, Set<Index> indexers, ReducingKeyIterator iter, Collection<SSTableReader> sstables)
     {
         this.cfs = cfs;
         this.indexers = indexers;

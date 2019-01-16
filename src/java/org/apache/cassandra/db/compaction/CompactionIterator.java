@@ -75,20 +75,20 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
     private final long[] mergeCounters;
 
     private final UnfilteredPartitionIterator compacted;
-    private final ActiveCompactionsTracker tracker;
+    private final ActiveCompactionsTracker activeCompactions;
 
     public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId)
     {
         this(type, scanners, controller, nowInSec, compactionId, ActiveCompactionsTracker.NOOP, true);
     }
 
-    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, ActiveCompactionsTracker tracker)
+    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, ActiveCompactionsTracker activeCompactions)
     {
-        this(type, scanners, controller, nowInSec, compactionId, tracker, true);
+        this(type, scanners, controller, nowInSec, compactionId, activeCompactions, true);
     }
 
     @SuppressWarnings("resource") // We make sure to close mergedIterator in close() and CompactionIterator is itself an AutoCloseable
-    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, ActiveCompactionsTracker tracker, boolean abortable)
+    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, ActiveCompactionsTracker activeCompactions, boolean abortable)
     {
         this.controller = controller;
         this.type = type;
@@ -102,8 +102,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
             bytes += scanner.getLengthInBytes();
         this.totalBytes = bytes;
         this.mergeCounters = new long[scanners.size()];
-        this.tracker = tracker == null ? ActiveCompactionsTracker.NOOP : tracker;
-        this.tracker.beginCompaction(this); // note that CompactionTask also calls this, but CT only creates CompactionIterator with a NOOP tracker
+        this.activeCompactions = activeCompactions == null ? ActiveCompactionsTracker.NOOP : activeCompactions;
+        this.activeCompactions.beginCompaction(this); // note that CompactionTask also calls this, but CT only creates CompactionIterator with a NOOP ActiveCompactions
 
         UnfilteredPartitionIterator merged = scanners.isEmpty()
                                            ? EmptyIterators.unfilteredPartition(controller.cfs.metadata())
@@ -256,7 +256,7 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         }
         finally
         {
-            tracker.finishCompaction(this);
+            activeCompactions.finishCompaction(this);
         }
     }
 

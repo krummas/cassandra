@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.compaction;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -49,24 +50,18 @@ public final class CompactionInfo
     private final Unit unit;
     private final UUID compactionId;
     private final ImmutableSet<SSTableReader> sstables;
-    private final CancellationType cancellationType;
 
-    public CompactionInfo(TableMetadata metadata, OperationType tasktype, long bytesComplete, long totalBytes, UUID compactionId, ImmutableSet<SSTableReader> sstables)
+    public CompactionInfo(TableMetadata metadata, OperationType tasktype, long bytesComplete, long totalBytes, UUID compactionId, Collection<SSTableReader> sstables)
     {
         this(metadata, tasktype, bytesComplete, totalBytes, Unit.BYTES, compactionId, sstables);
     }
 
-    public CompactionInfo(OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, ImmutableSet<SSTableReader> sstables)
+    public CompactionInfo(OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, Collection<SSTableReader> sstables)
     {
         this(null, tasktype, completed, total, unit, compactionId, sstables);
     }
 
-    public CompactionInfo(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, ImmutableSet<SSTableReader> sstables)
-    {
-        this(metadata, tasktype, completed, total, unit, compactionId, sstables, CancellationType.SSTABLE);
-    }
-
-    private CompactionInfo(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, ImmutableSet<SSTableReader> sstables, CancellationType cancellationType)
+    private CompactionInfo(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId, Collection<SSTableReader> sstables)
     {
         this.tasktype = tasktype;
         this.completed = completed;
@@ -74,8 +69,7 @@ public final class CompactionInfo
         this.metadata = metadata;
         this.unit = unit;
         this.compactionId = compactionId;
-        this.sstables = sstables;
-        this.cancellationType = cancellationType;
+        this.sstables = ImmutableSet.copyOf(sstables);
     }
 
     /**
@@ -84,7 +78,7 @@ public final class CompactionInfo
      */
     public static CompactionInfo withoutSSTables(TableMetadata metadata, OperationType tasktype, long completed, long total, Unit unit, UUID compactionId)
     {
-        return new CompactionInfo(metadata, tasktype, completed, total, unit, compactionId, ImmutableSet.of(), CancellationType.ALL);
+        return new CompactionInfo(metadata, tasktype, completed, total, unit, compactionId, ImmutableSet.of());
     }
 
     /** @return A copy of this CompactionInfo with updated progress. */
@@ -178,7 +172,7 @@ public final class CompactionInfo
 
     boolean shouldStop(Predicate<SSTableReader> sstablePredicate)
     {
-        if (cancellationType == CompactionInfo.CancellationType.ALL || sstables.isEmpty())
+        if (sstables.isEmpty())
         {
             return true;
         }
@@ -222,10 +216,5 @@ public final class CompactionInfo
         {
             return BYTES.toString().equals(unit);
         }
-    }
-
-    private enum CancellationType
-    {
-        ALL, SSTABLE
     }
 }

@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.Set;
 
 import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.db.partitions.UnfilteredPartitionIterator;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -39,7 +38,7 @@ public interface ISSTableScanner extends UnfilteredPartitionIterator
     public long getCompressedLengthInBytes();
     public long getCurrentPosition();
     public long getBytesScanned();
-    public ImmutableSet<SSTableReader> getBackingSSTables();
+    public Set<SSTableReader> getBackingSSTables();
 
     public static void closeAllAndPropagate(Collection<ISSTableScanner> scanners, Throwable throwable)
     {

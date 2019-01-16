@@ -137,8 +137,7 @@ public class PendingAntiCompaction
                 // todo: start tracking the parent repair session id that created the anticompaction to be able to give a better error messsage here:
                 String message = String.format("Prepare phase for incremental repair session %s has failed because it encountered " +
                                                "intersecting sstables belonging to another incremental repair session. This is " +
-                                               "caused by starting an incremental repair session before a previous one has completed. " +
-                                               "Check nodetool repair_admin for hung sessions and fix them.", prsid);
+                                               "caused by starting multiple conflicting incremental repairs at the same time", prsid);
                 throw new SSTableAcquisitionException(message);
             }
             return true;

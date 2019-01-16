@@ -52,7 +52,7 @@ public class CompactionTask extends AbstractCompactionTask
     protected final int gcBefore;
     protected final boolean keepOriginals;
     protected static long totalBytesCompacted = 0;
-    private ActiveCompactionsTracker tracker;
+    private ActiveCompactionsTracker activeCompactions;
 
     public CompactionTask(ColumnFamilyStore cfs, LifecycleTransaction txn, int gcBefore)
     {
@@ -77,9 +77,9 @@ public class CompactionTask extends AbstractCompactionTask
         return totalBytesCompacted += bytesCompacted;
     }
 
-    protected int executeInternal(ActiveCompactionsTracker tracker)
+    protected int executeInternal(ActiveCompactionsTracker activeCompactions)
     {
-        this.tracker = tracker == null ? ActiveCompactionsTracker.NOOP : tracker;
+        this.activeCompactions = activeCompactions == null ? ActiveCompactionsTracker.NOOP : activeCompactions;
         run();
         return transaction.originals().size();
     }
@@ -187,7 +187,7 @@ public class CompactionTask extends AbstractCompactionTask
                 if (!controller.cfs.getCompactionStrategyManager().isActive())
                     throw new CompactionInterruptedException(ci.getCompactionInfo());
 
-                tracker.beginCompaction(ci);
+                activeCompactions.beginCompaction(ci);
 
                 try (CompactionAwareWriter writer = getCompactionAwareWriter(cfs, getDirectories(), transaction, actuallyCompact))
                 {
@@ -217,7 +217,7 @@ public class CompactionTask extends AbstractCompactionTask
                 }
                 finally
                 {
-                    tracker.finishCompaction(ci);
+                    activeCompactions.finishCompaction(ci);
                     mergedRowCounts = ci.getMergedRowCounts();
                     totalSourceCQLRows = ci.getTotalSourceCQLRows();
                 }

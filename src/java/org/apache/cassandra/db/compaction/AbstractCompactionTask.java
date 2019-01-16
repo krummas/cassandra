@@ -93,11 +93,11 @@ public abstract class AbstractCompactionTask extends WrappedRunnable
     /**
      * executes the task and unmarks sstables compacting
      */
-    public int execute(ActiveCompactionsTracker tracker)
+    public int execute(ActiveCompactionsTracker activeCompactions)
     {
         try
         {
-            return executeInternal(tracker);
+            return executeInternal(activeCompactions);
         }
         catch(FSDiskFullWriteError e)
         {
@@ -112,7 +112,7 @@ public abstract class AbstractCompactionTask extends WrappedRunnable
     }
     public abstract CompactionAwareWriter getCompactionAwareWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables);
 
-    protected abstract int executeInternal(ActiveCompactionsTracker tracker);
+    protected abstract int executeInternal(ActiveCompactionsTracker activeCompactions);
 
     public AbstractCompactionTask setUserDefined(boolean isUserDefined)
     {

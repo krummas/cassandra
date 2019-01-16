@@ -243,7 +243,7 @@ public class BigTableScanner implements ISSTableScanner
         return sstable.onDiskLength();
     }
 
-    public ImmutableSet<SSTableReader> getBackingSSTables()
+    public Set<SSTableReader> getBackingSSTables()
     {
         return ImmutableSet.of(sstable);
     }
@@ -422,7 +422,7 @@ public class BigTableScanner implements ISSTableScanner
             return 0;
         }
 
-        public ImmutableSet<SSTableReader> getBackingSSTables()
+        public Set<SSTableReader> getBackingSSTables()
         {
             return ImmutableSet.of(sstable);
         }

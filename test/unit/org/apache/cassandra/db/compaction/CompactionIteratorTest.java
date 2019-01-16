@@ -462,7 +462,7 @@ public class CompactionIteratorTest
         }
 
         @Override
-        public ImmutableSet<SSTableReader> getBackingSSTables()
+        public Set<SSTableReader> getBackingSSTables()
         {
             return ImmutableSet.of();
         }

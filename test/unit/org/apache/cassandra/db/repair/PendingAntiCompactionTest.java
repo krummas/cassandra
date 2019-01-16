@@ -564,7 +564,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         {
             public CompactionInfo getCompactionInfo()
             {
-                return new CompactionInfo(cfs.metadata(), OperationType.ANTICOMPACTION, 0, 1000, UUID.randomUUID(), ImmutableSet.copyOf(compacting));
+                return new CompactionInfo(cfs.metadata(), OperationType.ANTICOMPACTION, 0, 1000, UUID.randomUUID(), compacting);
             }
         };
         CompactionManager.instance.active.beginCompaction(holder);
