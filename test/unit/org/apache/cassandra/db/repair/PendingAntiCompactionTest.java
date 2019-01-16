@@ -35,7 +35,6 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -447,8 +446,8 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                     assertTrue(e.getCause() instanceof PendingAntiCompaction.SSTableAcquisitionException);
                 }
 
-                assertEquals(1, CompactionManager.instance.active.getCompactions().size());
-                for (CompactionInfo.Holder holder : CompactionManager.instance.active.getCompactions())
+                assertEquals(1, getCompactionsFor(cfs).size());
+                for (CompactionInfo.Holder holder : getCompactionsFor(cfs))
                     assertFalse(holder.isStopRequested());
             }
         }
@@ -457,6 +456,17 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
             es.shutdown();
             ISSTableScanner.closeAllAndPropagate(scanners, null);
         }
+    }
+
+    private List<CompactionInfo.Holder> getCompactionsFor(ColumnFamilyStore cfs)
+    {
+        List<CompactionInfo.Holder> compactions = new ArrayList<>();
+        for (CompactionInfo.Holder holder : CompactionManager.instance.active.getCompactions())
+        {
+            if (holder.getCompactionInfo().getTableMetadata().equals(cfs.metadata()))
+                compactions.add(holder);
+        }
+        return compactions;
     }
 
     @Test
@@ -581,7 +591,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
         catch (PendingAntiCompaction.SSTableAcquisitionException e)
         {
             if (!shouldFail)
-                fail("We should fail filtering sstables");
+                fail("We should not fail filtering sstables");
         }
         finally
         {
