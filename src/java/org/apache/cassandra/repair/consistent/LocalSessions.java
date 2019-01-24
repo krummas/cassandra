@@ -206,7 +206,10 @@ public class LocalSessions
         if (session.getState() != FINALIZED)
             return;
 
-        Verify.verify(session.repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE);
+        // if the session is finalized but has repairedAt set to 0, it was
+        // a forced repair, and we shouldn't update the repaired state
+        if (session.repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
+            return;
 
         for (TableId tid : session.tableIds)
         {
