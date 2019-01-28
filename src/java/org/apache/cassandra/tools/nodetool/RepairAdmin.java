@@ -324,7 +324,7 @@ public class RepairAdmin extends NodeTool.NodeToolCmd
 
         if (cancel != null)
         {
-            Preconditions.checkArgument(rangeStr.isEmpty(), "Cannot specify tokens for session cancel");
+            Preconditions.checkArgument(rangeStr == null, "Cannot specify tokens for session cancel");
             cancelSession(probe.getRepairServiceProxy());
         }
         else if (cleanup)
