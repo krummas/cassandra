@@ -295,6 +295,9 @@ public class RepairAdmin extends NodeTool.NodeToolCmd
     private void validateOptions()
     {
         int numSelected = 0;
+
+        list |= cancel == null && !cleanup && !summarizeRepaired && !summarizePending;
+
         if (list) numSelected++;
         if (cancel != null) numSelected++;
         if (cleanup) numSelected++;
@@ -341,6 +344,7 @@ public class RepairAdmin extends NodeTool.NodeToolCmd
         }
         else
         {
+            assert list;
             // default
             listSessions(probe.getRepairServiceProxy(), rangeStr);
         }
