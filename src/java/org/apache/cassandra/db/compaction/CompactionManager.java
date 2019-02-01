@@ -1565,8 +1565,8 @@ public class CompactionManager implements CompactionManagerMBean
         int nowInSec = FBUtilities.nowInSeconds();
 
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
-        try (SSTableRewriter repairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(anticompactionGroup, false, groupMaxDataAge);
-             SSTableRewriter unRepairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(anticompactionGroup, false, groupMaxDataAge);
+        try (SSTableRewriter repairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(anticompactionGroup, true, groupMaxDataAge);
+             SSTableRewriter unRepairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(anticompactionGroup, true, groupMaxDataAge);
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(anticompactionGroup.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
              CompactionIterator ci = new CompactionIterator(OperationType.ANTICOMPACTION, scanners.scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics))
@@ -1602,6 +1602,13 @@ public class CompactionManager implements CompactionManagerMBean
             anticompactionGroup.permitRedundantTransitions();
             repairedSSTableWriter.setRepairedAt(repairedAt).prepareToCommit();
             unRepairedSSTableWriter.prepareToCommit();
+
+            // since there are multiple rewriters, we instruct them to keep originals, then manually obsolete the
+            // originals here. If we didn't do this, the first call to `prepareToCommit` above would remove the original
+            // sstables from the tracker before their replacements are added, briefly removing data from the read path
+            anticompactionGroup.obsoleteOriginals();
+            anticompactionGroup.checkpoint();
+
             anticompactedSSTables.addAll(repairedSSTableWriter.finished());
             anticompactedSSTables.addAll(unRepairedSSTableWriter.finished());
             repairedSSTableWriter.commit();
