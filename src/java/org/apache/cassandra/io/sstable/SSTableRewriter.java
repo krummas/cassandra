@@ -81,7 +81,12 @@ public class SSTableRewriter extends Transactional.AbstractTransactional impleme
 
     public SSTableRewriter(LifecycleTransaction transaction, long maxAge, boolean isOffline, boolean shouldOpenEarly)
     {
-        this(transaction, maxAge, isOffline, calculateOpenInterval(shouldOpenEarly), false);
+        this(transaction, maxAge, isOffline, shouldOpenEarly, false);
+    }
+
+    public SSTableRewriter(LifecycleTransaction transaction, long maxAge, boolean isOffline, boolean shouldOpenEarly, boolean keepOriginals)
+    {
+        this(transaction, maxAge, isOffline, calculateOpenInterval(shouldOpenEarly), keepOriginals);
     }
 
     @VisibleForTesting
