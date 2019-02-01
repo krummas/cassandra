@@ -1289,8 +1289,10 @@ public class CompactionManager implements CompactionManagerMBean
         logger.info(format, numAnticompact, antiCompactedSSTableCount);
     }
 
-    private int antiCompactGroup(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
-                             LifecycleTransaction anticompactionGroup, long repairedAt)
+
+    @VisibleForTesting
+    int antiCompactGroup(ColumnFamilyStore cfs, Collection<Range<Token>> ranges,
+                         LifecycleTransaction anticompactionGroup, long repairedAt)
     {
         long groupMaxDataAge = -1;
 
