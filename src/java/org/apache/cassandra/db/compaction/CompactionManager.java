@@ -1467,7 +1467,8 @@ public class CompactionManager implements CompactionManagerMBean
         logger.info(format, originalCount, antiCompactedSSTableCount);
     }
 
-    private int antiCompactGroup(ColumnFamilyStore cfs,
+    @VisibleForTesting
+    int antiCompactGroup(ColumnFamilyStore cfs,
                                  RangesAtEndpoint ranges,
                                  LifecycleTransaction txn,
                                  UUID pendingRepair)
