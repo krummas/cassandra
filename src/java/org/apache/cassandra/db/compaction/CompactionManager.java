@@ -1494,9 +1494,9 @@ public class CompactionManager implements CompactionManagerMBean
         RateLimiter limiter = getRateLimiter();
 
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
-        try (SSTableRewriter fullWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, false, groupMaxDataAge);
-             SSTableRewriter transWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, false, groupMaxDataAge);
-             SSTableRewriter unrepairedWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, false, groupMaxDataAge);
+        try (SSTableRewriter fullWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, true, groupMaxDataAge);
+             SSTableRewriter transWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, true, groupMaxDataAge);
+             SSTableRewriter unrepairedWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, true, groupMaxDataAge);
 
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(txn.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
@@ -1550,6 +1550,12 @@ public class CompactionManager implements CompactionManagerMBean
             fullWriter.prepareToCommit();
             transWriter.prepareToCommit();
             unrepairedWriter.prepareToCommit();
+
+            // since there are multiple rewriters, we instruct them to keep originals, then manually obsolete the
+            // originals here. If we didn't do this, the first call to `prepareToCommit` above would remove the original
+            // sstables from the tracker before their replacements are added, briefly removing data from the read path
+            txn.obsoleteOriginals();
+            txn.checkpoint();
 
             anticompactedSSTables.addAll(fullWriter.finished());
             anticompactedSSTables.addAll(transWriter.finished());
