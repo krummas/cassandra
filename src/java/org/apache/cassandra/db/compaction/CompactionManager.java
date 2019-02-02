@@ -1495,14 +1495,17 @@ public class CompactionManager implements CompactionManagerMBean
         int nowInSec = FBUtilities.nowInSeconds();
         RateLimiter limiter = getRateLimiter();
 
-        ILifecycleTransaction sharedTxn = new WrappedLifecycleTransaction(txn)
+        class SharedTxn extends WrappedLifecycleTransaction
         {
+            public SharedTxn(ILifecycleTransaction delegate) { super(delegate); }
             public Throwable commit(Throwable accumulate) { return accumulate; }
             public void prepareToCommit() {}
-        };
+            public void close() {}
+        }
 
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
-        try (SSTableRewriter fullWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
+        try (SharedTxn sharedTxn = new SharedTxn(txn);
+             SSTableRewriter fullWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
              SSTableRewriter transWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
              SSTableRewriter unrepairedWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
 
