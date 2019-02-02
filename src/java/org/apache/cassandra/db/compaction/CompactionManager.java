@@ -1315,14 +1315,17 @@ public class CompactionManager implements CompactionManagerMBean
         long unrepairedKeyCount = 0;
         int nowInSec = FBUtilities.nowInSeconds();
 
-        ILifecycleTransaction sharedTxn = new WrappedLifecycleTransaction(anticompactionGroup)
+        class SharedTxn extends WrappedLifecycleTransaction
         {
+            public SharedTxn(ILifecycleTransaction delegate) { super(delegate); }
             public Throwable commit(Throwable accumulate) { return accumulate; }
             public void prepareToCommit() {}
-        };
+            public void close() {}
+        }
 
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
-        try (SSTableRewriter repairedSSTableWriter = new SSTableRewriter(sharedTxn, groupMaxDataAge, false, false);
+        try (SharedTxn sharedTxn = new SharedTxn(anticompactionGroup);
+             SSTableRewriter repairedSSTableWriter = new SSTableRewriter(sharedTxn, groupMaxDataAge, false, false);
              SSTableRewriter unRepairedSSTableWriter = new SSTableRewriter(sharedTxn, groupMaxDataAge, false, false);
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(anticompactionGroup.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
