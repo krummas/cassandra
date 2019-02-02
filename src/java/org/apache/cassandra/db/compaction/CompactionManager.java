@@ -43,10 +43,12 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.CompactionInfo.Holder;
+import org.apache.cassandra.db.lifecycle.ILifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableIntervalTree;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.View;
+import org.apache.cassandra.db.lifecycle.WrappedLifecycleTransaction;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.view.ViewBuilder;
 import org.apache.cassandra.dht.Bounds;
@@ -1308,7 +1310,7 @@ public class CompactionManager implements CompactionManagerMBean
                                                               int expectedBloomFilterSize,
                                                               long repairedAt,
                                                               Collection<SSTableReader> sstables,
-                                                              LifecycleTransaction txn)
+                                                              ILifecycleTransaction txn)
     {
         FileUtils.createDirectory(compactionFileLocation);
         int minLevel = Integer.MAX_VALUE;
@@ -1564,17 +1566,23 @@ public class CompactionManager implements CompactionManagerMBean
         long unrepairedKeyCount = 0;
         int nowInSec = FBUtilities.nowInSeconds();
 
+        ILifecycleTransaction sharedTxn = new WrappedLifecycleTransaction(anticompactionGroup)
+        {
+            public Throwable commit(Throwable accumulate) { return accumulate; }
+            public void prepareToCommit() {}
+        };
+
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
-        try (SSTableRewriter repairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(anticompactionGroup, false, groupMaxDataAge);
-             SSTableRewriter unRepairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(anticompactionGroup, false, groupMaxDataAge);
+        try (SSTableRewriter repairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
+             SSTableRewriter unRepairedSSTableWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(anticompactionGroup.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
              CompactionIterator ci = new CompactionIterator(OperationType.ANTICOMPACTION, scanners.scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics))
         {
             int expectedBloomFilterSize = Math.max(cfs.metadata.params.minIndexInterval, (int)(SSTableReader.getApproximateKeyCount(sstableAsSet)));
 
-            repairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, repairedAt, sstableAsSet, anticompactionGroup));
-            unRepairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstableAsSet, anticompactionGroup));
+            repairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, repairedAt, sstableAsSet, sharedTxn));
+            unRepairedSSTableWriter.switchWriter(CompactionManager.createWriterForAntiCompaction(cfs, destination, expectedBloomFilterSize, ActiveRepairService.UNREPAIRED_SSTABLE, sstableAsSet, sharedTxn));
             Range.OrderedRangeContainmentChecker containmentChecker = new Range.OrderedRangeContainmentChecker(ranges);
             while (ci.hasNext())
             {
@@ -1599,13 +1607,14 @@ public class CompactionManager implements CompactionManagerMBean
             // since both writers are operating over the same Transaction, we cannot use the convenience Transactional.finish() method,
             // as on the second finish() we would prepareToCommit() on a Transaction that has already been committed, which is forbidden by the API
             // (since it indicates misuse). We call permitRedundantTransitions so that calls that transition to a state already occupied are permitted.
-            anticompactionGroup.permitRedundantTransitions();
             repairedSSTableWriter.setRepairedAt(repairedAt).prepareToCommit();
             unRepairedSSTableWriter.prepareToCommit();
+            anticompactionGroup.prepareToCommit();
             anticompactedSSTables.addAll(repairedSSTableWriter.finished());
             anticompactedSSTables.addAll(unRepairedSSTableWriter.finished());
             repairedSSTableWriter.commit();
             unRepairedSSTableWriter.commit();
+            Throwables.maybeFail(anticompactionGroup.commit(null));
 
             logger.trace("Repaired {} keys out of {} for {}/{} in {}", repairedKeyCount,
                                                                        repairedKeyCount + unrepairedKeyCount,
