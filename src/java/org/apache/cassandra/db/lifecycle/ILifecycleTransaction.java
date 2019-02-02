@@ -35,4 +35,5 @@ public interface ILifecycleTransaction extends Transactional, LifecycleNewTracke
     void obsoleteOriginals();
     Set<SSTableReader> originals();
     boolean isObsolete(SSTableReader reader);
+    boolean isOffline();
 }
