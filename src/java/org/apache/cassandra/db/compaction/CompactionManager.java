@@ -47,10 +47,12 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.CompactionInfo.Holder;
+import org.apache.cassandra.db.lifecycle.ILifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableIntervalTree;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.View;
+import org.apache.cassandra.db.lifecycle.WrappedLifecycleTransaction;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.view.ViewBuilderTask;
 import org.apache.cassandra.dht.Bounds;
@@ -1392,7 +1394,7 @@ public class CompactionManager implements CompactionManagerMBean
                                                               UUID pendingRepair,
                                                               boolean isTransient,
                                                               Collection<SSTableReader> sstables,
-                                                              LifecycleTransaction txn)
+                                                              ILifecycleTransaction txn)
     {
         FileUtils.createDirectory(compactionFileLocation);
         int minLevel = Integer.MAX_VALUE;
@@ -1493,10 +1495,16 @@ public class CompactionManager implements CompactionManagerMBean
         int nowInSec = FBUtilities.nowInSeconds();
         RateLimiter limiter = getRateLimiter();
 
+        ILifecycleTransaction sharedTxn = new WrappedLifecycleTransaction(txn)
+        {
+            public Throwable commit(Throwable accumulate) { return accumulate; }
+            public void prepareToCommit() {}
+        };
+
         CompactionStrategyManager strategy = cfs.getCompactionStrategyManager();
-        try (SSTableRewriter fullWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, false, groupMaxDataAge);
-             SSTableRewriter transWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, false, groupMaxDataAge);
-             SSTableRewriter unrepairedWriter = SSTableRewriter.constructWithoutEarlyOpening(txn, false, groupMaxDataAge);
+        try (SSTableRewriter fullWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
+             SSTableRewriter transWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
+             SSTableRewriter unrepairedWriter = SSTableRewriter.constructWithoutEarlyOpening(sharedTxn, false, groupMaxDataAge);
 
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(txn.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
@@ -1545,11 +1553,11 @@ public class CompactionManager implements CompactionManagerMBean
             // since all writers are operating over the same Transaction, we cannot use the convenience Transactional.finish() method,
             // as on the second finish() we would prepareToCommit() on a Transaction that has already been committed, which is forbidden by the API
             // (since it indicates misuse). We call permitRedundantTransitions so that calls that transition to a state already occupied are permitted.
-            txn.permitRedundantTransitions();
 
             fullWriter.prepareToCommit();
             transWriter.prepareToCommit();
             unrepairedWriter.prepareToCommit();
+            txn.prepareToCommit();
 
             anticompactedSSTables.addAll(fullWriter.finished());
             anticompactedSSTables.addAll(transWriter.finished());
@@ -1558,6 +1566,7 @@ public class CompactionManager implements CompactionManagerMBean
             fullWriter.commit();
             transWriter.commit();
             unrepairedWriter.commit();
+            txn.commit();
 
             return anticompactedSSTables.size();
         }
