@@ -1500,6 +1500,7 @@ public class CompactionManager implements CompactionManagerMBean
             public SharedTxn(ILifecycleTransaction delegate) { super(delegate); }
             public Throwable commit(Throwable accumulate) { return accumulate; }
             public void prepareToCommit() {}
+            public void obsoleteOriginals() {}
             public void close() {}
         }
 
@@ -1560,6 +1561,7 @@ public class CompactionManager implements CompactionManagerMBean
             fullWriter.prepareToCommit();
             transWriter.prepareToCommit();
             unrepairedWriter.prepareToCommit();
+            txn.obsoleteOriginals();
             txn.prepareToCommit();
 
             anticompactedSSTables.addAll(fullWriter.finished());
