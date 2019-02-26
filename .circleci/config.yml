@@ -64,16 +64,16 @@ upgrade_job_only: &upgrade_job_only
                       - build
 # Set env_settings, env_vars, and workflows/build_and_run_tests based on environment
 env_settings: &env_settings
-    <<: *default_env_settings
-    #<<: *high_capacity_env_settings
+    #<<: *default_env_settings
+    <<: *high_capacity_env_settings
 env_vars: &env_vars
-    <<: *resource_constrained_env_vars
-    #<<: *high_capacity_env_vars
+    #<<: *resource_constrained_env_vars
+    <<: *high_capacity_env_vars
 workflows:
     version: 2
-    build_and_run_tests: *default_jobs
+    #build_and_run_tests: *default_jobs
     #build_and_run_tests: *with_dtest_jobs_only
-    #build_and_run_tests: *with_dtest_jobs
+    build_and_run_tests: *with_dtest_jobs
     #build_and_run_tests: *upgrade_job_only
 docker_image: &docker_image aweisberg/cassandra-testing-ubuntu18-java11-w-dependencies
 version: 2
@@ -218,7 +218,7 @@ jobs:
           name: Clone Cassandra dtest Repository (via git)
           command: |
             export LANG=en_US.UTF-8
-            git clone --single-branch --branch master --depth 1 git://github.com/apache/cassandra-dtest.git ~/cassandra-dtest
+            git clone --single-branch --branch marcuse/testcci2 --depth 1 git://github.com/krummas/cassandra-dtest.git ~/cassandra-dtest
       - run:
           name: Configure virtualenv and python Dependencies
           command: |
@@ -231,7 +231,7 @@ jobs:
             export PATH=$PATH:$ANT_HOME/bin:$JAVA_HOME/bin
             export CASS_DRIVER_NO_EXTENSIONS=true
             export CASS_DRIVER_NO_CYTHON=true
-            pip3 install --upgrade -r ~/cassandra-dtest/requirements.txt
+            yes w | pip3 install --upgrade -r ~/cassandra-dtest/requirements.txt || :
             pip3 freeze
       - run:
           name: Determine Tests to Run
@@ -296,7 +296,7 @@ jobs:
           name: Clone Cassandra dtest Repository (via git)
           command: |
             export LANG=en_US.UTF-8
-            git clone --single-branch --branch master --depth 1 git://github.com/apache/cassandra-dtest.git ~/cassandra-dtest
+            git clone --single-branch --branch marcuse/testcci2 --depth 1 git://github.com/krummas/cassandra-dtest.git ~/cassandra-dtest
       - run:
           name: Configure virtualenv and python Dependencies
           command: |
@@ -309,7 +309,7 @@ jobs:
             export PATH=$PATH:$ANT_HOME/bin:$JAVA_HOME/bin
             export CASS_DRIVER_NO_EXTENSIONS=true
             export CASS_DRIVER_NO_CYTHON=true
-            pip3 install --upgrade -r ~/cassandra-dtest/requirements.txt
+            yes w | pip3 install --upgrade -r ~/cassandra-dtest/requirements.txt || :
             pip3 freeze
       - run:
           name: Determine Tests to Run
@@ -385,7 +385,7 @@ jobs:
             export PATH=$PATH:$ANT_HOME/bin:$JAVA_HOME/bin
             export CASS_DRIVER_NO_EXTENSIONS=true
             export CASS_DRIVER_NO_CYTHON=true
-            pip3 install --upgrade -r ~/cassandra-dtest/requirements.txt
+            yes w | pip3 install --upgrade -r ~/cassandra-dtest/requirements.txt || :
             pip3 freeze
       - run:
           name: Determine Tests to Run
@@ -424,7 +424,7 @@ jobs:
                 export SPLIT_TESTS=`cat /tmp/split_upgrade_dtest_tests_without_vnodes_final.txt`
                 #Skip all syncing to disk to avoid performance issues in flaky CI environments
                 export CASSANDRA_SKIP_SYNC=true
-                set -o pipefail && cd ~/cassandra-dtest && pytest --log-level="INFO" --junit-xml=/tmp/results/dtests/pytest_result_novnodes.xml -s --cassandra-dir=/home/cassandra/cassandra --execute-upgrade-tests --keep-test-dir --log-cli-level=debug $SPLIT_TESTS 2>&1 | tee /tmp/dtest/stdout-novnodes.txt
+                set -o pipefail && cd ~/cassandra-dtest && pytest --log-level="DEBUG" --junit-xml=/tmp/results/dtests/pytest_result_novnodes.xml -s --cassandra-dir=/home/cassandra/cassandra --execute-upgrade-tests --keep-test-dir --log-cli-level=debug $SPLIT_TESTS 2>&1 | tee /tmp/dtest/stdout-novnodes.txt
             fi
       - store_test_results:
           path: /tmp/results
