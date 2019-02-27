@@ -256,6 +256,10 @@ jobs:
           name: Run dtests (with vnodes)
           no_output_timeout: 15m
           command: |
+            echo "--psauxww--"
+            ps auxwww
+            echo "--ifconf---"
+            ifconfig -a
             echo "cat /tmp/split_dtest_tests_with_vnodes_final.txt"
             cat /tmp/split_dtest_tests_with_vnodes_final.txt
 
