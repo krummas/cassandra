@@ -36,6 +36,9 @@ with_dtests_jobs: &with_dtest_jobs
             - j8_unit_tests:
                 requires:
                   - build
+            - j8_jvm_dtests:
+                requires:
+                  - build
             # specialized unit tests (all run on request using Java 8)
             - start_utests_long:
                 type: approval
@@ -123,9 +126,16 @@ jobs:
       - attach_workspace:
           at: /home/cassandra
       - create_junit_containers
-      - append_distributed_containers
       - log_environment
       - run_parallel_junit_tests
+
+  j8_jvm_dtests:
+    <<: *j8_seq_executor
+    steps:
+      - attach_workspace:
+          at: /home/cassandra
+      - run_junit_tests:
+          target: test-jvm-dtest-forking
 
   utests_long:
     <<: *j8_seq_executor
@@ -283,20 +293,6 @@ commands:
 
         no_output_timeout: 15m
 
-  append_distributed_containers:
-    steps:
-      - run:
-          name: Append distributed tests
-          command: |
-            # append distributed tests
-            set -eo pipefail && circleci tests glob "$HOME/cassandra/test/distributed/**/*.java" > /tmp/all_java_distributed_tests.txt
-
-            set -eo pipefail && circleci tests split --split-by=timings --timings-type=filename --index=${CIRCLE_NODE_INDEX} --total=${CIRCLE_NODE_TOTAL} /tmp/all_java_distributed_tests.txt > /tmp/java_dtests_${CIRCLE_NODE_INDEX}.txt
-            set +eo pipefail && cat /tmp/java_dtests_${CIRCLE_NODE_INDEX}.txt | cut -c 44-1000000 | grep "Test\.java$" > /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt
-            echo "** /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt"
-            cat /tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt
-          no_output_timeout: 15m
-
   run_junit_tests:
     parameters:
       target:
@@ -342,10 +338,6 @@ commands:
           time mv ~/cassandra /tmp
           cd /tmp/cassandra
           ant <<parameters.target>> -Dtest.classlistfile=/tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt  -Dtest.classlistprefix=unit
-          # todo; move this to its own target?
-          if [ -s "/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt" ]; then
-            ant <<parameters.target>> -Dtest.classlistfile=/tmp/java_dtests_${CIRCLE_NODE_INDEX}_final.txt -Dtest.classlistprefix=distributed
-          fi
         no_output_timeout: <<parameters.no_output_timeout>>
     - store_test_results:
         path: /tmp/cassandra/build/test/output/
