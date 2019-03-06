@@ -275,7 +275,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-11-openjdk-amd64
   j8_dtests-no-vnodes:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -360,7 +360,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   j8_upgradetests-no-vnodes:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -452,7 +452,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   utests_stress:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -496,7 +496,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   j8_unit_tests:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -581,7 +581,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   j8_dtests-with-vnodes:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -665,7 +665,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   j8_jvm_dtests:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -709,7 +709,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   utests_long:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -753,7 +753,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-8-openjdk-amd64
   utests_fqltool:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -904,7 +904,7 @@ jobs:
     - JDK_HOME: /usr/lib/jvm/java-11-openjdk-amd64
   utests_compression:
     docker:
-    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+    - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
     resource_class: medium
     working_directory: ~/
     shell: /bin/bash -eo pipefail -l
@@ -1200,7 +1200,7 @@ workflows:
 #         type: string
 #         default: medium
 #     docker:
-#       - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190128
+#       - image: spod/cassandra-testing-ubuntu1810-java11-w-dependencies:20190306
 #     resource_class: << parameters.exec_resource_class >>
 #     working_directory: ~/
 #     shell: /bin/bash -eo pipefail -l
