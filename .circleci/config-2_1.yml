@@ -196,6 +196,7 @@ jobs:
           tests_filter_pattern: '^upgrade_tests'
       - run_dtests:
           file_tag: j8_upgradetests_without_vnodes
+          extra_env_args: 'RUN_STATIC_UPGRADE_MATRIX=true'
           pytest_extra_args: '--execute-upgrade-tests'
 
 commands:
@@ -387,7 +388,7 @@ commands:
           source ~/env/bin/activate
           export PATH=$JAVA_HOME/bin:$PATH
 
-          if [ -z '<<parameters.extra_env_args>>' ]; then
+          if [ -n '<<parameters.extra_env_args>>' ]; then
             export <<parameters.extra_env_args>>
           fi
 
@@ -422,7 +423,7 @@ commands:
 
             source ~/env/bin/activate
             export PATH=$JAVA_HOME/bin:$PATH
-            if [ -z '<<parameters.extra_env_args>>' ]; then
+            if [ -n '<<parameters.extra_env_args>>' ]; then
               export <<parameters.extra_env_args>>
             fi
 
