@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
@@ -593,16 +592,33 @@ public class IndexSummaryManagerTest
     @Test
     public void testCancelIndex() throws Exception
     {
-        testCancelIndexHelper((cfs) -> CompactionManager.instance.stopCompaction("INDEX_SUMMARY"));
+        testCancelIndexHelper(new CancelFunction()
+        {
+            public void cancel(ColumnFamilyStore cfs)
+            {
+                CompactionManager.instance.stopCompaction("INDEX_SUMMARY");
+            }
+        });
     }
 
     @Test
     public void testCancelIndexInterrupt() throws Exception
     {
-        testCancelIndexHelper((cfs) -> CompactionManager.instance.interruptCompactionFor(Collections.singleton(cfs.metadata), false));
+        testCancelIndexHelper(new CancelFunction()
+        {
+            public void cancel(ColumnFamilyStore cfs)
+            {
+                CompactionManager.instance.interruptCompactionFor(Collections.singleton(cfs.metadata), false);
+            }
+        });
     }
 
-    public void testCancelIndexHelper(Consumer<ColumnFamilyStore> cancelFunction) throws Exception
+    private static interface CancelFunction
+    {
+        void cancel(ColumnFamilyStore cfs);
+    }
+
+    public void testCancelIndexHelper(CancelFunction cf) throws Exception
     {
         String ksname = KEYSPACE1;
         String cfname = CF_STANDARDLOWiINTERVAL; // index interval of 8, no key caching
@@ -654,7 +670,7 @@ public class IndexSummaryManagerTest
         // to ensure that the stop condition check in IndexSummaryRedistribution::redistributeSummaries
         // is made *after* the halt request is made to the CompactionManager, don't allow the redistribution
         // to proceed until stopCompaction has been called.
-        cancelFunction.accept(cfs);
+        cf.cancel(cfs);
         // allows the redistribution to proceed
         barrier.countDown();
         t.join();
