@@ -73,7 +73,7 @@ public class DurationType extends AbstractType<Duration>
     @Override
     public String toJSONString(ByteBuffer buffer, ProtocolVersion protocolVersion)
     {
-        return getSerializer().deserialize(buffer).toString();
+        return '"' + getSerializer().deserialize(buffer).toString() + '"';
     }
 
     @Override
