@@ -822,9 +822,10 @@ public class CompactionManager implements CompactionManagerMBean
         // here we compute the task off the compaction executor, so having that present doesn't
         // confuse runWithCompactionsDisabled -- i.e., we don't want to deadlock ourselves, waiting
         // for ourselves to finish/acknowledge cancellation before continuing.
-        final Collection<AbstractCompactionTask> tasks = cfStore.getCompactionStrategyManager().getMaximalTasks(gcBefore, splitOutput);
+        @SuppressWarnings("resource") // the tasks are executed in parallel on the executor, making sure that closed
+        CompactionTaskCollection tasks = cfStore.getCompactionStrategyManager().getMaximalTasks(gcBefore, splitOutput);
 
-        if (tasks == null)
+        if (tasks == CompactionTaskCollection.EMPTY)
             return Collections.emptyList();
 
         List<Future<?>> futures = new ArrayList<>();
@@ -856,42 +857,37 @@ public class CompactionManager implements CompactionManagerMBean
 
     public void forceCompactionForTokenRange(ColumnFamilyStore cfStore, Collection<Range<Token>> ranges)
     {
-        Callable<Collection<AbstractCompactionTask>> taskCreator = () -> {
+        Callable<CompactionTaskCollection> taskCreator = () -> {
             Collection<SSTableReader> sstables = sstablesInBounds(cfStore, ranges);
             if (sstables == null || sstables.isEmpty())
             {
                 logger.debug("No sstables found for the provided token range");
-                return null;
+                return CompactionTaskCollection.EMPTY;
             }
             return cfStore.getCompactionStrategyManager().getUserDefinedTasks(sstables, getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()));
         };
 
-        final Collection<AbstractCompactionTask> tasks = cfStore.runWithCompactionsDisabled(taskCreator, false, false);
-
-        if (tasks == null)
-            return;
-
-        Runnable runnable = new WrappedRunnable()
+        try (CompactionTaskCollection tasks = cfStore.runWithCompactionsDisabled(taskCreator,
+                                                                                 (sstable) -> new Bounds<>(sstable.first.getToken(), sstable.last.getToken()).intersects(ranges),
+                                                                                 false,
+                                                                                 false,
+                                                                                 false))
         {
-            protected void runMayThrow() throws Exception
+            if (tasks == CompactionTaskCollection.EMPTY)
+                return;
+
+            Runnable runnable = new WrappedRunnable()
             {
-                try
+                protected void runMayThrow()
                 {
                     for (AbstractCompactionTask task : tasks)
                         if (task != null)
                             task.execute(active);
                 }
-                catch (Exception e)
-                {
-                    if (!(e instanceof CompactionInterruptedException))
-                        logger.error("Got exception running sub range compaction", e);
-                    FBUtilities.closeAll(tasks.stream().map(task -> task.transaction).collect(Collectors.toList()));
-                    throw e;
-                }
-            }
-        };
+            };
 
-        FBUtilities.waitOnFuture(executor.submitIfRunning(runnable, "force compaction for token range"));
+            FBUtilities.waitOnFuture(executor.submitIfRunning(runnable, "force compaction for token range"));
+        }
     }
 
     private static Collection<SSTableReader> sstablesInBounds(ColumnFamilyStore cfs, Collection<Range<Token>> tokenRangeCollection)
@@ -1021,21 +1017,13 @@ public class CompactionManager implements CompactionManagerMBean
                 }
                 else
                 {
-                    List<AbstractCompactionTask> tasks = cfs.getCompactionStrategyManager().getUserDefinedTasks(sstables, gcBefore);
-                    try
+                    try (CompactionTaskCollection tasks = cfs.getCompactionStrategyManager().getUserDefinedTasks(sstables, gcBefore))
                     {
                         for (AbstractCompactionTask task : tasks)
                         {
                             if (task != null)
                                 task.execute(active);
                         }
-                    }
-                    catch (Exception e)
-                    {
-                        if (!(e instanceof CompactionInterruptedException))
-                            logger.error("Got exception running user defined compaction", e);
-                        FBUtilities.closeAll(tasks.stream().map(task -> task.transaction).collect(Collectors.toList()));
-                        throw e;
                     }
                 }
             }
