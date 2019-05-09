@@ -956,34 +956,29 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
     }
 
-    public Collection<AbstractCompactionTask> getMaximalTasks(final int gcBefore, final boolean splitOutput)
+    public CompactionTaskCollection getMaximalTasks(final int gcBefore, final boolean splitOutput)
     {
         maybeReloadDiskBoundaries();
         // runWithCompactionsDisabled cancels active compactions and disables them, then we are able
         // to make the repaired/unrepaired strategies mark their own sstables as compacting. Once the
         // sstables are marked the compactions are re-enabled
-        return cfs.runWithCompactionsDisabled(new Callable<Collection<AbstractCompactionTask>>()
-        {
-            @Override
-            public Collection<AbstractCompactionTask> call()
+        return cfs.runWithCompactionsDisabled(() -> {
+            List<AbstractCompactionTask> tasks = new ArrayList<>();
+            readLock.lock();
+            try
             {
-                List<AbstractCompactionTask> tasks = new ArrayList<>();
-                readLock.lock();
-                try
+                for (AbstractStrategyHolder holder : holders)
                 {
-                    for (AbstractStrategyHolder holder : holders)
-                    {
-                        tasks.addAll(holder.getMaximalTasks(gcBefore, splitOutput));
-                    }
+                    tasks.addAll(holder.getMaximalTasks(gcBefore, splitOutput));
                 }
-                finally
-                {
-                    readLock.unlock();
-                }
-                if (tasks.isEmpty())
-                    return null;
-                return tasks;
             }
+            finally
+            {
+                readLock.unlock();
+            }
+            if (tasks.isEmpty())
+                return CompactionTaskCollection.EMPTY;
+            return new CompactionTaskCollection(tasks);
         }, false, false);
     }
 
@@ -996,7 +991,7 @@ public class CompactionStrategyManager implements INotificationConsumer
      * @param gcBefore gc grace period, throw away tombstones older than this
      * @return a list of compaction tasks corresponding to the sstables requested
      */
-    public List<AbstractCompactionTask> getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
+    public CompactionTaskCollection getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
     {
         maybeReloadDiskBoundaries();
         List<AbstractCompactionTask> ret = new ArrayList<>();
@@ -1008,7 +1003,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             {
                 ret.addAll(holders.get(i).getUserDefinedTasks(groupedSSTables.get(i), gcBefore));
             }
-            return ret;
+            return new CompactionTaskCollection(ret);
         }
         finally
         {
