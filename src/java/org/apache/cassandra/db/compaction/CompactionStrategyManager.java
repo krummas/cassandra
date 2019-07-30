@@ -29,7 +29,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -956,7 +955,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         }
     }
 
-    public CompactionTaskCollection getMaximalTasks(final int gcBefore, final boolean splitOutput)
+    public CompactionTasks getMaximalTasks(final int gcBefore, final boolean splitOutput)
     {
         maybeReloadDiskBoundaries();
         // runWithCompactionsDisabled cancels active compactions and disables them, then we are able
@@ -976,9 +975,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             {
                 readLock.unlock();
             }
-            if (tasks.isEmpty())
-                return CompactionTaskCollection.EMPTY;
-            return new CompactionTaskCollection(tasks);
+            return CompactionTasks.create(tasks);
         }, false, false);
     }
 
@@ -991,7 +988,7 @@ public class CompactionStrategyManager implements INotificationConsumer
      * @param gcBefore gc grace period, throw away tombstones older than this
      * @return a list of compaction tasks corresponding to the sstables requested
      */
-    public CompactionTaskCollection getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
+    public CompactionTasks getUserDefinedTasks(Collection<SSTableReader> sstables, int gcBefore)
     {
         maybeReloadDiskBoundaries();
         List<AbstractCompactionTask> ret = new ArrayList<>();
@@ -1003,7 +1000,7 @@ public class CompactionStrategyManager implements INotificationConsumer
             {
                 ret.addAll(holders.get(i).getUserDefinedTasks(groupedSSTables.get(i), gcBefore));
             }
-            return new CompactionTaskCollection(ret);
+            return CompactionTasks.create(ret);
         }
         finally
         {

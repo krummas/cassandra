@@ -20,7 +20,6 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.UUID;
 
 import com.google.common.collect.Lists;
@@ -229,7 +228,7 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         mutateRepaired(sstable, repairId, false);
         prm.addSSTable(sstable);
 
-        try (CompactionTaskCollection tasks = csm.getUserDefinedTasks(Collections.singleton(sstable), 100))
+        try (CompactionTasks tasks = csm.getUserDefinedTasks(Collections.singleton(sstable), 100))
         {
             Assert.assertEquals(1, tasks.size());
         }
@@ -248,7 +247,7 @@ public class PendingRepairManagerTest extends AbstractPendingRepairTest
         mutateRepaired(sstable2, repairId2, false);
         prm.addSSTable(sstable);
         prm.addSSTable(sstable2);
-        try (CompactionTaskCollection tasks = csm.getUserDefinedTasks(Lists.newArrayList(sstable, sstable2), 100))
+        try (CompactionTasks tasks = csm.getUserDefinedTasks(Lists.newArrayList(sstable, sstable2), 100))
         {
             Assert.assertEquals(2, tasks.size());
         }

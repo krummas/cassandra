@@ -19,7 +19,6 @@
 package org.apache.cassandra.db.compaction;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import com.google.common.collect.Iterables;
@@ -304,7 +303,7 @@ public class CompactionsPurgeTest
                 .build().applyUnsafe();
 
         cfs.forceBlockingFlush();
-        try (CompactionTaskCollection tasks = cfs.getCompactionStrategyManager().getUserDefinedTasks(sstablesIncomplete, Integer.MAX_VALUE))
+        try (CompactionTasks tasks = cfs.getCompactionStrategyManager().getUserDefinedTasks(sstablesIncomplete, Integer.MAX_VALUE))
         {
             Iterables.getOnlyElement(tasks).execute(ActiveCompactionsTracker.NOOP);
         }
@@ -356,7 +355,7 @@ public class CompactionsPurgeTest
         cfs.forceBlockingFlush();
 
         // compact the sstables with the c1/c2 data and the c1 tombstone
-        try (CompactionTaskCollection tasks = cfs.getCompactionStrategyManager().getUserDefinedTasks(sstablesIncomplete, Integer.MAX_VALUE))
+        try (CompactionTasks tasks = cfs.getCompactionStrategyManager().getUserDefinedTasks(sstablesIncomplete, Integer.MAX_VALUE))
         {
             Iterables.getOnlyElement(tasks).execute(ActiveCompactionsTracker.NOOP);
         }

@@ -26,16 +26,28 @@ import java.util.stream.Collectors;
 
 import org.apache.cassandra.utils.FBUtilities;
 
-public class CompactionTaskCollection extends AbstractCollection<AbstractCompactionTask> implements AutoCloseable
+public class CompactionTasks extends AbstractCollection<AbstractCompactionTask> implements AutoCloseable
 {
     @SuppressWarnings("resource")
-    public static final CompactionTaskCollection EMPTY = new CompactionTaskCollection(Collections.emptyList());
+    private static final CompactionTasks EMPTY = new CompactionTasks(Collections.emptyList());
 
     private final Collection<AbstractCompactionTask> tasks;
 
-    CompactionTaskCollection(Collection<AbstractCompactionTask> tasks)
+    private CompactionTasks(Collection<AbstractCompactionTask> tasks)
     {
         this.tasks = tasks;
+    }
+
+    public static CompactionTasks create(Collection<AbstractCompactionTask> tasks)
+    {
+        if (tasks == null || tasks.isEmpty())
+            return EMPTY;
+        return new CompactionTasks(tasks);
+    }
+
+    public static CompactionTasks empty()
+    {
+        return EMPTY;
     }
 
     public Iterator<AbstractCompactionTask> iterator()
