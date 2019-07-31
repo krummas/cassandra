@@ -817,12 +817,12 @@ public class CompactionManager implements CompactionManagerMBean
         FBUtilities.waitOnFutures(submitMaximal(cfStore, getDefaultGcBefore(cfStore, FBUtilities.nowInSeconds()), splitOutput));
     }
 
+    @SuppressWarnings("resource") // the tasks are executed in parallel on the executor, making sure that they get closed
     public List<Future<?>> submitMaximal(final ColumnFamilyStore cfStore, final int gcBefore, boolean splitOutput)
     {
         // here we compute the task off the compaction executor, so having that present doesn't
         // confuse runWithCompactionsDisabled -- i.e., we don't want to deadlock ourselves, waiting
         // for ourselves to finish/acknowledge cancellation before continuing.
-        @SuppressWarnings("resource") // the tasks are executed in parallel on the executor, making sure that closed
         CompactionTasks tasks = cfStore.getCompactionStrategyManager().getMaximalTasks(gcBefore, splitOutput);
 
         if (tasks.isEmpty())
@@ -850,7 +850,6 @@ public class CompactionManager implements CompactionManagerMBean
         }
         if (nonEmptyTasks > 1)
             logger.info("Major compaction will not result in a single sstable - repaired and unrepaired data is kept separate and compaction runs per data_file_directory.");
-
 
         return futures;
     }
