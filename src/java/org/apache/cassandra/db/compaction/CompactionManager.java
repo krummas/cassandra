@@ -809,12 +809,9 @@ public class CompactionManager implements CompactionManagerMBean
                         if (task != null)
                             task.execute(metrics);
                 }
-                catch (Exception e)
+                finally
                 {
-                    if (!(e instanceof CompactionInterruptedException))
-                        logger.error("Got exception running sub range compaction", e);
                     FBUtilities.closeAll(tasks.stream().map(task -> task.transaction).collect(Collectors.toList()));
-                    throw e;
                 }
             }
         };
@@ -955,12 +952,9 @@ public class CompactionManager implements CompactionManagerMBean
                                 task.execute(metrics);
                         }
                     }
-                    catch (Exception e)
+                    finally
                     {
-                        if (!(e instanceof CompactionInterruptedException))
-                            logger.error("Got exception running user defined compaction", e);
                         FBUtilities.closeAll(tasks.stream().map(task -> task.transaction).collect(Collectors.toList()));
-                        throw e;
                     }
                 }
             }
