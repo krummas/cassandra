@@ -118,8 +118,7 @@ public class DiskBoundaries
     {
         for (int i = 0; i < directories.size(); i++)
         {
-            Directories.DataDirectory directory = directories.get(i);
-            if (descriptor.directory.getAbsolutePath().startsWith(directory.location.getAbsolutePath()))
+            if (directories.get(i).containsFile(descriptor.directory))
                 return i;
         }
         return 0;

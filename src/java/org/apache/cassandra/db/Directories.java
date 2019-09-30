@@ -279,7 +279,7 @@ public class Directories
     {
         if (dataDirectory != null)
             for (File dir : dataPaths)
-                if (dir.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+                if (dataDirectory.containsFile(dir))
                     return dir;
         return null;
     }
@@ -290,7 +290,7 @@ public class Directories
         {
             for (DataDirectory dataDirectory : paths)
             {
-                if (directory.getAbsolutePath().startsWith(dataDirectory.location.getAbsolutePath()))
+                if (dataDirectory.containsFile(directory))
                     return dataDirectory;
             }
         }
@@ -614,6 +614,22 @@ public class Directories
             return "DataDirectory{" +
                    "location=" + location +
                    '}';
+        }
+
+        public boolean containsFile(File file)
+        {
+            try
+            {
+                String canonicalDirectory = file.getCanonicalPath();
+                String canonicalLocation = location.getCanonicalPath();
+                canonicalLocation = canonicalLocation.endsWith(File.separator) ? canonicalLocation : canonicalLocation + File.separator;
+                return canonicalDirectory.startsWith(canonicalLocation);
+            }
+            catch (IOException e)
+            {
+                logger.error("Could not resolve canonical path for " + file, e);
+            }
+            return false;
         }
     }
 
