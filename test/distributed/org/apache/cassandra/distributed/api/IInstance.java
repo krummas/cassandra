@@ -24,7 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 
 // The cross-version API requires that an Instance has a constructor signature of (IInstanceConfig, ClassLoader)
-public interface IInstance extends IIsolatedExecutor
+public interface IInstance extends IIsolatedExecutor, Thread.UncaughtExceptionHandler
 {
     ICoordinator coordinator();
     IListen listen();
@@ -40,6 +40,14 @@ public interface IInstance extends IIsolatedExecutor
     boolean isShutdown();
     Future<Void> shutdown();
     Future<Void> shutdown(boolean graceful);
+
+    /**
+     * Return the number of times the instance tried to call {@link System#exit(int)}.
+     *
+     * When the instance is shutdown, this state should be saved, but in case not possible should return {@code -1}
+     * to indicate "unknown".
+     */
+    long killAttempts();
 
     // these methods are not for external use, but for simplicity we leave them public and on the normal IInstance interface
     void startup(ICluster cluster);

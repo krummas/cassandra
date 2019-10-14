@@ -21,13 +21,25 @@ package org.apache.cassandra.concurrent;
  */
 
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.net.InetAddresses;
+import com.google.common.util.concurrent.ListenableFutureTask;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.tracing.TraceState;
+import org.apache.cassandra.tracing.TraceStateImpl;
+import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 public class DebuggableThreadPoolExecutorTest
@@ -64,5 +76,80 @@ public class DebuggableThreadPoolExecutorTest
             continue;
         long delta = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
         assert delta >= 9 * 50 : delta;
+    }
+
+    @Test
+    public void testRunnableFuturesWhileTracing()
+    {
+        LinkedBlockingQueue<Runnable> q = new LinkedBlockingQueue<Runnable>(1);
+        DebuggableThreadPoolExecutor executor = new DebuggableThreadPoolExecutor(1,
+                                                                                 Integer.MAX_VALUE,
+                                                                                 TimeUnit.MILLISECONDS,
+                                                                                 q,
+                                                                                 new NamedThreadFactory("TEST"));
+        withTracing(() -> {
+            try {
+
+                Throwable throwable = assertThrows(ExecutionException.class, () -> executor.submit(failingTask()).get());
+                Assert.assertEquals(DebuggingThrowsException.class, throwable.getCause().getClass());
+
+                throwable = assertThrows(ExecutionException.class, () -> executor.submit(failingTask(), 42).get());
+                Assert.assertEquals(DebuggingThrowsException.class, throwable.getCause().getClass());
+            }
+            finally
+            {
+                executor.shutdown();
+            }
+        });
+
+    }
+
+    private static void withTracing(Runnable fn)
+    {
+        TraceState state = Tracing.instance.get();
+        try {
+            Tracing.instance.set(new TraceStateImpl(InetAddressAndPort.getByAddress(InetAddresses.forString("127.0.0.1")), UUID.randomUUID(), Tracing.TraceType.NONE));
+            fn.run();
+        }
+        finally
+        {
+            Tracing.instance.set(state);
+        }
+    }
+
+    private static String failingFunction()
+    {
+        throw new DebuggingThrowsException();
+    }
+
+    private static RunnableFuture<String> failingTask()
+    {
+        return ListenableFutureTask.create(DebuggableThreadPoolExecutorTest::failingFunction);
+    }
+
+    private static final class DebuggingThrowsException extends RuntimeException {
+
+    }
+
+    private static Throwable assertThrows(Class<? extends Throwable> klass, FailingRunnable fn)
+    {
+        Throwable throwed = null;
+        try {
+            fn.run();
+        }
+        catch (Throwable t)
+        {
+            throwed = t;
+        }
+        if (throwed == null)
+            Assert.fail("Excepted to throw " + klass.getName() + " but did not throw a exception");
+        if (!throwed.getClass().isAssignableFrom(klass))
+            Assert.fail("Excepted to throw " + klass.getName() + " but threw " + throwed.getClass().getName() + "; " + throwed.getMessage());
+        return throwed;
+    }
+
+    public interface FailingRunnable
+    {
+        void run() throws Throwable;
     }
 }

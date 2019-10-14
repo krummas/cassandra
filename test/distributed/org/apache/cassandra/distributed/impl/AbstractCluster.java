@@ -102,6 +102,7 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
 
     // mutated by user-facing API
     private final MessageFilters filters;
+    private volatile Thread.UncaughtExceptionHandler previousHandler = null;
 
     protected class Wrapper extends DelegatingInvokableInstance implements IUpgradeableInstance
     {
@@ -171,6 +172,15 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
             return future;
         }
 
+        public long killAttempts()
+        {
+            IInvokableInstance local = delegate;
+            // if shutdown cleared the delegate, then no longer know how many kill attempts happened, so return -1
+            if (local == null)
+                return -1;
+            return local.killAttempts();
+        }
+
         @Override
         public void receiveMessage(IMessage message)
         {
@@ -192,6 +202,15 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
                 delegate.shutdown();
                 delegate = null;
             }
+        }
+
+        public void uncaughtException(Thread thread, Throwable throwable)
+        {
+            IInvokableInstance delegate = this.delegate;
+            if (delegate != null)
+                delegate.uncaughtException(thread, throwable);
+            else
+                logger.error("uncaught exception in thread {}", thread, throwable);
         }
     }
 
@@ -360,7 +379,22 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
 
     void startup()
     {
+        previousHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(this::uncaughtExceptions);
         parallelForEach(I::startup, 0, null);
+    }
+
+    private void uncaughtExceptions(Thread thread, Throwable error)
+    {
+        if (!(thread.getContextClassLoader() instanceof InstanceClassLoader))
+        {
+            Thread.UncaughtExceptionHandler handler = previousHandler;
+            if (null != handler)
+                handler.uncaughtException(thread, error);
+            return;
+        }
+        InstanceClassLoader cl = (InstanceClassLoader) thread.getContextClassLoader();
+        get(cl.getGeneration()).uncaughtException(thread, error);
     }
 
     protected interface Factory<I extends IInstance, C extends AbstractCluster<I>>
@@ -594,7 +628,10 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
         instances.clear();
         instanceMap.clear();
         // Make sure to only delete directory when threads are stopped
-        FileUtils.deleteRecursive(root);
+        if (root.exists())
+            FileUtils.deleteRecursive(root);
+        Thread.setDefaultUncaughtExceptionHandler(previousHandler);
+        previousHandler = null;
 
         //withThreadLeakCheck(futures);
     }

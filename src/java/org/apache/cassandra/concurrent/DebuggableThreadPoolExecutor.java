@@ -19,6 +19,7 @@ package org.apache.cassandra.concurrent;
 
 import java.util.concurrent.*;
 
+import com.google.common.base.Throwables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -147,7 +148,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor implements 
     {
         super.execute(locals == null || command instanceof LocalSessionWrapper
                       ? command
-                      : new LocalSessionWrapper<Object>(command, locals));
+                      : LocalSessionWrapper.create(command, locals));
     }
 
     public void maybeExecuteImmediately(Runnable command)
@@ -160,7 +161,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor implements 
     public void execute(Runnable command)
     {
         super.execute(isTracing() && !(command instanceof LocalSessionWrapper)
-                      ? new LocalSessionWrapper<Object>(Executors.callable(command, null))
+                      ? LocalSessionWrapper.create(command)
                       : command);
     }
 
@@ -169,7 +170,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor implements 
     {
         if (isTracing() && !(runnable instanceof LocalSessionWrapper))
         {
-            return new LocalSessionWrapper<T>(Executors.callable(runnable, result));
+            return new LocalSessionWrapper<T>(callable(runnable, result));
         }
         return super.newTaskFor(runnable, result);
     }
@@ -302,10 +303,20 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor implements 
             locals = ExecutorLocals.create();
         }
 
-        public LocalSessionWrapper(Runnable command, ExecutorLocals locals)
+        public LocalSessionWrapper(Callable<T> callable, ExecutorLocals locals)
         {
-            super(command, null);
+            super(callable);
             this.locals = locals;
+        }
+
+        public static LocalSessionWrapper<Object> create(Runnable command)
+        {
+            return new LocalSessionWrapper<>(callable(command));
+        }
+
+        public static LocalSessionWrapper<Object> create(Runnable command, ExecutorLocals locals)
+        {
+            return new LocalSessionWrapper<>(callable(command), locals);
         }
 
         private void setupContext()
@@ -316,6 +327,50 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor implements 
         private void reset()
         {
             ExecutorLocals.set(null);
+        }
+    }
+
+    private static Callable<Object> callable(Runnable fn)
+    {
+        if (fn instanceof RunnableFuture)
+            return new PropogateFutureTaskResult((RunnableFuture<Object>) fn);
+        return Executors.callable(fn);
+    }
+
+    private static <T> Callable<T> callable(Runnable fn, T result)
+    {
+        if (fn instanceof RunnableFuture)
+        {
+            PropogateFutureTaskResult p = new PropogateFutureTaskResult((RunnableFuture<Object>) fn);
+            return () -> {
+                p.call();
+                return result;
+            };
+        }
+        return Executors.callable(fn, result);
+    }
+
+    private static final class PropogateFutureTaskResult implements Callable<Object>
+    {
+        private final RunnableFuture<Object> fn;
+
+        private PropogateFutureTaskResult(RunnableFuture<Object> fn)
+        {
+            this.fn = fn;
+        }
+
+        public Object call() throws Exception
+        {
+            fn.run();
+            try {
+                return fn.get();
+            }
+            catch (ExecutionException e)
+            {
+                Throwables.throwIfUnchecked(e.getCause());
+                Throwables.throwIfInstanceOf(e.getCause(), Exception.class);
+                throw new RuntimeException(e.getCause());
+            }
         }
     }
 }
