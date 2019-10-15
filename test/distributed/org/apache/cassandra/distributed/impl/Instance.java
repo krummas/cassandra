@@ -78,6 +78,7 @@ import org.apache.cassandra.schema.LegacySchemaMigrator;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.PendingRangeCalculatorService;
 import org.apache.cassandra.service.QueryState;
+import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.streaming.StreamCoordinator;
 import org.apache.cassandra.tracing.TraceState;
@@ -342,6 +343,30 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     public void setMessagingVersion(InetAddressAndPort endpoint, int version)
     {
         runOnInstance(() -> MessagingService.instance().setVersion(endpoint.address, version));
+    }
+
+    public void flush(String keyspace)
+    {
+        runOnInstance(() -> FBUtilities.waitOnFutures(Keyspace.open(keyspace).flush()));
+    }
+
+    public void forceCompact(String keyspace, String table)
+    {
+        runOnInstance(() -> {
+            try
+            {
+                Keyspace.open(keyspace).getColumnFamilyStore(table).forceMajorCompaction();
+            }
+            catch (Exception e)
+            {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    public void disableHandoff()
+    {
+        runOnInstance(() -> StorageProxy.instance.setHintedHandoffEnabled(false));
     }
 
     @Override
