@@ -156,7 +156,21 @@ final class LogFile implements AutoCloseable
             return false;
         }
 
-        records.forEach(LogFile::verifyRecord);
+        Set<String> absolutePaths = new HashSet<>();
+        for (LogRecord record : records)
+            record.absolutePath.ifPresent(absolutePaths::add);
+
+        Map<String, List<File>> recordFiles = LogRecord.getExistingFiles(absolutePaths);
+        for (LogRecord record : records)
+        {
+            List<File> existingFiles = Collections.emptyList();
+            if (record.absolutePath.isPresent())
+            {
+                String key = record.absolutePath.get();
+                existingFiles = recordFiles.getOrDefault(key, Collections.emptyList());
+            }
+            LogFile.verifyRecord(record, existingFiles);
+        }
 
         Optional<LogRecord> firstInvalid = records.stream().filter(LogRecord::isInvalidOrPartial).findFirst();
         if (!firstInvalid.isPresent())
@@ -195,7 +209,7 @@ final class LogFile implements AutoCloseable
         return record;
     }
 
-    static void verifyRecord(LogRecord record)
+    static void verifyRecord(LogRecord record, List<File> existingFiles)
     {
         if (record.checksum != record.computeChecksum())
         {
@@ -216,7 +230,7 @@ final class LogFile implements AutoCloseable
         // file that obsoleted the very same files. So we check the latest update time and make sure
         // it matches. Because we delete files from oldest to newest, the latest update time should
         // always match.
-        record.status.onDiskRecord = record.withExistingFiles();
+        record.status.onDiskRecord = record.withExistingFiles(existingFiles);
         if (record.updateTime != record.status.onDiskRecord.updateTime && record.status.onDiskRecord.updateTime > 0)
         {
             record.setError(String.format("Unexpected files detected for sstable [%s], " +
@@ -340,14 +354,8 @@ final class LogFile implements AutoCloseable
     {
         LogRecord record = makeRecord(type, table);
         assert records.contains(record) : String.format("[%s] is not tracked by %s", record, id);
-
-        deleteRecordFiles(record);
+        record.absolutePath.ifPresent(s -> deleteRecordFiles(LogRecord.getExistingFiles(s)));
         records.remove(record);
-    }
-
-    boolean contains(Type type, SSTable table)
-    {
-        return contains(makeRecord(type, table));
     }
 
     boolean contains(Type type, SSTable sstable, LogRecord record)
@@ -362,21 +370,33 @@ final class LogFile implements AutoCloseable
 
     void deleteFilesForRecordsOfType(Type type)
     {
-        records.stream()
-               .filter(type::matches)
-               .forEach(LogFile::deleteRecordFiles);
+        Set<String> absolutePaths = new HashSet<>();
+        for (LogRecord record : records)
+            if (type.matches(record))
+                record.absolutePath.ifPresent(absolutePaths::add);
+
+        Map<String, List<File>> existingFiles = LogRecord.getExistingFiles(absolutePaths);
+
+        for (LogRecord record : records)
+        {
+            if (type.matches(record))
+            {
+                record.absolutePath.ifPresent(path -> {
+                    List<File> toDelete = existingFiles.get(path);
+                    if (toDelete != null && !toDelete.isEmpty())
+                        LogFile.deleteRecordFiles(toDelete);
+                });
+            }
+        }
         records.clear();
     }
 
-    private static void deleteRecordFiles(LogRecord record)
+    private static void deleteRecordFiles(List<File> existingFiles)
     {
-        List<File> files = record.getExistingFiles();
-
         // we sort the files in ascending update time order so that the last update time
         // stays the same even if we only partially delete files, see comment in isInvalid()
-        files.sort((f1, f2) -> Long.compare(f1.lastModified(), f2.lastModified()));
-
-        files.forEach(LogTransaction::delete);
+        existingFiles.sort(Comparator.comparingLong(File::lastModified));
+        existingFiles.forEach(LogTransaction::delete);
     }
 
     /**
