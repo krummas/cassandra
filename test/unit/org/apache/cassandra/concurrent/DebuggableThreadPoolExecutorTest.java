@@ -21,14 +21,14 @@ package org.apache.cassandra.concurrent;
  */
 
 
-import java.io.IOException;
-import java.net.InetAddress;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.common.base.Throwables;
 import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.ListenableFutureTask;
 import org.junit.Assert;
@@ -79,7 +79,7 @@ public class DebuggableThreadPoolExecutorTest
     }
 
     @Test
-    public void testRunnableFuturesWhileTracing()
+    public void testExecuteFutureTaskWhileTracing()
     {
         LinkedBlockingQueue<Runnable> q = new LinkedBlockingQueue<Runnable>(1);
         DebuggableThreadPoolExecutor executor = new DebuggableThreadPoolExecutor(1,
@@ -87,21 +87,70 @@ public class DebuggableThreadPoolExecutorTest
                                                                                  TimeUnit.MILLISECONDS,
                                                                                  q,
                                                                                  new NamedThreadFactory("TEST"));
-        withTracing(() -> {
-            try {
+        Runnable test = () -> executor.execute(failingTask());
+        try
+        {
+            // make sure the non-tracing case works
+            Throwable cause = catchUncaughtExceptions(test);
+            Assert.assertEquals(DebuggingThrowsException.class, cause.getClass());
 
-                Throwable throwable = assertThrows(ExecutionException.class, () -> executor.submit(failingTask()).get());
-                Assert.assertEquals(DebuggingThrowsException.class, throwable.getCause().getClass());
+            // tracing should have the same semantics
+            cause = catchUncaughtExceptions(() -> withTracing(test));
+            Assert.assertEquals(DebuggingThrowsException.class, cause.getClass());
+        }
+        finally
+        {
+            executor.shutdown();
+        }
+    }
 
-                throwable = assertThrows(ExecutionException.class, () -> executor.submit(failingTask(), 42).get());
-                Assert.assertEquals(DebuggingThrowsException.class, throwable.getCause().getClass());
-            }
-            finally
-            {
-                executor.shutdown();
-            }
-        });
+    @Test
+    public void testSubmitFutureTaskWhileTracing()
+    {
+        LinkedBlockingQueue<Runnable> q = new LinkedBlockingQueue<Runnable>(1);
+        DebuggableThreadPoolExecutor executor = new DebuggableThreadPoolExecutor(1,
+                                                                                 Integer.MAX_VALUE,
+                                                                                 TimeUnit.MILLISECONDS,
+                                                                                 q,
+                                                                                 new NamedThreadFactory("TEST"));
+        FailingRunnable test = () -> executor.submit(failingTask()).get();
+        try
+        {
+            // make sure the non-tracing case works
+            Throwable cause = catchUncaughtExceptions(test);
+            Assert.assertEquals(DebuggingThrowsException.class, cause.getClass());
 
+            // tracing should have the same semantics
+            cause = catchUncaughtExceptions(() -> withTracing(test));
+            Assert.assertEquals(DebuggingThrowsException.class, cause.getClass());
+        }
+        finally
+        {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    public void testSubmitWithResultFutureTaskWhileTracing()
+    {
+        LinkedBlockingQueue<Runnable> q = new LinkedBlockingQueue<Runnable>(1);
+        DebuggableThreadPoolExecutor executor = new DebuggableThreadPoolExecutor(1,
+                                                                                 Integer.MAX_VALUE,
+                                                                                 TimeUnit.MILLISECONDS,
+                                                                                 q,
+                                                                                 new NamedThreadFactory("TEST"));
+        FailingRunnable test = () -> executor.submit(failingTask(), 42).get();
+        try
+        {
+            Throwable cause = catchUncaughtExceptions(test);
+            Assert.assertEquals(DebuggingThrowsException.class, cause.getClass());
+            cause = catchUncaughtExceptions(() -> withTracing(test));
+            Assert.assertEquals(DebuggingThrowsException.class, cause.getClass());
+        }
+        finally
+        {
+            executor.shutdown();
+        }
     }
 
     private static void withTracing(Runnable fn)
@@ -114,6 +163,34 @@ public class DebuggableThreadPoolExecutorTest
         finally
         {
             Tracing.instance.set(state);
+        }
+    }
+
+    private static Throwable catchUncaughtExceptions(Runnable fn)
+    {
+        Thread.UncaughtExceptionHandler defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
+        try
+        {
+            AtomicReference<Throwable> ref = new AtomicReference<>(null);
+            CountDownLatch latch = new CountDownLatch(1);
+            Thread.setDefaultUncaughtExceptionHandler((thread, cause) -> {
+                ref.set(cause);
+                latch.countDown();
+            });
+            fn.run();
+            try
+            {
+                latch.await(30, TimeUnit.SECONDS);
+            }
+            catch (InterruptedException e)
+            {
+                throw new AssertionError(e);
+            }
+            return ref.get();
+        }
+        finally
+        {
+            Thread.setDefaultUncaughtExceptionHandler(defaultHandler);
         }
     }
 
@@ -131,25 +208,22 @@ public class DebuggableThreadPoolExecutorTest
 
     }
 
-    private static Throwable assertThrows(Class<? extends Throwable> klass, FailingRunnable fn)
+    // REVIEWER : I know this is the same as WrappedRunnable, but that doesn't support lambda...
+    private interface FailingRunnable extends Runnable
     {
-        Throwable throwed = null;
-        try {
-            fn.run();
-        }
-        catch (Throwable t)
-        {
-            throwed = t;
-        }
-        if (throwed == null)
-            Assert.fail("Excepted to throw " + klass.getName() + " but did not throw a exception");
-        if (!throwed.getClass().isAssignableFrom(klass))
-            Assert.fail("Excepted to throw " + klass.getName() + " but threw " + throwed.getClass().getName() + "; " + throwed.getMessage());
-        return throwed;
-    }
+        void doRun() throws Throwable;
 
-    public interface FailingRunnable
-    {
-        void run() throws Throwable;
+        default void run()
+        {
+            try
+            {
+                doRun();
+            }
+            catch (Throwable t)
+            {
+                Throwables.throwIfUnchecked(t);
+                throw new RuntimeException(t);
+            }
+        }
     }
 }
