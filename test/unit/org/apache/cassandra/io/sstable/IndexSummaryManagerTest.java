@@ -704,7 +704,7 @@ public class IndexSummaryManagerTest
         assert sstables.size() == numSSTables;
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.UNKNOWN))
         {
-            try (AutoCloseable toresume = CompactionManager.instance.pauseGlobalCompactions())
+            try (AutoCloseable toresume = CompactionManager.instance.pauseGlobalCompaction())
             {
                 sstables = redistributeSummaries(Collections.emptyList(), of(cfs.metadata.cfId, txn), (singleSummaryOffHeapSpace * (numSSTables / 2)));
                 fail("The redistribution should fail - we got paused before adding to active compactions, but after marking compacting");
