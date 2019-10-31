@@ -224,7 +224,7 @@ public class IndexSummaryManager implements IndexSummaryManagerMBean
 
     public void redistributeSummaries() throws IOException
     {
-        if (CompactionManager.instance.globalCompactionsPaused())
+        if (CompactionManager.instance.isGlobalCompactionPaused())
             return;
         Pair<List<SSTableReader>, Map<UUID, LifecycleTransaction>> compactingAndNonCompacting = getCompactingAndNonCompactingSSTables();
         try

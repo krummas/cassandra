@@ -2089,7 +2089,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                                                ? Iterables.concat(concatWithIndexes(), viewManager.allViewsCfs())
                                                                : concatWithIndexes();
 
-            try (CompactionManager.CompactionPauser pause = CompactionManager.instance.pauseGlobalCompactions();
+            try (CompactionManager.CompactionPauser pause = CompactionManager.instance.pauseGlobalCompaction();
                  CompactionManager.CompactionPauser pausedStrategies = pauseCompactionStrategies(selfWithAuxiliaryCfs))
             {
                 // interrupt in-progress compactions
@@ -2127,7 +2127,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         {
             for (ColumnFamilyStore cfs : toPause)
             {
-                successfullyPaused.ensureCapacity(successfullyPaused.size() + 1);
+                successfullyPaused.ensureCapacity(successfullyPaused.size() + 1); // to avoid OOM:ing after pausing the strategies
                 cfs.getCompactionStrategyManager().pause();
                 successfullyPaused.add(cfs);
             }

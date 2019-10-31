@@ -23,7 +23,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import javax.management.openmbean.OpenDataException;
 import javax.management.openmbean.TabularData;
 
@@ -116,7 +115,7 @@ public class CompactionManager implements CompactionManagerMBean
     final Multiset<ColumnFamilyStore> compactingCF = ConcurrentHashMultiset.create();
 
     // used to temporarily pause non-strategy managed compactions (like index summary redistribution)
-    private final AtomicInteger globalCompactionsPauseCount = new AtomicInteger(0);
+    private final AtomicInteger globalCompactionPauseCount = new AtomicInteger(0);
 
     private final RateLimiter compactionRateLimiter = RateLimiter.create(Double.MAX_VALUE);
 
@@ -1864,15 +1863,15 @@ public class CompactionManager implements CompactionManagerMBean
      *
      * a global compaction is one that includes several/all tables, currently only IndexSummaryBuilder
      */
-    public boolean globalCompactionsPaused()
+    public boolean isGlobalCompactionPaused()
     {
-        return globalCompactionsPauseCount.get() > 0;
+        return globalCompactionPauseCount.get() > 0;
     }
 
-    public CompactionPauser pauseGlobalCompactions()
+    public CompactionPauser pauseGlobalCompaction()
     {
-        CompactionPauser pauser = globalCompactionsPauseCount::decrementAndGet;
-        globalCompactionsPauseCount.incrementAndGet();
+        CompactionPauser pauser = globalCompactionPauseCount::decrementAndGet;
+        globalCompactionPauseCount.incrementAndGet();
         return pauser;
     }
 

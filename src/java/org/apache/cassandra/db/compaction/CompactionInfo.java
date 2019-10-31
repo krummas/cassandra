@@ -177,7 +177,7 @@ public final class CompactionInfo implements Serializable
 
         public boolean isStopRequested()
         {
-            return stopRequested || (isGlobal() && CompactionManager.instance.globalCompactionsPaused());
+            return stopRequested || (isGlobal() && CompactionManager.instance.isGlobalCompactionPaused());
         }
 
         /**
