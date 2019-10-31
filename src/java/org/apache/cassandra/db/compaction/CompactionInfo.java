@@ -192,7 +192,7 @@ public final class CompactionInfo
 
         public boolean isStopRequested()
         {
-            return stopRequested || (isGlobal() && CompactionManager.instance.globalCompactionsPaused());
+            return stopRequested || (isGlobal() && CompactionManager.instance.isGlobalCompactionPaused());
         }
     }
 

@@ -228,7 +228,7 @@ public class IndexSummaryManager implements IndexSummaryManagerMBean
 
     public void redistributeSummaries() throws IOException
     {
-        if (CompactionManager.instance.globalCompactionsPaused())
+        if (CompactionManager.instance.isGlobalCompactionPaused())
             return;
         Pair<Long, Map<TableId, LifecycleTransaction>> redistributionTransactionInfo = getRestributionTransactions();
         Map<TableId, LifecycleTransaction> transactions = redistributionTransactionInfo.right;
