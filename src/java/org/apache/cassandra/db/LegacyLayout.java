@@ -487,7 +487,7 @@ public abstract class LegacyLayout
      * post-query limitation are in order (see above). This will be {@code Integer.MAX_VALUE} if no such limits are
      * necessary.
      */
-    private static int maxCellsPerPartition(ReadCommand command)
+    private static int maxLiveCellsPerPartition(ReadCommand command)
     {
         if (command == null)
             return Integer.MAX_VALUE;
@@ -525,9 +525,8 @@ public abstract class LegacyLayout
         // before we use the LegacyRangeTombstoneList at all
         List<LegacyLayout.LegacyCell> cells = Lists.newArrayList(pair.right);
 
-        int maxCellsPerPartition = maxCellsPerPartition(command);
-        if (cells.size() > maxCellsPerPartition)
-            cells = cells.subList(0, maxCellsPerPartition);
+        int maxCellsPerPartition = maxLiveCellsPerPartition(command);
+        cells = maybeTrimLiveCells(cells, maxCellsPerPartition, command.nowInSec());
 
         // The LegacyRangeTombstoneList already has range tombstones for the single-row deletions and complex
         // deletions.  Go through our normal range tombstones and add then to the LegacyRTL so that the range
@@ -546,6 +545,27 @@ public abstract class LegacyLayout
         }
 
         return new LegacyUnfilteredPartition(info.getPartitionDeletion(), rtl, cells);
+    }
+
+    private static List<LegacyCell> maybeTrimLiveCells(List<LegacyCell> cells, int maxLiveCells, int nowInSec)
+    {
+        int endIdx = -1;
+        int liveCount = 0;
+        for (int i = 0; i < cells.size(); i++)
+        {
+            LegacyCell cell = cells.get(i);
+            if (cell.isLive(nowInSec))
+                liveCount++;
+            // strictly > since subList endpoint is exclusive
+            if (liveCount > maxLiveCells)
+            {
+                endIdx = i;
+                break;
+            }
+        }
+        if (endIdx > 0)
+            return cells.subList(0, endIdx);
+        return cells;
     }
 
     public static void serializeAsLegacyPartition(ReadCommand command, UnfilteredRowIterator partition, DataOutputPlus out, int version) throws IOException
