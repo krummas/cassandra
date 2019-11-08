@@ -549,27 +549,22 @@ public abstract class LegacyLayout
 
     private static List<LegacyCell> maybeTrimLiveCells(List<LegacyCell> cells, int maxLiveCells, ReadCommand command)
     {
-        if (null == command || maxLiveCells > cells.size())
+        if (null == command || maxLiveCells >= cells.size())
             return cells;
 
         int nowInSec = command.nowInSec();
-        int endIdx = -1;
-        int liveCount = 0;
-        for (int i = 0; i < cells.size(); i++)
+        int live = 0;
+        int dead = 0;
+
+        for (int i = 0; i < cells.size() && live < maxLiveCells; i++)
         {
-            LegacyCell cell = cells.get(i);
-            if (cell.isLive(nowInSec))
-                liveCount++;
-            // strictly > since subList endpoint is exclusive
-            if (liveCount > maxLiveCells)
-            {
-                endIdx = i;
-                break;
-            }
+            if (cells.get(i).isLive(nowInSec))
+                live++;
+            else
+                dead++;
         }
-        if (endIdx > 0)
-            return cells.subList(0, endIdx);
-        return cells;
+
+        return cells.subList(0, live + dead);
     }
 
     public static void serializeAsLegacyPartition(ReadCommand command, UnfilteredRowIterator partition, DataOutputPlus out, int version) throws IOException
