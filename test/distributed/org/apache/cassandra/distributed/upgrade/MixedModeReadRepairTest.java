@@ -18,13 +18,29 @@
 
 package org.apache.cassandra.distributed.upgrade;
 
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+
 import org.junit.Test;
 
+import com.datastax.driver.core.ProtocolVersion;
+import com.datastax.driver.core.QueryOptions;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Row;
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.SimpleStatement;
+import com.datastax.driver.core.Statement;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.distributed.impl.Versions;
 import org.apache.cassandra.distributed.test.DistributedTestBase;
 
+import static org.apache.cassandra.distributed.api.Feature.GOSSIP;
+import static org.apache.cassandra.distributed.api.Feature.NATIVE_PROTOCOL;
+import static org.apache.cassandra.distributed.api.Feature.NETWORK;
 import static org.apache.cassandra.distributed.impl.Versions.find;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class MixedModeReadRepairTest extends UpgradeTestBase
 {
@@ -56,4 +72,5 @@ public class MixedModeReadRepairTest extends UpgradeTestBase
             cluster.get(1).forceCompact(DistributedTestBase.KEYSPACE, "tbl");
         }).run();
     }
+
 }

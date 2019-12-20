@@ -144,6 +144,10 @@ public class Versions
             this.version = version;
             this.classpath = classpath;
         }
+        public String toString()
+        {
+            return version;
+        }
     }
 
     private final Map<Major, List<Version>> versions;

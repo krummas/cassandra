@@ -25,4 +25,5 @@ public interface IUpgradeableInstance extends IInstance
 {
     // only to be invoked while the node is shutdown!
     public void setVersion(Versions.Version version);
+    public Versions.Version getVersion();
 }

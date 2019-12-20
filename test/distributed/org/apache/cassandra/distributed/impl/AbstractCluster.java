@@ -227,6 +227,11 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
             else
                 logger.error("uncaught exception in thread {}", thread, throwable);
         }
+
+        public Versions.Version getVersion()
+        {
+            return version;
+        }
     }
 
     protected AbstractCluster(File root, Versions.Version version, List<InstanceConfig> configs,
@@ -340,6 +345,8 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
             }
         }
     }
+
+
 
     public abstract class ChangeMonitor implements AutoCloseable
     {
