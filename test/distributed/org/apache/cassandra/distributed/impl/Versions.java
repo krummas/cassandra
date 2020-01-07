@@ -168,13 +168,15 @@ public class Versions
 
     public static Versions find()
     {
-        logger.info("Looking for dtest jars in " + new File("build").getAbsolutePath());
+        final String dtestJarDirectory = System.getProperty("org.apache.cassandra.distributed.test.jar_path","build");
+        final File sourceDirectory = new File(dtestJarDirectory);
+        logger.info("Looking for dtest jars in " + sourceDirectory.getAbsolutePath());
         final Pattern pattern = Pattern.compile("dtest-(?<fullversion>(\\d+)\\.(\\d+)(\\.\\d+)?(\\.\\d+)?)([~\\-]\\w[.\\w]*(?:\\-\\w[.\\w]*)*)?(\\+[.\\w]+)?\\.jar");
         final Map<Major, List<Version>> versions = new HashMap<>();
         for (Major major : Major.values())
             versions.put(major, new ArrayList<>());
 
-        for (File file : new File("build").listFiles())
+        for (File file : sourceDirectory.listFiles())
         {
             Matcher m = pattern.matcher(file.getName());
             if (!m.matches())
