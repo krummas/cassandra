@@ -28,6 +28,12 @@ j8_small_par_executor: &j8_small_par_executor
     #exec_resource_class: xlarge
   parallelism: 2
 
+j8_medium_par_executor: &j8_medium_par_executor
+  executor:
+    name: java8-executor
+    #exec_resource_class: xlarge
+  parallelism: 2
+
 j8_seq_executor: &j8_seq_executor
   executor:
     name: java8-executor
@@ -50,7 +56,6 @@ j8_with_dtests_jobs: &j8_with_dtests_jobs
     - j8_jvm_dtests:
         requires:
           - j8_build
-          - j8_dtest_jars_build
     # Java 11 unit tests (on request, currently not working)
     - start_j11_unit_tests:
         type: approval
@@ -88,9 +93,15 @@ j8_with_dtests_jobs: &j8_with_dtests_jobs
     - utests_fqltool:
         requires:
           - start_utests_fqltool
+    - start_jvm_upgrade_dtest:
+        type: approval
     - j8_dtest_jars_build:
         requires:
           - j8_build
+          - start_jvm_upgrade_dtest
+    - j8_jvm_upgrade_dtests:
+        requires:
+          - j8_dtest_jars_build
     # Java 8 dtests (on request)
     - start_j8_dtests:
         type: approval
@@ -254,6 +265,19 @@ jobs:
           at: /home/cassandra
       - create_junit_containers:
           classlistprefix: distributed
+          extra_filters: "| grep -v upgrade"
+      - log_environment
+      - run_parallel_junit_tests:
+          classlistprefix: distributed
+
+  j8_jvm_upgrade_dtests:
+    <<: *j8_medium_par_executor
+    steps:
+      - attach_workspace:
+          at: /home/cassandra
+      - create_junit_containers:
+          classlistprefix: distributed
+          extra_filters: "| grep upgrade"
       - log_environment
       - run_parallel_junit_tests:
           classlistprefix: distributed
@@ -493,6 +517,9 @@ commands:
       classlistprefix:
         type: string
         default: unit
+      extra_filters:
+        type: string
+        default: ""
     steps:
     - run:
         name: Determine <<parameters.classlistprefix>> Tests to Run
@@ -509,7 +536,7 @@ commands:
 
           # split up the unit tests into groups based on the number of containers we have
           set -eo pipefail && circleci tests split --split-by=timings --timings-type=filename --index=${CIRCLE_NODE_INDEX} --total=${CIRCLE_NODE_TOTAL} /tmp/all_java_unit_tests.txt > /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt
-          set -eo pipefail && cat /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt | sed "s;^/home/cassandra/cassandra/test/<<parameters.classlistprefix>>/;;g" | grep "Test\.java$" > /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
+          set -eo pipefail && cat /tmp/java_tests_${CIRCLE_NODE_INDEX}.txt | sed "s;^/home/cassandra/cassandra/test/<<parameters.classlistprefix>>/;;g" | grep "Test\.java$" <<parameters.extra_filters>> > /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
           echo "** /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt"
           cat /tmp/java_tests_${CIRCLE_NODE_INDEX}_final.txt
 
