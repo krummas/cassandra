@@ -394,8 +394,6 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
 
                 if (!FBUtilities.getBroadcastAddressAndPort().equals(broadcastAddressAndPort()))
                     throw new IllegalStateException();
-
-                // todo: wait for gossip to settle ?
             }
             catch (Throwable t)
             {

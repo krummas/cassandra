@@ -37,6 +37,7 @@ import com.datastax.driver.core.SimpleStatement;
 import com.datastax.driver.core.Statement;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.distributed.api.ICoordinator;
+import org.apache.cassandra.distributed.impl.AbstractCluster;
 import org.apache.cassandra.distributed.impl.Versions;
 import org.apache.cassandra.distributed.test.DistributedTestBase;
 
@@ -80,13 +81,14 @@ public class PagingTest extends UpgradeTestBase
                    }
                })
         .runAfterNodeUpgrade((cluster, node) -> {
-            Thread.sleep(5000); // sometimes one node doesn't have time come up properly?
-            try (com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
+            try (AbstractCluster<?>.AllMembersAliveMonitor monitor = cluster.allMembersLiveMonitor();
+                 com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
                                                                                       .addContactPoint("127.0.0.1")
                                                                                       .withProtocolVersion(ProtocolVersion.V3)
                                                                                       .build();
                  Session s = c.connect())
             {
+                monitor.waitForCompletion();
                 assertEquals(expected,
                              dump("select distinct pk from " + DistributedTestBase.KEYSPACE + ".tbl WHERE token(pk) > " + Long.MIN_VALUE + " AND token(pk) < " + Long.MAX_VALUE,
                                   s));
@@ -148,13 +150,14 @@ public class PagingTest extends UpgradeTestBase
                })
         .runAfterNodeUpgrade((cluster, node) -> {
             long start = System.currentTimeMillis();
-            Thread.sleep(1000); // sometimes one node doesn't have time come up properly?
             List<List<Object>> results = new ArrayList<>();
-            try (com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
+            try (AbstractCluster<?>.AllMembersAliveMonitor monitor = cluster.allMembersLiveMonitor();
+                 com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
                                                                                       .addContactPoint("127.0.0.1")
                                                                                       .build();
                  Session s = c.connect())
             {
+                monitor.waitForCompletion();
                 for (int j = 0; j < 50; j++)
                     results.addAll(dump("SELECT pk, ck, v FROM " + DistributedTestBase.KEYSPACE + ".tbl WHERE pk=" + j, s));
                 assertEquals(expected, results);
@@ -240,12 +243,13 @@ public class PagingTest extends UpgradeTestBase
         .runAfterNodeUpgrade((cluster, node) ->
                              {
                                  String host = "127.0.0."+(readMismatchingNode ? mismatchNode : upNode);
-                                 try (com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
+                                 try (AbstractCluster<?>.AllMembersAliveMonitor monitor = cluster.allMembersLiveMonitor();
+                                      com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
                                                                                                            .addContactPoint(host)
                                                                                                            .build();
                                       Session s = c.connect())
                                  {
-                                     Thread.sleep(1000);
+                                     monitor.waitForCompletion();
                                      assertRows(s, 175, 51, 25);
                                      cluster.get(node).flush(DistributedTestBase.KEYSPACE);
                                      cluster.get(node).forceCompact(DistributedTestBase.KEYSPACE, "tbl");
@@ -256,12 +260,13 @@ public class PagingTest extends UpgradeTestBase
                                 {
                                     // major compact all nodes and read
                                     cluster.forEach((node) -> node.forceCompact(DistributedTestBase.KEYSPACE, "tbl"));
-                                    try (com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
+                                    try (AbstractCluster<?>.AllMembersAliveMonitor monitor = cluster.allMembersLiveMonitor();
+                                         com.datastax.driver.core.Cluster c = com.datastax.driver.core.Cluster.builder()
                                                                                                               .addContactPoint("127.0.0.1")
                                                                                                               .build();
                                          Session s = c.connect())
                                     {
-                                        Thread.sleep(1000);
+                                        monitor.waitForCompletion();
                                         Set<Integer> fetchSizes = Sets.newHashSet(10, 49, 50, 51, 249, 250, 251, 799, 800, 801, 1000);
                                         for (int fetchSize : fetchSizes)
                                             assertRows(s, 2000, 801, fetchSize);

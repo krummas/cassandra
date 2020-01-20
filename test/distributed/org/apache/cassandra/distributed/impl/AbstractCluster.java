@@ -441,6 +441,11 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
         }
     }
 
+    public AllMembersAliveMonitor allMembersLiveMonitor()
+    {
+        return new AllMembersAliveMonitor();
+    }
+
     public class AllMembersAliveMonitor extends ChangeMonitor
     {
         public AllMembersAliveMonitor()
