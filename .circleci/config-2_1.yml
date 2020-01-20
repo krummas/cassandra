@@ -59,39 +59,34 @@ j8_with_dtests_jobs: &j8_with_dtests_jobs
     # Java 11 unit tests (on request, currently not working)
     - start_j11_unit_tests:
         type: approval
-        requires:
-          - j8_build
     - j11_unit_tests:
         requires:
+          - j8_build
           - start_j11_unit_tests
     # specialized unit tests (all run on request using Java 8)
     - start_utests_long:
         type: approval
-        requires:
-          - j8_build
     - utests_long:
         requires:
+          - j8_build
           - start_utests_long
     - start_utests_compression:
         type: approval
-        requires:
-          - j8_build
     - utests_compression:
         requires:
+          - j8_build
           - start_utests_compression
     - start_utests_stress:
         type: approval
-        requires:
-          - j8_build
     - utests_stress:
         requires:
+          - j8_build
           - start_utests_stress
     - start_utests_fqltool:
         type: approval
-        requires:
-          - j8_build
     - utests_fqltool:
         requires:
+          - j8_build
           - start_utests_fqltool
     - start_jvm_upgrade_dtest:
         type: approval
@@ -105,32 +100,31 @@ j8_with_dtests_jobs: &j8_with_dtests_jobs
     # Java 8 dtests (on request)
     - start_j8_dtests:
         type: approval
-        requires:
-          - j8_build
     - j8_dtests-with-vnodes:
         requires:
+          - j8_build
           - start_j8_dtests
     - j8_dtests-no-vnodes:
         requires:
+          - j8_build
           - start_j8_dtests
     # Java 11 dtests (on request)
     - start_j11_dtests:
         type: approval
-        requires:
-          - j8_build
     - j11_dtests-with-vnodes:
         requires:
+        - j8_build
         - start_j11_dtests
     - j11_dtests-no-vnodes:
         requires:
+        - j8_build
         - start_j11_dtests
     # Java 8 upgrade tests
     - start_upgrade_tests:
         type: approval
-        requires:
-          - j8_build
     - j8_upgradetests-no-vnodes:
         requires:
+          - j8_build
           - start_upgrade_tests
 
 j11_with_dtests_jobs: &j11_with_dtests_jobs
