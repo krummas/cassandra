@@ -509,7 +509,7 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster, 
             return;
         }
         InstanceClassLoader cl = (InstanceClassLoader) thread.getContextClassLoader();
-        get(cl.getGeneration()).uncaughtException(thread, error);
+        get(cl.getId()).uncaughtException(thread, error);
     }
 
     protected interface Factory<I extends IInstance, C extends AbstractCluster<I>>
