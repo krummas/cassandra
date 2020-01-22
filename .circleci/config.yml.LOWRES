@@ -1248,18 +1248,16 @@ workflows:
     - j11_build
     - start_j11_unit_tests:
         type: approval
-        requires:
-        - j11_build
     - j11_unit_tests:
         requires:
         - start_j11_unit_tests
+        - j11_build
     - start_j11_dtests:
         type: approval
-        requires:
-        - j11_build
     - j11_dtests-with-vnodes:
         requires:
         - start_j11_dtests
+        - j11_build
     - j11_dtests-no-vnodes:
         requires:
         - start_j11_dtests
