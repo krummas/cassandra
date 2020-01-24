@@ -14,3 +14,11 @@
 <     #exec_resource_class: xlarge
 ---
 >     exec_resource_class: xlarge
+35c35
+<     #exec_resource_class: xlarge
+---
+>     exec_resource_class: xlarge
+41c41
+<     #exec_resource_class: xlarge
+---
+>     exec_resource_class: xlarge
