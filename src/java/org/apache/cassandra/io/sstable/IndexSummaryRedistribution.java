@@ -41,6 +41,7 @@ import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.compaction.CompactionInfo.Unit;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.metrics.StorageMetrics;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.Pair;
@@ -279,9 +280,25 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
                          sstable, sstable.getIndexSummarySamplingLevel(), Downsampling.BASE_SAMPLING_LEVEL,
                          entry.newSamplingLevel, Downsampling.BASE_SAMPLING_LEVEL);
             ColumnFamilyStore cfs = Keyspace.open(sstable.metadata().keyspace).getColumnFamilyStore(sstable.metadata().id);
+            long oldSize = sstable.bytesOnDisk();
             SSTableReader replacement = sstable.cloneWithNewSummarySamplingLevel(cfs, entry.newSamplingLevel);
+            long newSize = replacement.bytesOnDisk();
             newSSTables.add(replacement);
-            transactions.get(sstable.metadata().id).update(replacement, true);
+            LifecycleTransaction tx = transactions.get(sstable.metadata().id);
+            tx.update(replacement, true);
+            tx.runOnCommit(() -> {
+                // The new size will be added in Transactional.commit() as an updated SSTable, more details: CASSANDRA-13738
+                StorageMetrics.load.dec(oldSize);
+                cfs.metric.liveDiskSpaceUsed.dec(oldSize);
+                cfs.metric.totalDiskSpaceUsed.dec(oldSize);
+            });
+            tx.runOnRollback(() -> {
+                // the local disk was modified but book keeping couldn't be commited, apply the delta
+                long delta = oldSize - newSize; // if new is larger this will be negative, so dec will become a inc
+                StorageMetrics.load.dec(delta);
+                cfs.metric.liveDiskSpaceUsed.dec(delta);
+                cfs.metric.totalDiskSpaceUsed.dec(delta);
+            });
         }
 
         return newSSTables;
