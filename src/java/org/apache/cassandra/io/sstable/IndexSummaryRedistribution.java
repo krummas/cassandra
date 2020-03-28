@@ -52,6 +52,8 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
 {
     private static final Logger logger = LoggerFactory.getLogger(IndexSummaryRedistribution.class);
 
+    private static final Listener NOOP = new Listener() {};
+
     // The target (or ideal) number of index summary entries must differ from the actual number of
     // entries by this ratio in order to trigger an upsample or downsample of the summary.  Because
     // upsampling requires reading the primary index in order to rebuild the summary, the threshold
@@ -62,8 +64,14 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
     private final Map<TableId, LifecycleTransaction> transactions;
     private final long nonRedistributingOffHeapSize;
     private final long memoryPoolBytes;
+    private final Listener listener;
     private final UUID compactionId;
     private volatile long remainingSpace;
+
+    public interface Listener
+    {
+        default void onPreResample(SSTableReader sstable) {}
+    }
 
     /**
      *
@@ -73,9 +81,22 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
      */
     public IndexSummaryRedistribution(Map<TableId, LifecycleTransaction> transactions, long nonRedistributingOffHeapSize, long memoryPoolBytes)
     {
+        this(transactions, nonRedistributingOffHeapSize, memoryPoolBytes, NOOP);
+    }
+
+    /**
+     *
+     * @param transactions the transactions for the different keyspaces/tables we are to redistribute
+     * @param nonRedistributingOffHeapSize the total index summary off heap size for all sstables we were not able to mark compacting (due to them being involved in other compactions)
+     * @param memoryPoolBytes size of the memory pool
+     * @param listener listener for different events while processing
+     */
+    public IndexSummaryRedistribution(Map<TableId, LifecycleTransaction> transactions, long nonRedistributingOffHeapSize, long memoryPoolBytes, Listener listener)
+    {
         this.transactions = transactions;
         this.nonRedistributingOffHeapSize = nonRedistributingOffHeapSize;
         this.memoryPoolBytes = memoryPoolBytes;
+        this.listener = listener;
         this.compactionId = UUID.randomUUID();
     }
 
@@ -249,6 +270,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
         toDownsample.addAll(forceUpsample);
         for (ResampleEntry entry : toDownsample)
         {
+            listener.onPreResample(entry.sstable);
             if (isStopRequested())
                 throw new CompactionInterruptedException(getCompactionInfo());
 

@@ -2233,6 +2233,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
             else
                 barrier = null;
 
+            cfs.metric.pendingSSTableReleases.inc();
             ScheduledExecutors.nonPeriodicTasks.execute(new Runnable()
             {
                 public void run()
@@ -2257,6 +2258,7 @@ public abstract class SSTableReader extends SSTable implements SelfRefCounted<SS
                     if (ifile != null)
                         ifile.close();
                     globalRef.release();
+                    cfs.metric.pendingSSTableReleases.dec();
 
                     if (logger.isTraceEnabled())
                         logger.trace("Async instance tidier for {}, completed", descriptor);

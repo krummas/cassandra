@@ -106,6 +106,8 @@ public class TableMetrics
     public final Gauge<Integer> pendingCompactions;
     /** Number of SSTables on disk for this CF */
     public final Gauge<Integer> liveSSTableCount;
+    /* Estimated number of SSTable pending waiting to be released */
+    public final Counter pendingSSTableReleases;
     /** Number of SSTables with old version on disk for this CF */
     public final Gauge<Integer> oldVersionSSTableCount;
     /** Disk space used by SSTables belonging to this table */
@@ -955,6 +957,7 @@ public class TableMetrics
             }
             return cnt;
         });
+        pendingSSTableReleases = createTableCounter("PendingSSTableReleases");
     }
 
     public void updateSSTableIterated(int count)
