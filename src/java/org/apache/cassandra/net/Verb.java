@@ -185,6 +185,10 @@ public enum Verb
     INTERNAL_RSP           (23,  P1, rpcTimeout,      INTERNAL_RESPONSE, () -> null,                                 () -> ResponseVerbHandler.instance                             ),
 
     // largest used ID: 116
+
+    // CUSTOM VERBS
+    UNUSED_CUSTOM_VERB     (0,   P1, rpcTimeout,      INTERNAL_RESPONSE, () -> null,                                 () -> null                                                    , true),
+
     ;
 
     public static final List<Verb> VERBS = ImmutableList.copyOf(Verb.values());
@@ -199,6 +203,7 @@ public enum Verb
     }
 
     public final int id;
+    private final boolean isCustom;
     public final Priority priority;
     public final Stage stage;
 
@@ -233,16 +238,27 @@ public enum Verb
 
     Verb(int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, Verb responseVerb)
     {
+        this(id, priority, expiration, stage, serializer, handler, responseVerb, false);
+    }
+
+    Verb(int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, boolean isCustom)
+    {
+        this(id, priority, expiration, stage, serializer, handler, null, isCustom);
+    }
+
+    Verb(int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, Verb responseVerb, boolean isCustom)
+    {
         this.stage = stage;
         if (id < 0)
             throw new IllegalArgumentException("Verb id must be non-negative, got " + id + " for verb " + name());
 
-        this.id = id;
+        this.id = isCustom ? idForCustomVerb(id) : id;
         this.priority = priority;
         this.serializer = serializer;
         this.handler = handler;
         this.responseVerb = responseVerb;
         this.expiration = expiration;
+        this.isCustom = isCustom;
     }
 
     public <In, Out> IVersionedAsymmetricSerializer<In, Out> serializer()
@@ -319,32 +335,75 @@ public enum Verb
         return original;
     }
 
+    // This is the largest number we can store in 2 bytes using VIntCoding (1 bit per byte is used to indicate if there is more data coming).
+    // When generating ids we count *down* from this number
+    private static final int CUSTOM_VERB_START = (1 << (7 * 2)) - 1;
+
     private static final Verb[] idToVerbMap;
+    private static final Verb[] idToCustomVerbMap;
+    private static final int minCustomId;
 
     static
     {
         Verb[] verbs = values();
         int max = -1;
-        for (Verb v : verbs)
-            max = Math.max(v.id, max);
-
-        Verb[] idMap = new Verb[max + 1];
+        int minCustom = Integer.MAX_VALUE;
         for (Verb v : verbs)
         {
-            if (idMap[v.id] != null)
-                throw new IllegalArgumentException("cannot have two verbs that map to the same id: " + v + " and " + idMap[v.id]);
-            idMap[v.id] = v;
+            if (!v.isCustom)
+                max = Math.max(v.id, max);
+            else
+                minCustom = Math.min(v.id, minCustom);
+        }
+        minCustomId = minCustom;
+
+        Verb[] idMap = new Verb[max + 1];
+        int customCount = minCustom < Integer.MAX_VALUE ? CUSTOM_VERB_START - minCustom : 0;
+        Verb[] customIdMap = new Verb[customCount + 1];
+        for (Verb v : verbs)
+        {
+            if (!v.isCustom)
+            {
+                if (idMap[v.id] != null)
+                    throw new IllegalArgumentException("cannot have two verbs that map to the same id: " + v + " and " + idMap[v.id]);
+                idMap[v.id] = v;
+            }
+            else
+            {
+                int relativeId = idForCustomVerb(v.id);
+                if (customIdMap[relativeId] != null)
+                    throw new IllegalArgumentException("cannot have two custom verbs that map to the same id: " + v + " and " + customIdMap[relativeId]);
+                customIdMap[relativeId] = v;
+            }
         }
 
         idToVerbMap = idMap;
+        idToCustomVerbMap = customIdMap;
     }
 
-    static Verb fromId(int id)
+    public static Verb fromId(int id)
     {
-        Verb verb = id >= 0 && id < idToVerbMap.length ? idToVerbMap[id] : null;
+        Verb verb;
+        if (id >= minCustomId)
+        {
+            int relativeId = idForCustomVerb(id);
+            verb = relativeId >= 0 && relativeId < idToCustomVerbMap.length ? idToCustomVerbMap[relativeId] : null;
+        }
+        else
+        {
+            verb = id >= 0 && id < idToVerbMap.length ? idToVerbMap[id] : null;
+        }
         if (verb == null)
             throw new IllegalArgumentException("Unknown verb id " + id);
         return verb;
+    }
+
+    /**
+     * calculate an id for a custom verb
+     */
+    private static int idForCustomVerb(int id)
+    {
+        return CUSTOM_VERB_START - id;
     }
 }
 
