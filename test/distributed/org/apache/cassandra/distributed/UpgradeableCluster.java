@@ -21,7 +21,6 @@ package org.apache.cassandra.distributed;
 import java.io.File;
 import java.util.List;
 
-import org.apache.cassandra.distributed.api.ICluster;
 import org.apache.cassandra.distributed.api.IInstanceConfig;
 import org.apache.cassandra.distributed.impl.AbstractCluster;
 import org.apache.cassandra.distributed.api.IUpgradeableInstance;
@@ -53,15 +52,6 @@ public class UpgradeableCluster extends AbstractCluster<IUpgradeableInstance> im
     {
         return new Builder<IUpgradeableInstance, UpgradeableCluster>(UpgradeableCluster::new)
         {
-            {
-                withVersion(CURRENT_VERSION);
-            }
-
-            protected void setupLogging(File file)
-            {
-                setupLogging(file);
-            }
-
             protected IInstanceConfig generateConfig(int nodeNum, String ipAddress, NetworkTopology networkTopology, File root, String token, String seedIp)
             {
                 return InstanceConfig.generate(nodeNum, ipAddress, networkTopology, root, token, seedIp);
