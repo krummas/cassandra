@@ -161,7 +161,7 @@ public class DiskSpaceMetricsTest extends TestBaseImpl
         SimpleCondition condition = new SimpleCondition();
         IndexSummaryRedistribution redistribution = new IndexSummaryRedistribution(txns, nonRedistributingOffHeapSize, 0, new IndexSummaryRedistribution.Listener()
         {
-            public void onPreResample(SSTableReader sstable)
+            public void beforeResample(SSTableReader sstable)
             {
                 if (countdown.decrementAndGet() == 0)
                 {

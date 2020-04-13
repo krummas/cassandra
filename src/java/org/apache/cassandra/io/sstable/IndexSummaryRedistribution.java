@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Iterables;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +35,6 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.compaction.CompactionInfo.Unit;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -71,7 +69,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
 
     public interface Listener
     {
-        default void onPreResample(SSTableReader sstable) {}
+        default void beforeResample(SSTableReader sstable) {}
     }
 
     /**
@@ -92,6 +90,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
      * @param memoryPoolBytes size of the memory pool
      * @param listener listener for different events while processing
      */
+    @VisibleForTesting
     public IndexSummaryRedistribution(Map<TableId, LifecycleTransaction> transactions, long nonRedistributingOffHeapSize, long memoryPoolBytes, Listener listener)
     {
         this.transactions = transactions;
@@ -271,7 +270,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
         toDownsample.addAll(forceUpsample);
         for (ResampleEntry entry : toDownsample)
         {
-            listener.onPreResample(entry.sstable);
+            listener.beforeResample(entry.sstable);
             if (isStopRequested())
                 throw new CompactionInterruptedException(getCompactionInfo());
 
