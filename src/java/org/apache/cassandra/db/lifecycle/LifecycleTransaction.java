@@ -20,7 +20,6 @@ package org.apache.cassandra.db.lifecycle;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
@@ -127,7 +126,7 @@ public class LifecycleTransaction extends Transactional.AbstractTransactional im
 
     // commit/rollback hooks
     private List<Runnable> commitHooks = new ArrayList<>();
-    private List<Runnable> rollbackHooks = new ArrayList<>();
+    private List<Runnable> abortHooks = new ArrayList<>();
 
     /**
      * construct a Transaction for use in an offline operation
@@ -267,7 +266,7 @@ public class LifecycleTransaction extends Transactional.AbstractTransactional im
         accumulate = tracker.notifySSTablesChanged(invalid, restored, OperationType.COMPACTION, accumulate);
         // setReplaced immediately preceding versions that have not been obsoleted
         accumulate = setReplaced(logged.update, accumulate);
-        accumulate = runOnRollbackHooks(accumulate);
+        accumulate = runOnAbortooks(accumulate);
         // we have replaced all of logged.update and never made visible staged.update,
         // and the files we have logged as obsolete we clone fresh versions of, so they are no longer needed either
         // any _staged_ obsoletes should either be in staged.update already, and dealt with there,
@@ -284,9 +283,9 @@ public class LifecycleTransaction extends Transactional.AbstractTransactional im
         return runHooks(commitHooks, accumulate);
     }
 
-    private Throwable runOnRollbackHooks(Throwable accumulate)
+    private Throwable runOnAbortooks(Throwable accumulate)
     {
-        return runHooks(rollbackHooks, accumulate);
+        return runHooks(abortHooks, accumulate);
     }
 
     private static Throwable runHooks(Iterable<Runnable> hooks, Throwable accumulate)
@@ -406,9 +405,9 @@ public class LifecycleTransaction extends Transactional.AbstractTransactional im
         commitHooks.add(fn);
     }
 
-    public void runOnRollback(Runnable fn)
+    public void runOnAbort(Runnable fn)
     {
-        rollbackHooks.add(fn);
+        abortHooks.add(fn);
     }
 
     /**
