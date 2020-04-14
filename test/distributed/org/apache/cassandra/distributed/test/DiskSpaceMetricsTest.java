@@ -140,9 +140,8 @@ public class DiskSpaceMetricsTest extends TestBaseImpl
         // wait for there to be no more pending sstable releases
         instance.runOnInstance(() -> {
             ColumnFamilyStore cf = Keyspace.open(KEYSPACE).getColumnFamilyStore(tableName);
-            while (cf.metric.pendingSSTableReleases.getCount() > 0) {
+            while (cf.metric.pendingSSTableReleases.getCount() > 0)
                 Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
-            }
         });
         long totalDiskSpaceUsed = instance.callOnInstance(() -> Keyspace.open(KEYSPACE).getColumnFamilyStore(tableName).metric.totalDiskSpaceUsed.getCount());
         Assert.assertEquals("bytes on disk does not match current metric totalDiskSpaceUsed", actual, totalDiskSpaceUsed);
