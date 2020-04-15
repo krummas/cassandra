@@ -18,13 +18,29 @@
 
 package org.apache.cassandra.distributed.upgrade;
 
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+
 import org.junit.Test;
 
 import org.apache.cassandra.distributed.api.ConsistencyLevel;
 import org.apache.cassandra.distributed.shared.DistributedTestBase;
 import org.apache.cassandra.distributed.shared.Versions;
 
-import static org.apache.cassandra.distributed.shared.Versions.find;
+import com.datastax.driver.core.ProtocolVersion;
+import com.datastax.driver.core.QueryOptions;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Row;
+import com.datastax.driver.core.Session;
+import com.datastax.driver.core.SimpleStatement;
+import com.datastax.driver.core.Statement;
+
+import static org.apache.cassandra.distributed.api.Feature.GOSSIP;
+import static org.apache.cassandra.distributed.api.Feature.NATIVE_PROTOCOL;
+import static org.apache.cassandra.distributed.api.Feature.NETWORK;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class MixedModeReadRepairTest extends UpgradeTestBase
 {
@@ -34,26 +50,21 @@ public class MixedModeReadRepairTest extends UpgradeTestBase
         new TestCase()
         .nodes(2)
         .upgrade(Versions.Major.v22, Versions.Major.v30)
-        .nodesToUpgrade(2)
         .setup((cluster) -> cluster.schemaChange("CREATE TABLE " + DistributedTestBase.KEYSPACE + ".tbl (pk ascii, b boolean, v blob, PRIMARY KEY (pk)) WITH COMPACT STORAGE"))
-        .runAfterClusterUpgrade((cluster) -> {
-            // now node2 is 3.0 and node1 is 2.2
+        .runAfterNodeUpgrade((cluster, node) -> {
+            if (node != 1)
+                return;
+            // now node1 is 3.0 and node2 is 2.2
             // make sure 2.2 side does not get the mutation
-            cluster.get(2).executeInternal("DELETE FROM " + DistributedTestBase.KEYSPACE + ".tbl WHERE pk = ?",
+            cluster.get(1).executeInternal("DELETE FROM " + DistributedTestBase.KEYSPACE + ".tbl WHERE pk = ?",
                                                                           "something");
             // trigger a read repair
-            cluster.coordinator(1).execute("SELECT * FROM " + DistributedTestBase.KEYSPACE + ".tbl WHERE pk = ?",
+            cluster.coordinator(2).execute("SELECT * FROM " + DistributedTestBase.KEYSPACE + ".tbl WHERE pk = ?",
                                            ConsistencyLevel.ALL,
                                            "something");
-            cluster.get(1).flush(DistributedTestBase.KEYSPACE);
-            // upgrade node1 to 3.0
-            cluster.get(1).shutdown().get();
-            Versions allVersions = find();
-            cluster.get(1).setVersion(allVersions.getLatest(Versions.Major.v30));
-            cluster.get(1).startup();
-
-            // and make sure the sstables are readable
-            cluster.get(1).forceCompact(DistributedTestBase.KEYSPACE, "tbl");
-        }).run();
+            cluster.get(2).flush(DistributedTestBase.KEYSPACE);
+        })
+        .runAfterClusterUpgrade((cluster) -> cluster.get(2).forceCompact(DistributedTestBase.KEYSPACE, "tbl"))
+        .run();
     }
 }
