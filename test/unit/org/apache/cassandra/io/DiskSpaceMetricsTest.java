@@ -3,7 +3,6 @@ package org.apache.cassandra.io;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -15,18 +14,17 @@ import org.junit.Test;
 
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
-import org.apache.cassandra.db.lifecycle.View;
 import org.apache.cassandra.io.sstable.IndexSummaryManager;
 import org.apache.cassandra.io.sstable.IndexSummaryRedistribution;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.concurrent.SimpleCondition;
+
+import static org.junit.Assert.fail;
 
 public class DiskSpaceMetricsTest extends CQLTester
 {
@@ -36,8 +34,8 @@ public class DiskSpaceMetricsTest extends CQLTester
     @Test
     public void baseline() throws Throwable
     {
-        String tableName = createTable("CREATE TABLE %s (pk bigint, PRIMARY KEY (pk)) WITH min_index_interval=1");
-        ColumnFamilyStore table = Keyspace.open(KEYSPACE).getColumnFamilyStore(tableName);
+        createTable("CREATE TABLE %s (pk bigint, PRIMARY KEY (pk)) WITH min_index_interval=1");
+        ColumnFamilyStore table = getCurrentColumnFamilyStore();
 
         // disable compaction so nothing changes between calculations
         table.disableAutoCompaction();
@@ -54,8 +52,8 @@ public class DiskSpaceMetricsTest extends CQLTester
     @Test
     public void summaryRedistribution() throws Throwable
     {
-        String tableName = createTable("CREATE TABLE %s (pk bigint, PRIMARY KEY (pk)) WITH min_index_interval=1");
-        ColumnFamilyStore table = Keyspace.open(KEYSPACE).getColumnFamilyStore(tableName);
+        createTable("CREATE TABLE %s (pk bigint, PRIMARY KEY (pk)) WITH min_index_interval=1");
+        ColumnFamilyStore table = getCurrentColumnFamilyStore();
 
         // disable compaction so nothing changes between calculations
         table.disableAutoCompaction();
@@ -98,48 +96,28 @@ public class DiskSpaceMetricsTest extends CQLTester
 
         // totalDiskSpaceUsed is based off SStable delete, which is async: LogTransaction's tidy enqueues in ScheduledExecutors.nonPeriodicTasks
         // wait for there to be no more pending sstable releases
-        while (table.metric.pendingSSTableReleases.getCount() > 0)
+        LifecycleTransaction.waitForDeletions();
+        while (table.metric.totalDiskSpaceUsed.getCount() != actual)
             Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
-        long totalDiskSpaceUsed = table.metric.totalDiskSpaceUsed.getCount();
-        Assert.assertEquals("bytes on disk does not match current metric totalDiskSpaceUsed", actual, totalDiskSpaceUsed);
     }
 
-    private static void indexDownsampleCancelLastSSTable(ColumnFamilyStore table)
+    private static void indexDownsampleCancelLastSSTable(ColumnFamilyStore cfs)
     {
-        View view = table.getTracker().getView();
-        List<SSTableReader> sstables = Lists.newArrayList(view.select(SSTableSet.CANONICAL));
-        LifecycleTransaction txn = table.getTracker().tryModify(sstables, OperationType.UNKNOWN);
-        Map<TableId, LifecycleTransaction> txns = ImmutableMap.of(table.metadata.id, txn);
-        long nonRedistributingOffHeapSize = sstables.stream().mapToLong(SSTableReader::getIndexSummaryOffHeapSize).sum();
-        // fail on the last file
-        AtomicInteger countdown = new AtomicInteger(sstables.size() - 1);
-        SimpleCondition condition = new SimpleCondition();
-        IndexSummaryRedistribution redistribution = new IndexSummaryRedistribution(txns, nonRedistributingOffHeapSize, 0, new IndexSummaryRedistribution.Listener()
-        {
-            public void beforeResample(SSTableReader sstable)
+        List<SSTableReader> sstables = Lists.newArrayList(cfs.getSSTables(SSTableSet.CANONICAL));
+        LifecycleTransaction txn = cfs.getTracker().tryModify(sstables, OperationType.UNKNOWN);
+        Map<TableId, LifecycleTransaction> txns = ImmutableMap.of(cfs.metadata.id, txn);
+        // fail on the last file (* 3 because we call isStopRequested 3 times for each sstable, and we should fail on the last)
+        AtomicInteger countdown = new AtomicInteger(3 * sstables.size() - 1);
+        IndexSummaryRedistribution redistribution = new IndexSummaryRedistribution(txns, 0, 0) {
+            public boolean isStopRequested()
             {
-                if (countdown.decrementAndGet() == 0)
-                {
-                    // winner, block waiting for the pool
-                    try
-                    {
-                        condition.await();
-                    }
-                    catch (InterruptedException e)
-                    {
-                        throw new RuntimeException(e);
-                    }
-                }
+                return countdown.decrementAndGet() == 0;
             }
-        });
+        };
         try
         {
-            ForkJoinPool.commonPool().execute(() -> {
-                while (countdown.get() > 0) { }
-                redistribution.stop();
-                condition.signalAll();
-            });
             IndexSummaryManager.redistributeSummaries(redistribution);
+            fail("Should throw CompactionInterruptedException");
         }
         catch (CompactionInterruptedException e)
         {

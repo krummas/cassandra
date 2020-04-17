@@ -277,7 +277,7 @@ public class LifecycleTransaction extends Transactional.AbstractTransactional im
         staged.clear();
         return accumulate;
     }
-    
+
     private Throwable runOnCommitHooks(Throwable accumulate)
     {
         return runHooks(commitHooks, accumulate);
