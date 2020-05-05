@@ -92,4 +92,8 @@ public interface StorageProxyMBean
     void enableSnapshotOnRepairedDataMismatch();
     void disableSnapshotOnRepairedDataMismatch();
     boolean getSnapshotOnRepairedDataMismatchEnabled();
+
+    void enableSnapshotOnDuplicateRowDetection();
+    void disableSnapshotOnDuplicateRowDetection();
+    boolean getSnapshotOnDuplicateRowDetectionEnabled();
 }

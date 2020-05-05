@@ -3006,6 +3006,16 @@ public class DatabaseDescriptor
         conf.snapshot_on_repaired_data_mismatch = enabled;
     }
 
+    public static boolean snapshotOnDuplicateRowDetection()
+    {
+        return conf.snapshot_on_duplicate_row_detection;
+    }
+
+    public static void setSnapshotOnDuplicateRowDetection(boolean enabled)
+    {
+        conf.snapshot_on_duplicate_row_detection = enabled;
+    }
+
     public static boolean reportUnconfirmedRepairedDataMismatches()
     {
         return conf.report_unconfirmed_repaired_data_mismatches;
