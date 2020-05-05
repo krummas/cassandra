@@ -18,14 +18,24 @@
 
 package org.apache.cassandra.distributed.upgrade;
 
+import java.util.Arrays;
+import java.util.Iterator;
+
 import org.junit.Test;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.distributed.UpgradeableCluster;
 import org.apache.cassandra.distributed.api.ConsistencyLevel;
 import org.apache.cassandra.distributed.shared.DistributedTestBase;
 import org.apache.cassandra.distributed.shared.Versions;
 
+import static org.junit.Assert.fail;
+
 public class MixedModeReadRepairTest extends UpgradeTestBase
 {
+    private static final Logger logger = LoggerFactory.getLogger(MixedModeReadRepairTest.class);
     @Test
     public void mixedModeReadRepairCompactStorage() throws Throwable
     {
@@ -48,5 +58,102 @@ public class MixedModeReadRepairTest extends UpgradeTestBase
         })
         .runAfterClusterUpgrade((cluster) -> cluster.get(2).forceCompact(DistributedTestBase.KEYSPACE, "tbl"))
         .run();
+    }
+
+    @Test
+    public void mixedModeReadRepairDuplicateRows() throws Throwable
+    {
+        final String[] workload1 = new String[]
+        {
+            "DELETE FROM " + DistributedTestBase.KEYSPACE + ".tbl USING TIMESTAMP 1 WHERE pk = 1 AND ck = 2;",
+            "INSERT INTO " + DistributedTestBase.KEYSPACE + ".tbl (pk, ck, v) VALUES (1, 1, {'a':'b'}) USING TIMESTAMP 3;",
+            "INSERT INTO " + DistributedTestBase.KEYSPACE + ".tbl (pk, ck, v) VALUES (1, 2, {'c':'d'}) USING TIMESTAMP 3;",
+            "INSERT INTO " + DistributedTestBase.KEYSPACE + ".tbl (pk, ck, v) VALUES (1, 3, {'e':'f'}) USING TIMESTAMP 3;",
+        };
+
+        final String[] workload2 = new String[]
+        {
+            "INSERT INTO " + DistributedTestBase.KEYSPACE + ".tbl (pk, ck, v) VALUES (1, 2, {'g':'h'}) USING TIMESTAMP 5;",
+        };
+
+        new TestCase()
+        .nodes(2)
+        .upgrade(Versions.Major.v22, Versions.Major.v30)
+        .setup((cluster) ->
+        {
+            cluster.schemaChange("CREATE TABLE " + DistributedTestBase.KEYSPACE + ".tbl (pk int, ck int, v map<text, text>, PRIMARY KEY (pk, ck));");
+        })
+        .runAfterNodeUpgrade((cluster, node) ->
+        {
+            if (node == 2)
+                return;
+
+            // now node1 is 3.0 and node2 is 2.2
+            for (int i = 0; i < workload1.length; i++ )
+                cluster.coordinator(2).execute(workload1[i], ConsistencyLevel.QUORUM);
+
+            cluster.get(1).flush(KEYSPACE);
+            cluster.get(2).flush(KEYSPACE);
+
+            validate(cluster, 2, false);
+
+            for (int i = 0; i < workload2.length; i++ )
+                cluster.coordinator(2).execute(workload2[i], ConsistencyLevel.QUORUM);
+
+            cluster.get(1).flush(KEYSPACE);
+            cluster.get(2).flush(KEYSPACE);
+
+            validate(cluster, 1, true);
+        })
+        .run();
+    }
+
+    private void validate(UpgradeableCluster cluster, int nodeid, boolean local)
+    {
+        String query = "SELECT * FROM " + KEYSPACE + ".tbl";
+
+        Iterator<Object[]> iter = local
+                                ? toIter(cluster.get(nodeid).executeInternal(query))
+                                : cluster.coordinator(nodeid).executeWithPaging(query, ConsistencyLevel.ALL, 2);
+
+        Object[] prevRow = null;
+        Object prevClustering = null;
+
+        while (iter.hasNext())
+        {
+            Object[] row = iter.next();
+            Object clustering = row[1];
+
+            if (clustering.equals(prevClustering))
+            {
+                fail(String.format("Duplicate rows on node %d in %s mode: \n%s\n%s",
+                                   nodeid,
+                                   local ? "local" : "distributed",
+                                   Arrays.toString(prevRow),
+                                   Arrays.toString(row)));
+            }
+
+            prevRow = row;
+            prevClustering = clustering;
+        }
+    }
+
+    private static Iterator<Object[]> toIter(Object[][] objects)
+    {
+        return new Iterator<Object[]>()
+        {
+            int i = 0;
+            @Override
+            public boolean hasNext()
+            {
+                return i < objects.length;
+            }
+
+            @Override
+            public Object[] next()
+            {
+                return objects[i++];
+            }
+        };
     }
 }
