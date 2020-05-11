@@ -357,6 +357,9 @@ public enum Verb
         }
         minCustomId = minCustom;
 
+        if (minCustom <= max)
+            throw new IllegalStateException("Overlapping verb ids are not allowed");
+
         Verb[] idMap = new Verb[max + 1];
         int customCount = minCustom < Integer.MAX_VALUE ? CUSTOM_VERB_START - minCustom : 0;
         Verb[] customIdMap = new Verb[customCount + 1];
