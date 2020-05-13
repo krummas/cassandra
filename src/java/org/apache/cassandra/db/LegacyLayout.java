@@ -1485,10 +1485,10 @@ public abstract class LegacyLayout
                 // written, as 2.x storage format does not guarantee just one range tombstone, unlike 3.x.
                 // We have to make sure that clustering matches, which would mean that tombstone is for the
                 // same row.
-                if (rowDeletion != null && clustering.equals(tombstone.start.getAsClustering(metadata)))
+                if (clustering.equals(tombstone.start.getAsClustering(metadata)))
                 {
                     // If the tombstone superceeds the previous delete, we discard the previous one
-                    if (tombstone.deletionTime.supersedes(rowDeletion.deletionTime))
+                    if (rowDeletion == null || tombstone.deletionTime.supersedes(rowDeletion.deletionTime))
                     {
                         builder.addRowDeletion(Row.Deletion.regular(tombstone.deletionTime));
                         rowDeletion = tombstone;
