@@ -29,6 +29,8 @@ import java.util.stream.Collectors;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.cql3.SuperColumnCompatibility;
 import org.apache.cassandra.utils.AbstractIterator;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.PeekingIterator;
@@ -1649,7 +1651,8 @@ public abstract class LegacyLayout
         public final ColumnDefinition column;
         public final ByteBuffer collectionElement;
 
-        private LegacyCellName(Clustering clustering, ColumnDefinition column, ByteBuffer collectionElement)
+        @VisibleForTesting
+        LegacyCellName(Clustering clustering, ColumnDefinition column, ByteBuffer collectionElement)
         {
             this.clustering = clustering;
             this.column = column;
@@ -1775,7 +1778,8 @@ public abstract class LegacyLayout
         public final int localDeletionTime;
         public final int ttl;
 
-        private LegacyCell(Kind kind, LegacyCellName name, ByteBuffer value, long timestamp, int localDeletionTime, int ttl)
+        @VisibleForTesting
+        LegacyCell(Kind kind, LegacyCellName name, ByteBuffer value, long timestamp, int localDeletionTime, int ttl)
         {
             this.kind = kind;
             this.name = name;
