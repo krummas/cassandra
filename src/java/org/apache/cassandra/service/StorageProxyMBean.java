@@ -96,4 +96,11 @@ public interface StorageProxyMBean
     void enableSnapshotOnDuplicateRowDetection();
     void disableSnapshotOnDuplicateRowDetection();
     boolean getSnapshotOnDuplicateRowDetectionEnabled();
+
+    void getCheckForDuplicateRowsDuringReads();
+    void enableCheckForDuplicateRowsDuringReads();
+    void disableCheckForDuplicateRowsDuringReads();
+    void getCheckForDuplicateRowsDuringCompaction();
+    void enableCheckForDuplicateRowsDuringCompaction();
+    void disableCheckForDuplicateRowsDuringCompaction();
 }
