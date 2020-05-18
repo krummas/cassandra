@@ -1491,7 +1491,7 @@ public abstract class LegacyLayout
                 {
                     // If the tombstone superceeds the previous delete, we discard the previous one.
                     // This assumes that we are building the row from a sane source (ie, this row deletion
-                    // does not delete anything already added to the builder)
+                    // does not delete anything already added to the builder). See CASSANDRA-15789 for details
                     if (rowDeletion == null || tombstone.deletionTime.supersedes(rowDeletion.deletionTime))
                     {
                         builder.addRowDeletion(Row.Deletion.regular(tombstone.deletionTime));
