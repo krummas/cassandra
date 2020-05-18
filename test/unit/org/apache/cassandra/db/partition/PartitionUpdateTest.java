@@ -112,6 +112,9 @@ public class PartitionUpdateTest extends CQLTester
         Assert.assertEquals(0, update.operationCount());
     }
 
+    /**
+     * Makes sure we merge duplicate rows, see CASSANDRA-15789
+     */
     @Test
     public void testDuplicate()
     {
@@ -174,6 +177,9 @@ public class PartitionUpdateTest extends CQLTester
         assertEquals(1, count);
     }
 
+    /**
+     * Makes sure we don't create duplicates when merging 2 partition updates
+     */
     @Test
     public void testMerge()
     {

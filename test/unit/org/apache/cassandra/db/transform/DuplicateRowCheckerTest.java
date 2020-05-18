@@ -170,7 +170,6 @@ public class DuplicateRowCheckerTest extends CQLTester
 
     public static void assertCommandIssued(HashMap<InetAddress, MessageOut> sent, boolean isExpected)
     {
-        System.out.println(sent);
         assertEquals(isExpected, !sent.isEmpty());
         if (isExpected)
         {
@@ -178,7 +177,6 @@ public class DuplicateRowCheckerTest extends CQLTester
             assertTrue(sent.containsKey(FBUtilities.getBroadcastAddress()));
             SnapshotCommand command = (SnapshotCommand) sent.get(FBUtilities.getBroadcastAddress()).payload;
             assertTrue(command.snapshot_name.startsWith(DiagnosticSnapshotService.DUPLICATE_ROWS_DETECTED_SNAPSHOT_PREFIX));
-            System.out.println(command.toString());
         }
     }
 
