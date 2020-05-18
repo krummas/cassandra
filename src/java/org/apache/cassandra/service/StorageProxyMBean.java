@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+
 public interface StorageProxyMBean
 {
     public long getTotalHints();
@@ -70,4 +72,11 @@ public interface StorageProxyMBean
     void enableSnapshotOnDuplicateRowDetection();
     void disableSnapshotOnDuplicateRowDetection();
     boolean getSnapshotOnDuplicateRowDetectionEnabled();
+
+    void getCheckForDuplicateRowsDuringReads();
+    void enableCheckForDuplicateRowsDuringReads();
+    void disableCheckForDuplicateRowsDuringReads();
+    void getCheckForDuplicateRowsDuringCompaction();
+    void enableCheckForDuplicateRowsDuringCompaction();
+    void disableCheckForDuplicateRowsDuringCompaction();
 }
