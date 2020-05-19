@@ -2705,9 +2705,9 @@ public class StorageProxy implements StorageProxyMBean
     }
 
     @Override
-    public void getCheckForDuplicateRowsDuringReads()
+    public boolean getCheckForDuplicateRowsDuringReads()
     {
-        DatabaseDescriptor.checkForDuplicateRowsDuringReads();
+        return DatabaseDescriptor.checkForDuplicateRowsDuringReads();
     }
 
     @Override
@@ -2723,9 +2723,9 @@ public class StorageProxy implements StorageProxyMBean
     }
 
     @Override
-    public void getCheckForDuplicateRowsDuringCompaction()
+    public boolean getCheckForDuplicateRowsDuringCompaction()
     {
-        DatabaseDescriptor.checkForDuplicateRowsDuringCompaction();
+        return DatabaseDescriptor.checkForDuplicateRowsDuringCompaction();
     }
 
     @Override
