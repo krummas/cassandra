@@ -126,7 +126,10 @@ public class DiagnosticSnapshotService
             for (InetAddressAndPort replica : endpoints)
                 MessagingService.instance().send(msg, replica);
         }
-        logger.debug("Diagnostic snapshot request dropped due to throttling");
+        else
+        {
+            logger.debug("Diagnostic snapshot request dropped due to throttling");
+        }
     }
 
     private void maybeSnapshot(SnapshotCommand command, InetAddressAndPort initiator)

@@ -3016,7 +3016,6 @@ public class DatabaseDescriptor
         conf.snapshot_on_duplicate_row_detection = enabled;
     }
 
-<<<<<<< HEAD
     public static boolean reportUnconfirmedRepairedDataMismatches()
     {
         return conf.report_unconfirmed_repaired_data_mismatches;
