@@ -21,10 +21,8 @@ package org.apache.cassandra.distributed.upgrade;
 import java.util.Arrays;
 import java.util.Iterator;
 
+import com.google.common.collect.Iterators;
 import org.junit.Test;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.distributed.UpgradeableCluster;
 import org.apache.cassandra.distributed.api.ConsistencyLevel;
@@ -35,7 +33,6 @@ import static org.junit.Assert.fail;
 
 public class MixedModeReadRepairTest extends UpgradeTestBase
 {
-    private static final Logger logger = LoggerFactory.getLogger(MixedModeReadRepairTest.class);
     @Test
     public void mixedModeReadRepairCompactStorage() throws Throwable
     {
@@ -113,7 +110,7 @@ public class MixedModeReadRepairTest extends UpgradeTestBase
         String query = "SELECT * FROM " + KEYSPACE + ".tbl";
 
         Iterator<Object[]> iter = local
-                                ? toIter(cluster.get(nodeid).executeInternal(query))
+                                ? Iterators.forArray(cluster.get(nodeid).executeInternal(query))
                                 : cluster.coordinator(nodeid).executeWithPaging(query, ConsistencyLevel.ALL, 2);
 
         Object[] prevRow = null;
@@ -136,24 +133,5 @@ public class MixedModeReadRepairTest extends UpgradeTestBase
             prevRow = row;
             prevClustering = clustering;
         }
-    }
-
-    private static Iterator<Object[]> toIter(Object[][] objects)
-    {
-        return new Iterator<Object[]>()
-        {
-            int i = 0;
-            @Override
-            public boolean hasNext()
-            {
-                return i < objects.length;
-            }
-
-            @Override
-            public Object[] next()
-            {
-                return objects[i++];
-            }
-        };
     }
 }
