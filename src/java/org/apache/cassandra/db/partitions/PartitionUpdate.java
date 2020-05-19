@@ -219,7 +219,7 @@ public class PartitionUpdate extends AbstractBTreePartition
         return fromIterator(iterator, true,  null);
     }
 
-    private static final NoSpamLogger rowMergingLogger = NoSpamLogger.getLogger(logger, 5, TimeUnit.MINUTES);
+    private static final NoSpamLogger rowMergingLogger = NoSpamLogger.getLogger(logger, 1, TimeUnit.MINUTES);
     /**
      * Removes duplicate rows from incoming iterator, to be used when we can't trust the underlying iterator (like when reading legacy sstables)
      */
@@ -227,9 +227,8 @@ public class PartitionUpdate extends AbstractBTreePartition
     {
         return fromIterator(iterator, false, (a, b) -> {
             CFMetaData cfm = iterator.metadata();
-            rowMergingLogger.warn(String.format("Merging rows from pre 3.0 iterator for partition key: %s, clustering: %s",
-                                                cfm.getKeyValidator().getString(iterator.partitionKey().getKey()),
-                                                a.clustering().toString(cfm)));
+            rowMergingLogger.warn(String.format("Merging rows from pre 3.0 iterator for partition key: %s",
+                                                cfm.getKeyValidator().getString(iterator.partitionKey().getKey())));
             return Rows.merge(a, b, FBUtilities.nowInSeconds());
         });
     }
