@@ -91,6 +91,7 @@ import static org.apache.cassandra.concurrent.Stage.*;
 import static org.apache.cassandra.concurrent.Stage.INTERNAL_RESPONSE;
 import static org.apache.cassandra.concurrent.Stage.MISC;
 import static org.apache.cassandra.net.VerbTimeouts.*;
+import static org.apache.cassandra.net.Verb.Kind.*;
 import static org.apache.cassandra.net.Verb.Priority.*;
 import static org.apache.cassandra.schema.MigrationManager.MigrationsSerializer;
 
@@ -187,7 +188,8 @@ public enum Verb
     // largest used ID: 116
 
     // CUSTOM VERBS
-    UNUSED_CUSTOM_VERB     (0,   P1, rpcTimeout,      INTERNAL_RESPONSE, () -> null,                                 () -> null                                                    , true),
+    UNUSED_CUSTOM_VERB     (CUSTOM,
+                            0,   P1, rpcTimeout,      INTERNAL_RESPONSE, () -> null,                                 () -> null                                                     ),
 
     ;
 
@@ -202,10 +204,16 @@ public enum Verb
         P4
     }
 
+    public enum Kind
+    {
+        NORMAL,
+        CUSTOM
+    }
+
     public final int id;
-    private final boolean isCustom;
     public final Priority priority;
     public final Stage stage;
+    public final Kind kind;
 
     /**
      * Messages we receive from peers have a Verb that tells us what kind of message it is.
@@ -238,27 +246,38 @@ public enum Verb
 
     Verb(int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, Verb responseVerb)
     {
-        this(id, priority, expiration, stage, serializer, handler, responseVerb, false);
+        this(NORMAL, id, priority, expiration, stage, serializer, handler, responseVerb);
     }
 
-    Verb(int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, boolean isCustom)
+    Verb(Kind kind, int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler)
     {
-        this(id, priority, expiration, stage, serializer, handler, null, isCustom);
+        this(kind, id, priority, expiration, stage, serializer, handler, null);
     }
 
-    Verb(int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, Verb responseVerb, boolean isCustom)
+    Verb(Kind kind, int id, Priority priority, ToLongFunction<TimeUnit> expiration, Stage stage, Supplier<? extends IVersionedAsymmetricSerializer<?, ?>> serializer, Supplier<? extends IVerbHandler<?>> handler, Verb responseVerb)
     {
         this.stage = stage;
         if (id < 0)
             throw new IllegalArgumentException("Verb id must be non-negative, got " + id + " for verb " + name());
 
-        this.id = isCustom ? idForCustomVerb(id) : id;
+        if (kind == CUSTOM)
+        {
+            if (id > MAX_CUSTOM_VERB_ID)
+                throw new AssertionError("Invalid custom verb id " + id + " - we only allow custom ids between 0 and " + MAX_CUSTOM_VERB_ID);
+            this.id = idForCustomVerb(id);
+        }
+        else
+        {
+            if (id > CUSTOM_VERB_START - MAX_CUSTOM_VERB_ID)
+                throw new AssertionError("Invalid verb id " + id + " - we only allow ids between 0 and " + (CUSTOM_VERB_START - MAX_CUSTOM_VERB_ID));
+            this.id = id;
+        }
         this.priority = priority;
         this.serializer = serializer;
         this.handler = handler;
         this.responseVerb = responseVerb;
         this.expiration = expiration;
-        this.isCustom = isCustom;
+        this.kind = kind;
     }
 
     public <In, Out> IVersionedAsymmetricSerializer<In, Out> serializer()
@@ -339,6 +358,10 @@ public enum Verb
     // When generating ids we count *down* from this number
     private static final int CUSTOM_VERB_START = (1 << (7 * 2)) - 1;
 
+    // Sanity check for the custom verb ids - avoids someone mistakenly adding a custom verb id close to the normal verbs which
+    // could cause a conflict later when new normal verbs are added.
+    private static final int MAX_CUSTOM_VERB_ID = 1000;
+
     private static final Verb[] idToVerbMap;
     private static final Verb[] idToCustomVerbMap;
     private static final int minCustomId;
@@ -350,10 +373,17 @@ public enum Verb
         int minCustom = Integer.MAX_VALUE;
         for (Verb v : verbs)
         {
-            if (!v.isCustom)
-                max = Math.max(v.id, max);
-            else
-                minCustom = Math.min(v.id, minCustom);
+            switch (v.kind)
+            {
+                case NORMAL:
+                    max = Math.max(v.id, max);
+                    break;
+                case CUSTOM:
+                    minCustom = Math.min(v.id, minCustom);
+                    break;
+                default:
+                    throw new AssertionError("Unsupported Verb Kind: " + v.kind + " for verb " + v);
+            }
         }
         minCustomId = minCustom;
 
@@ -365,18 +395,21 @@ public enum Verb
         Verb[] customIdMap = new Verb[customCount + 1];
         for (Verb v : verbs)
         {
-            if (!v.isCustom)
+            switch (v.kind)
             {
-                if (idMap[v.id] != null)
-                    throw new IllegalArgumentException("cannot have two verbs that map to the same id: " + v + " and " + idMap[v.id]);
-                idMap[v.id] = v;
-            }
-            else
-            {
-                int relativeId = idForCustomVerb(v.id);
-                if (customIdMap[relativeId] != null)
-                    throw new IllegalArgumentException("cannot have two custom verbs that map to the same id: " + v + " and " + customIdMap[relativeId]);
-                customIdMap[relativeId] = v;
+                case NORMAL:
+                    if (idMap[v.id] != null)
+                        throw new IllegalArgumentException("cannot have two verbs that map to the same id: " + v + " and " + idMap[v.id]);
+                    idMap[v.id] = v;
+                    break;
+                case CUSTOM:
+                    int relativeId = idForCustomVerb(v.id);
+                    if (customIdMap[relativeId] != null)
+                        throw new IllegalArgumentException("cannot have two custom verbs that map to the same id: " + v + " and " + customIdMap[relativeId]);
+                    customIdMap[relativeId] = v;
+                    break;
+                default:
+                    throw new AssertionError("Unsupported Verb Kind: " + v.kind + " for verb " + v);
             }
         }
 
@@ -386,16 +419,13 @@ public enum Verb
 
     public static Verb fromId(int id)
     {
-        Verb verb;
+        Verb[] verbs = idToVerbMap;
         if (id >= minCustomId)
         {
-            int relativeId = idForCustomVerb(id);
-            verb = relativeId >= 0 && relativeId < idToCustomVerbMap.length ? idToCustomVerbMap[relativeId] : null;
+            id = idForCustomVerb(id);
+            verbs = idToCustomVerbMap;
         }
-        else
-        {
-            verb = id >= 0 && id < idToVerbMap.length ? idToVerbMap[id] : null;
-        }
+        Verb verb = id >= 0 && id < verbs.length ? verbs[id] : null;
         if (verb == null)
             throw new IllegalArgumentException("Unknown verb id " + id);
         return verb;
