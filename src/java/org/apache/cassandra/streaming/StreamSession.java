@@ -694,7 +694,17 @@ public class StreamSession implements IEndpointStateChangeSubscriber
     {
         // prepare tasks
         state(State.PREPARING);
-        ScheduledExecutors.nonPeriodicTasks.execute(() -> prepareAsync(requests, summaries));
+        ScheduledExecutors.nonPeriodicTasks.execute(() -> {
+            try
+            {
+                prepareAsync(requests, summaries);
+            }
+            catch (Exception e)
+            {
+                onError(e);
+                throw e;
+            }
+        });
     }
 
     /**
