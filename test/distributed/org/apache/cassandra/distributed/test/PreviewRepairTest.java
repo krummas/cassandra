@@ -323,7 +323,7 @@ public class PreviewRepairTest extends TestBaseImpl
         }
     }
 
-    private static void insert(ICoordinator coordinator, int start, int count)
+    static void insert(ICoordinator coordinator, int start, int count)
     {
         insert(coordinator, start, count, "tbl");
     }
@@ -337,7 +337,7 @@ public class PreviewRepairTest extends TestBaseImpl
     /**
      * returns a pair with [repair success, was inconsistent]
      */
-    private static IIsolatedExecutor.SerializableCallable<RepairResult> repair(Map<String, String> options)
+    static IIsolatedExecutor.SerializableCallable<RepairResult> repair(Map<String, String> options)
     {
         return () -> {
             SimpleCondition await = new SimpleCondition();
@@ -367,18 +367,22 @@ public class PreviewRepairTest extends TestBaseImpl
             return new RepairResult(success.get(), wasInconsistent.get());
         };
     }
-
     private static Map<String, String> options(boolean preview)
     {
+        return options(preview, false);
+    }
+
+    public static Map<String, String> options(boolean preview, boolean full)
+    {
         Map<String, String> config = new HashMap<>();
-        config.put(RepairOption.INCREMENTAL_KEY, "true");
         config.put(RepairOption.PARALLELISM_KEY, RepairParallelism.PARALLEL.toString());
         if (preview)
             config.put(RepairOption.PREVIEW, PreviewKind.REPAIRED.toString());
+        config.put(RepairOption.INCREMENTAL_KEY, Boolean.toString(!full));
         return config;
     }
 
-    private static Map<String, String> options(boolean preview, String range)
+    public static Map<String, String> options(boolean preview, String range)
     {
         Map<String, String> options = options(preview);
         options.put(RepairOption.RANGES_KEY, range);
