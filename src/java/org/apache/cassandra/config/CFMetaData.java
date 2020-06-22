@@ -762,7 +762,7 @@ public final class CFMetaData
         return new AbstractIterator<ColumnDefinition>()
         {
             private final Iterator<ColumnDefinition> partitionKeyIter = partitionKeyColumns.iterator();
-            private final Iterator<ColumnDefinition> clusteringIter = isStaticCompactTable() ? Collections.<ColumnDefinition>emptyIterator() : clusteringColumns.iterator();
+            private final Iterator<ColumnDefinition> clusteringIter = isClusteringHidden() ? Collections.emptyIterator() : clusteringColumns.iterator();
             private final Iterator<ColumnDefinition> otherColumns = nonPkColumnIterator();
 
             protected ColumnDefinition computeNext()
@@ -776,6 +776,14 @@ public final class CFMetaData
                 return otherColumns.hasNext() ? otherColumns.next() : endOfData();
             }
         };
+    }
+
+    private boolean isClusteringHidden()
+    {
+        if (isStaticCompactTable())
+            return true;
+        // old static compact case
+        return clusteringColumns.size() == 1 && clusteringColumns.get(0).isHidden();
     }
 
     public Iterable<ColumnDefinition> primaryKeyColumns()
@@ -1137,6 +1145,27 @@ public final class CFMetaData
         if (removed)
             partitionColumns = partitionColumns.without(def);
         return removed;
+    }
+
+    public boolean hideColumn(ColumnDefinition def)
+    {
+        assert !def.isPartitionKey();
+        ColumnDefinition hidden = def.hide();
+        ColumnDefinition existing = columnMetadata.replace(def.name.bytes, hidden);
+
+        if (existing != null)
+        {
+            if (existing.isClusteringColumn())
+            {
+                clusteringColumns.remove(existing);
+                clusteringColumns.add(hidden);
+            }
+            else
+            {
+                partitionColumns = PartitionColumns.builder().addAll(partitionColumns.without(def)).add(hidden).build();
+            }
+        }
+        return existing != null;
     }
 
     /**

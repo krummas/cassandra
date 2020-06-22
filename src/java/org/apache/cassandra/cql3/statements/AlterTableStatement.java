@@ -48,7 +48,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
 {
     public enum Type
     {
-        ADD, ALTER, DROP, DROP_COMPACT_STORAGE, OPTS, RENAME
+        ADD, ALTER, DROP, DROP_COMPACT_STORAGE, FORCE_DROP_COMPACT_STORAGE, OPTS, RENAME
     }
 
     public final Type oType;
@@ -272,6 +272,25 @@ public class AlterTableStatement extends SchemaAlteringStatement
                     throw new InvalidRequestException(String.format("Cannot drop column %s on base table %s with materialized views.",
                                                                     columnName.toString(),
                                                                     columnFamily()));
+                break;
+            case FORCE_DROP_COMPACT_STORAGE:
+                // todo: just testing, wip, cleanup later
+                //todo: obviously broken since we don't know the actual name of the added column; (could be column4)
+                if (!meta.isCompactTable())
+                    throw new InvalidRequestException("Cannot FORCE DROP COMPACT STORAGE on table without COMPACT STORAGE");
+                ColumnDefinition csValDef = meta.compactValueColumn();
+                cfm = meta.asNonCompact();
+
+                if (csValDef != null)
+                    cfm.hideColumn(csValDef);
+
+                if (meta.isStaticCompactTable())
+                {
+                    assert cfm.clusteringColumns().size() == 1;
+                    ColumnDefinition cd = cfm.clusteringColumns().get(0);
+                    cfm.hideColumn(cd);
+                }
+
                 break;
             case DROP_COMPACT_STORAGE:
                 if (!meta.isCompactTable())

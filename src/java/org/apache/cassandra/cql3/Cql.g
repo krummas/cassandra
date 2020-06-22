@@ -827,6 +827,7 @@ alterTableStatement returns [AlterTableStatement expr]
           | K_DROP  id=cident K_USING K_TIMESTAMP t=INTEGER { type = AlterTableStatement.Type.DROP;
                                                               dropTimestamp = Long.parseLong(Constants.Literal.integer($t.text).getText()); }
           | K_DROP  K_COMPACT K_STORAGE                     { type = AlterTableStatement.Type.DROP_COMPACT_STORAGE; }
+          | K_FORCE K_DROP K_COMPACT K_STORAGE              { type = AlterTableStatement.Type.FORCE_DROP_COMPACT_STORAGE; }
           | K_WITH  properties[attrs]                       { type = AlterTableStatement.Type.OPTS; }
           | K_RENAME                                        { type = AlterTableStatement.Type.RENAME; }
                id1=cident K_TO toId1=ident { renames.put(id1, toId1); }
@@ -1637,6 +1638,7 @@ basic_unreserved_keyword returns [String str]
         | K_JSON
         | K_CALLED
         | K_INPUT
+        | K_FORCE
         ) { $str = $k.text; }
     ;
 
@@ -1691,6 +1693,7 @@ K_RENAME:      R E N A M E;
 K_ADD:         A D D;
 K_TYPE:        T Y P E;
 K_COMPACT:     C O M P A C T;
+K_FORCE:       F O R C E;
 K_STORAGE:     S T O R A G E;
 K_ORDER:       O R D E R;
 K_BY:          B Y;

@@ -152,6 +152,7 @@ public final class SchemaKeyspace
                 + "kind text,"
                 + "position int,"
                 + "type text,"
+                + "hidden boolean,"
                 + "PRIMARY KEY ((keyspace_name), table_name, column_name))");
 
     private static final CFMetaData DroppedColumns =
@@ -654,6 +655,7 @@ public final class SchemaKeyspace
              .add("position", column.position())
              .add("clustering_order", column.clusteringOrder().toString().toLowerCase())
              .add("type", type.asCQL3Type().toString())
+             .add("hidden", column.isHidden())
              .build();
     }
 
@@ -1073,13 +1075,15 @@ public final class SchemaKeyspace
         int position = row.getInt("position");
         ClusteringOrder order = ClusteringOrder.valueOf(row.getString("clustering_order").toUpperCase());
 
+        boolean isHidden = row.has("hidden") && row.getBoolean("hidden");
+
         AbstractType<?> type = parse(keyspace, row.getString("type"), types);
         if (order == ClusteringOrder.DESC)
             type = ReversedType.getInstance(type);
 
         ColumnIdentifier name = new ColumnIdentifier(row.getBytes("column_name_bytes"), row.getString("column_name"));
 
-        return new ColumnDefinition(keyspace, table, name, type, position, kind);
+        return new ColumnDefinition(keyspace, table, name, type, position, kind, isHidden);
     }
 
     private static Map<ByteBuffer, CFMetaData.DroppedColumn> fetchDroppedColumns(String keyspace, String table)

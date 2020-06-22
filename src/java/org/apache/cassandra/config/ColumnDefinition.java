@@ -39,6 +39,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
 
     public static final int NO_POSITION = -1;
 
+
     public enum ClusteringOrder
     {
         ASC, DESC, NONE
@@ -78,6 +79,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
      * the first clustering column is 0.
      */
     private final int position;
+    private final boolean hidden; // whether this column should show up in select *
 
     private final Comparator<CellPath> cellPathComparator;
     private final Comparator<Object> asymmetricCellPathComparator;
@@ -140,7 +142,18 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
              ColumnIdentifier.getInterned(name, cfm.getColumnDefinitionNameComparator(kind)),
              type,
              position,
-             kind);
+             kind,
+             false);
+    }
+
+    public ColumnDefinition(String ksName,
+                            String cfName,
+                            ColumnIdentifier name,
+                            AbstractType<?> type,
+                            int position,
+                            Kind kind)
+    {
+        this(ksName, cfName, name, type, position, kind, false);
     }
 
     @VisibleForTesting
@@ -149,7 +162,8 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
                             ColumnIdentifier name,
                             AbstractType<?> type,
                             int position,
-                            Kind kind)
+                            Kind kind,
+                            boolean hidden)
     {
         super(ksName, cfName, name, type);
         assert name != null && type != null && kind != null;
@@ -161,6 +175,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
         this.cellComparator = cellPathComparator == null ? ColumnData.comparator : (a, b) -> cellPathComparator.compare(a.path(), b.path());
         this.asymmetricCellPathComparator = cellPathComparator == null ? null : (a, b) -> cellPathComparator.compare(((Cell)a).path(), (CellPath) b);
         this.comparisonOrder = comparisonOrder(kind, isComplex(), Math.max(0, position), name);
+        this.hidden = hidden;
     }
 
     private static Comparator<CellPath> makeCellPathComparator(Kind kind, AbstractType<?> type)
@@ -192,17 +207,17 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
 
     public ColumnDefinition copy()
     {
-        return new ColumnDefinition(ksName, cfName, name, type, position, kind);
+        return new ColumnDefinition(ksName, cfName, name, type, position, kind, hidden);
     }
 
     public ColumnDefinition withNewName(ColumnIdentifier newName)
     {
-        return new ColumnDefinition(ksName, cfName, newName, type, position, kind);
+        return new ColumnDefinition(ksName, cfName, newName, type, position, kind, hidden);
     }
 
     public ColumnDefinition withNewType(AbstractType<?> newType)
     {
-        return new ColumnDefinition(ksName, cfName, name, newType, position, kind);
+        return new ColumnDefinition(ksName, cfName, name, newType, position, kind, hidden);
     }
 
     public boolean isPartitionKey()
@@ -223,6 +238,11 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
     public boolean isRegular()
     {
         return kind == Kind.REGULAR;
+    }
+
+    public boolean isHidden()
+    {
+        return hidden;
     }
 
     public ClusteringOrder clusteringOrder()
@@ -254,13 +274,14 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
             && Objects.equal(name, cd.name)
             && Objects.equal(type, cd.type)
             && Objects.equal(kind, cd.kind)
-            && Objects.equal(position, cd.position);
+            && Objects.equal(position, cd.position)
+            && Objects.equal(hidden, cd.hidden);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hashCode(ksName, cfName, name, type, kind, position);
+        return Objects.hashCode(ksName, cfName, name, type, kind, position, hidden);
     }
 
     @Override
@@ -271,6 +292,7 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
                       .add("type", type)
                       .add("kind", kind)
                       .add("position", position)
+                      .add("hidden", hidden)
                       .toString();
     }
 
@@ -409,5 +431,10 @@ public class ColumnDefinition extends ColumnSpecification implements Comparable<
         if (type instanceof CollectionType) // for thrift
             return ((CollectionType) type).valueComparator().isCounter();
         return type.isCounter();
+    }
+
+    public ColumnDefinition hide()
+    {
+        return new ColumnDefinition(ksName, cfName, name, type, position, kind, true);
     }
 }

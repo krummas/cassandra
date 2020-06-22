@@ -101,7 +101,8 @@ public class PartitionColumns implements Iterable<ColumnDefinition>
 
     public Iterator<ColumnDefinition> selectOrderIterator()
     {
-        return Iterators.concat(statics.selectOrderIterator(), regulars.selectOrderIterator());
+        // todo: perf
+        return Iterators.filter(Iterators.concat(statics.selectOrderIterator(), regulars.selectOrderIterator()), cd -> !cd.isHidden());
     }
 
     /** * Returns the total number of static and regular columns. */
