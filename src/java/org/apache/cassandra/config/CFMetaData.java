@@ -1024,7 +1024,7 @@ public final class CFMetaData
     public ColumnDefinition getColumnDefinitionForCQL(ByteBuffer name)
     {
         ColumnDefinition cd = getColumnDefinition(name);
-        return hiddenColumns.contains(cd) ? null : cd;
+        return hiddenColumns.contains(cd) || cd.isHidden() ? null : cd;
     }
 
     public static boolean isNameValid(String name)
