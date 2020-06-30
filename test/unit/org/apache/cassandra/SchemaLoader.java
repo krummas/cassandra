@@ -323,7 +323,7 @@ public class SchemaLoader
 
     public static CFMetaData counterCFMD(String ksName, String cfName)
     {
-        return CFMetaData.Builder.create(ksName, cfName, false, true, true)
+        return CFMetaData.Builder.create(ksName, cfName, false, true, true, Collections.emptySet())
                 .addPartitionKey("key", AsciiType.instance)
                 .addClusteringColumn("name", AsciiType.instance)
                 .addRegularColumn("val", CounterColumnType.instance)

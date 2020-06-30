@@ -41,6 +41,7 @@ import org.apache.cassandra.transport.Event;
 /** A {@code CREATE TABLE} parsed from a CQL query statement. */
 public class CreateTableStatement extends SchemaAlteringStatement
 {
+    private final Set<ColumnIdentifier> hiddenColumns;
     private List<AbstractType<?>> keyTypes;
     private List<AbstractType<?>> clusteringTypes;
 
@@ -61,12 +62,13 @@ public class CreateTableStatement extends SchemaAlteringStatement
     private final boolean ifNotExists;
     private final UUID id;
 
-    public CreateTableStatement(CFName name, TableParams params, boolean ifNotExists, Set<ColumnIdentifier> staticColumns, UUID id)
+    public CreateTableStatement(CFName name, TableParams params, boolean ifNotExists, Set<ColumnIdentifier> staticColumns, Set<ColumnIdentifier> hiddenColumns, UUID id)
     {
         super(name);
         this.params = params;
         this.ifNotExists = ifNotExists;
         this.staticColumns = staticColumns;
+        this.hiddenColumns = hiddenColumns;
         this.id = id;
     }
 
@@ -113,12 +115,17 @@ public class CreateTableStatement extends SchemaAlteringStatement
 
     public CFMetaData.Builder metadataBuilder()
     {
-        CFMetaData.Builder builder = CFMetaData.Builder.create(keyspace(), columnFamily(), isDense, isCompound, hasCounters);
+        CFMetaData.Builder builder = CFMetaData.Builder.create(keyspace(), columnFamily(), isDense, isCompound, hasCounters, hiddenColumns);
         builder.withId(id);
         for (int i = 0; i < keyAliases.size(); i++)
             builder.addPartitionKey(keyAliases.get(i), keyTypes.get(i));
         for (int i = 0; i < columnAliases.size(); i++)
-            builder.addClusteringColumn(columnAliases.get(i), clusteringTypes.get(i));
+        {
+            if (hiddenColumns.contains(columnAliases.get(i)))
+                builder.addClusteringColumn(columnAliases.get(i), clusteringTypes.get(i));
+            else
+                builder.addClusteringColumn(columnAliases.get(i), clusteringTypes.get(i));
+        }
 
         boolean isStaticCompact = !isDense && !isCompound;
         for (Map.Entry<ColumnIdentifier, AbstractType> entry : columns.entrySet())
@@ -128,7 +135,12 @@ public class CreateTableStatement extends SchemaAlteringStatement
             if (staticColumns.contains(name) || isStaticCompact)
                 builder.addStaticColumn(name, entry.getValue());
             else
-                builder.addRegularColumn(name, entry.getValue());
+            {
+                if (hiddenColumns.contains(name))
+                    builder.addRegularColumn(name, entry.getValue());
+                else
+                    builder.addRegularColumn(name, entry.getValue());
+            }
         }
 
         boolean isCompactTable = isDense || !isCompound;
@@ -177,6 +189,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
         private final List<List<ColumnIdentifier>> keyAliases = new ArrayList<>();
         private final List<ColumnIdentifier> columnAliases = new ArrayList<>();
         private final Set<ColumnIdentifier> staticColumns = new HashSet<>();
+        private final Set<ColumnIdentifier> hiddenColumns = new HashSet<>();
 
         private final Multiset<ColumnIdentifier> definedNames = HashMultiset.create(1);
 
@@ -215,7 +228,7 @@ public class CreateTableStatement extends SchemaAlteringStatement
 
             TableParams params = properties.properties.asNewTableParams();
 
-            CreateTableStatement stmt = new CreateTableStatement(cfName, params, ifNotExists, staticColumns, properties.properties.getId());
+            CreateTableStatement stmt = new CreateTableStatement(cfName, params, ifNotExists, staticColumns, hiddenColumns, properties.properties.getId());
 
             for (Map.Entry<ColumnIdentifier, CQL3Type.Raw> entry : definitions.entrySet())
             {
@@ -356,12 +369,14 @@ public class CreateTableStatement extends SchemaAlteringStatement
             return isReversed != null && isReversed ? ReversedType.getInstance(type) : type;
         }
 
-        public void addDefinition(ColumnIdentifier def, CQL3Type.Raw type, boolean isStatic)
+        public void addDefinition(ColumnIdentifier def, CQL3Type.Raw type, boolean isStatic, boolean isHidden)
         {
             definedNames.add(def);
             definitions.put(def, type);
             if (isStatic)
                 staticColumns.add(def);
+            if (isHidden)
+                hiddenColumns.add(def);
         }
 
         public void addKeyAliases(List<ColumnIdentifier> aliases)

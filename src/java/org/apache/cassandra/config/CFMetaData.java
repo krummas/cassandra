@@ -1404,8 +1404,9 @@ public final class CFMetaData
         private final List<Pair<ColumnIdentifier, AbstractType>> clusteringColumns = new ArrayList<>();
         private final List<Pair<ColumnIdentifier, AbstractType>> staticColumns = new ArrayList<>();
         private final List<Pair<ColumnIdentifier, AbstractType>> regularColumns = new ArrayList<>();
+        private final Set<ColumnIdentifier> hiddenColumns;
 
-        private Builder(String keyspace, String table, boolean isDense, boolean isCompound, boolean isSuper, boolean isCounter, boolean isView)
+        private Builder(String keyspace, String table, boolean isDense, boolean isCompound, boolean isSuper, boolean isCounter, boolean isView, Set<ColumnIdentifier> hiddenColumns)
         {
             this.keyspace = keyspace;
             this.table = table;
@@ -1415,36 +1416,37 @@ public final class CFMetaData
             this.isCounter = isCounter;
             this.isView = isView;
             this.partitioner = Optional.empty();
+            this.hiddenColumns = hiddenColumns;
         }
 
         public static Builder create(String keyspace, String table)
         {
-            return create(keyspace, table, false, true, false);
+            return create(keyspace, table, false, true, false, Collections.emptySet());
         }
 
-        public static Builder create(String keyspace, String table, boolean isDense, boolean isCompound, boolean isCounter)
+        public static Builder create(String keyspace, String table, boolean isDense, boolean isCompound, boolean isCounter, Set<ColumnIdentifier> hiddenColumns)
         {
-            return create(keyspace, table, isDense, isCompound, false, isCounter);
+            return create(keyspace, table, isDense, isCompound, false, isCounter, hiddenColumns);
         }
 
-        public static Builder create(String keyspace, String table, boolean isDense, boolean isCompound, boolean isSuper, boolean isCounter)
+        public static Builder create(String keyspace, String table, boolean isDense, boolean isCompound, boolean isSuper, boolean isCounter, Set<ColumnIdentifier> hiddenColumns)
         {
-            return new Builder(keyspace, table, isDense, isCompound, isSuper, isCounter, false);
+            return new Builder(keyspace, table, isDense, isCompound, isSuper, isCounter, false, hiddenColumns);
         }
 
         public static Builder createView(String keyspace, String table)
         {
-            return new Builder(keyspace, table, false, true, false, false, true);
+            return new Builder(keyspace, table, false, true, false, false, true, Collections.emptySet());
         }
 
         public static Builder createDense(String keyspace, String table, boolean isCompound, boolean isCounter)
         {
-            return create(keyspace, table, true, isCompound, isCounter);
+            return create(keyspace, table, true, isCompound, isCounter, Collections.emptySet());
         }
 
         public static Builder createSuper(String keyspace, String table, boolean isCounter)
         {
-            return create(keyspace, table, true, true, true, isCounter);
+            return create(keyspace, table, true, true, true, isCounter, Collections.emptySet());
         }
 
         public Builder withPartitioner(IPartitioner partitioner)
@@ -1540,11 +1542,11 @@ public final class CFMetaData
             for (int i = 0; i < clusteringColumns.size(); i++)
             {
                 Pair<ColumnIdentifier, AbstractType> p = clusteringColumns.get(i);
-                clusterings.add(new ColumnDefinition(keyspace, table, p.left, p.right, i, ColumnDefinition.Kind.CLUSTERING));
+                clusterings.add(new ColumnDefinition(keyspace, table, p.left, p.right, i, ColumnDefinition.Kind.CLUSTERING, hiddenColumns.contains(p.left)));
             }
 
             for (Pair<ColumnIdentifier, AbstractType> p : regularColumns)
-                builder.add(new ColumnDefinition(keyspace, table, p.left, p.right, ColumnDefinition.NO_POSITION, ColumnDefinition.Kind.REGULAR));
+                builder.add(new ColumnDefinition(keyspace, table, p.left, p.right, ColumnDefinition.NO_POSITION, ColumnDefinition.Kind.REGULAR, hiddenColumns.contains(p.left)));
 
             for (Pair<ColumnIdentifier, AbstractType> p : staticColumns)
                 builder.add(new ColumnDefinition(keyspace, table, p.left, p.right, ColumnDefinition.NO_POSITION, ColumnDefinition.Kind.STATIC));

@@ -21,6 +21,7 @@ package org.apache.cassandra.service;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
+import java.util.Collections;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -63,7 +64,7 @@ public class EmbeddedCassandraServiceTest
         setup();
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),
-                                    CFMetaData.Builder.create(KEYSPACE1, CF_STANDARD, true, false, false)
+                                    CFMetaData.Builder.create(KEYSPACE1, CF_STANDARD, true, false, false, Collections.emptySet())
                                                       .addPartitionKey("pk", AsciiType.instance)
                                                       .addClusteringColumn("ck", AsciiType.instance)
                                                       .addRegularColumn("val", AsciiType.instance)

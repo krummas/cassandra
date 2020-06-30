@@ -20,6 +20,8 @@ package org.apache.cassandra.config;
  *
  */
 
+import java.util.Collections;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -32,7 +34,7 @@ public class ColumnDefinitionTest
     @Test
     public void testSerializeDeserialize() throws Exception
     {
-        CFMetaData cfm = CFMetaData.Builder.create("ks", "cf", true, false, false)
+        CFMetaData cfm = CFMetaData.Builder.create("ks", "cf", true, false, false, Collections.emptySet())
                          .addPartitionKey("pkey", AsciiType.instance)
                          .addClusteringColumn("name", AsciiType.instance)
                          .addRegularColumn("val", AsciiType.instance)

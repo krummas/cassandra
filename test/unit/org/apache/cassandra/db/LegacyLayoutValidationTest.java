@@ -19,6 +19,7 @@
 package org.apache.cassandra.db;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.Iterator;
 
 import com.google.common.collect.Iterators;
@@ -49,7 +50,7 @@ public class LegacyLayoutValidationTest
                                                               .addRegularColumn("v2", Int32Type.instance)
                                                               .build();
 
-    private static final CFMetaData COMPACT_FIXED = CFMetaData.Builder.create("ks", "cf", true, false, false)
+    private static final CFMetaData COMPACT_FIXED = CFMetaData.Builder.create("ks", "cf", true, false, false, Collections.emptySet())
                                                                       .addPartitionKey("k", Int32Type.instance)
                                                                       .addClusteringColumn("c", Int32Type.instance)
                                                                       .addRegularColumn("v", Int32Type.instance)
@@ -63,7 +64,7 @@ public class LegacyLayoutValidationTest
                                                                  .addRegularColumn("v2", UTF8Type.instance)
                                                                  .build();
 
-    private static final CFMetaData COMPACT_VARIABLE = CFMetaData.Builder.create("ks", "cf", true, false, false)
+    private static final CFMetaData COMPACT_VARIABLE = CFMetaData.Builder.create("ks", "cf", true, false, false, Collections.emptySet())
                                                                          .addPartitionKey("k", Int32Type.instance)
                                                                          .addClusteringColumn("c", UTF8Type.instance)
                                                                          .addRegularColumn("v", UTF8Type.instance)

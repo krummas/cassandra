@@ -679,7 +679,7 @@ cfamDefinition[CreateTableStatement.RawStatement expr]
     ;
 
 cfamColumns[CreateTableStatement.RawStatement expr]
-    : k=ident v=comparatorType { boolean isStatic=false; } (K_STATIC {isStatic = true;})? { $expr.addDefinition(k, v, isStatic); }
+    : k=ident v=comparatorType { boolean isStatic=false, isHidden=false; } (K_STATIC {isStatic = true;})? (K_HIDDEN {isHidden = true;})? { $expr.addDefinition(k, v, isStatic, isHidden); }
         (K_PRIMARY K_KEY { $expr.addKeyAliases(Collections.singletonList(k)); })?
     | K_PRIMARY K_KEY '(' pkDef[expr] (',' c=ident { $expr.addColumnAlias(c); } )* ')'
     ;
@@ -1639,6 +1639,7 @@ basic_unreserved_keyword returns [String str]
         | K_CALLED
         | K_INPUT
         | K_FORCE
+        | K_HIDDEN
         ) { $str = $k.text; }
     ;
 
@@ -1764,6 +1765,7 @@ K_TUPLE:       T U P L E;
 K_TRIGGER:     T R I G G E R;
 K_STATIC:      S T A T I C;
 K_FROZEN:      F R O Z E N;
+K_HIDDEN:      H I D D E N;
 
 K_FUNCTION:    F U N C T I O N;
 K_FUNCTIONS:   F U N C T I O N S;

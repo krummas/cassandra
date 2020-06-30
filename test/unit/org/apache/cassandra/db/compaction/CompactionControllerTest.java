@@ -19,6 +19,7 @@
 package org.apache.cassandra.db.compaction;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -59,12 +60,12 @@ public class CompactionControllerTest extends SchemaLoader
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE,
                                     KeyspaceParams.simple(1),
-                                    CFMetaData.Builder.create(KEYSPACE, CF1, true, false, false)
+                                    CFMetaData.Builder.create(KEYSPACE, CF1, true, false, false, Collections.emptySet())
                                                       .addPartitionKey("pk", AsciiType.instance)
                                                       .addClusteringColumn("ck", AsciiType.instance)
                                                       .addRegularColumn("val", AsciiType.instance)
                                                       .build(),
-                                    CFMetaData.Builder.create(KEYSPACE, CF2, true, false, false)
+                                    CFMetaData.Builder.create(KEYSPACE, CF2, true, false, false, Collections.emptySet())
                                                       .addPartitionKey("pk", AsciiType.instance)
                                                       .addClusteringColumn("ck", AsciiType.instance)
                                                       .addRegularColumn("val", AsciiType.instance)

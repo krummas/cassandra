@@ -81,7 +81,7 @@ public class StreamingTransferTest
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD),
-                                    CFMetaData.Builder.create(KEYSPACE1, CF_COUNTER, false, true, true)
+                                    CFMetaData.Builder.create(KEYSPACE1, CF_COUNTER, false, true, true, Collections.emptySet())
                                                       .addPartitionKey("key", BytesType.instance)
                                                       .build(),
                                     CFMetaData.Builder.create(KEYSPACE1, CF_STANDARDINT)

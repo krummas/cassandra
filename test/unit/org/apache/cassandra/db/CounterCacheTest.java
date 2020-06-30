@@ -52,7 +52,7 @@ public class CounterCacheTest
     {
         SchemaLoader.prepareServer();
 
-        CFMetaData counterTable = CFMetaData.Builder.create(KEYSPACE1, COUNTER1, false, true, true)
+        CFMetaData counterTable = CFMetaData.Builder.create(KEYSPACE1, COUNTER1, false, true, true, Collections.emptySet())
                                   .addPartitionKey("key", Int32Type.instance)
                                   .addClusteringColumn("name", Int32Type.instance)
                                   .addRegularColumn("c", CounterColumnType.instance)

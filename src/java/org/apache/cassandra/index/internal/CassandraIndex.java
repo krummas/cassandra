@@ -772,7 +772,7 @@ public abstract class CassandraIndex implements Index
         CFMetaData.Builder builder = indexMetadata.isKeys()
                                      ? CFMetaData.Builder.create(baseCfsMetadata.ksName,
                                                                  baseCfsMetadata.indexColumnFamilyName(indexMetadata),
-                                                                 true, false, false)
+                                                                 true, false, false, Collections.emptySet())
                                      : CFMetaData.Builder.create(baseCfsMetadata.ksName,
                                                                  baseCfsMetadata.indexColumnFamilyName(indexMetadata));
 

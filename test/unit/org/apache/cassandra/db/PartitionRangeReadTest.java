@@ -73,7 +73,7 @@ public class PartitionRangeReadTest
                                     KeyspaceParams.simple(1),
                                     SchemaLoader.standardCFMD(KEYSPACE1, CF_STANDARD1),
                                     SchemaLoader.denseCFMD(KEYSPACE1, CF_STANDARDINT, IntegerType.instance),
-                                    CFMetaData.Builder.create(KEYSPACE1, CF_COMPACT1, false, false, false)
+                                    CFMetaData.Builder.create(KEYSPACE1, CF_COMPACT1, false, false, false, Collections.emptySet())
                                                       .addPartitionKey("key", AsciiType.instance)
                                                       .addClusteringColumn("column1", AsciiType.instance)
                                                       .addRegularColumn("value", AsciiType.instance)
