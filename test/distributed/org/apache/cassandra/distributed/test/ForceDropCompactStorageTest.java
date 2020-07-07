@@ -25,8 +25,9 @@ import org.apache.cassandra.distributed.api.ConsistencyLevel;
 
 import static org.apache.cassandra.distributed.shared.AssertUtils.assertRows;
 import static org.apache.cassandra.distributed.shared.AssertUtils.row;
+import static org.junit.Assert.assertEquals;
 
-public class SchemaTest extends TestBaseImpl
+public class ForceDropCompactStorageTest extends TestBaseImpl
 {
     @Test
     public void forceDropCompactStorageStaticCompact() throws Throwable
@@ -72,6 +73,7 @@ public class SchemaTest extends TestBaseImpl
             Object[][] expected = cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL);
             cluster.get(1).schemaChangeInternal("ALTER TABLE "+KEYSPACE+".tbl FORCE DROP COMPACT STORAGE");
             assertRows(cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), expected);
+            assertRows(cluster.coordinator(2).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), expected);
             cluster.get(2).schemaChangeInternal("ALTER TABLE "+KEYSPACE+".tbl FORCE DROP COMPACT STORAGE");
             assertRows(cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), expected);
         }
@@ -90,6 +92,7 @@ public class SchemaTest extends TestBaseImpl
 
             cluster.forEach(i -> i.flush(KEYSPACE));
             assertRows(cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), expected);
+            assertRows(cluster.coordinator(2).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), expected);
         }
     }
     @Test
@@ -152,7 +155,6 @@ public class SchemaTest extends TestBaseImpl
         }
     }
 
-
     @Test
     public void forceDropCompactStorageMixedStaticCompactWrites() throws Throwable
     {
@@ -198,7 +200,6 @@ public class SchemaTest extends TestBaseImpl
             for (int i = 10; i < 15; i++)
                 cluster.get(2).executeInternal("INSERT INTO "+KEYSPACE+".tbl (id, v1) values (?, ?)", i, i);
 
-
             for (int i = 0; i < 15; i++)
                 assertRows(cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl WHERE id = ?", ConsistencyLevel.ALL, i), row(i, i));
 
@@ -210,4 +211,34 @@ public class SchemaTest extends TestBaseImpl
         }
     }
 
+    @Test
+    public void testRowDeletionDense() throws Throwable
+    {
+        try (Cluster cluster = init(Cluster.create(1)))
+        {
+            cluster.schemaChange("CREATE TABLE " + KEYSPACE + ".tbl (id int, ck int, primary key (id, ck)) WITH COMPACT STORAGE");
+            for (int i = 0; i < 5; i++)
+                cluster.coordinator(1).execute("INSERT INTO "+KEYSPACE+".tbl (id, ck) values (?, ?)", ConsistencyLevel.ALL, i, i);
+            cluster.get(1).schemaChangeInternal("ALTER TABLE "+KEYSPACE+".tbl FORCE DROP COMPACT STORAGE");
+            cluster.coordinator(1).execute("DELETE FROM "+KEYSPACE+".tbl WHERE id = 1 AND ck = 1", ConsistencyLevel.ALL);
+            cluster.get(1).flush(KEYSPACE);
+            cluster.get(1).forceCompact(KEYSPACE, "tbl");
+
+            assertEquals(4, cluster.coordinator(1).execute("select * from "+KEYSPACE+".tbl", ConsistencyLevel.ALL).length);
+        }
+    }
+
+    @Test
+    public void testDeletionStaticCompact() throws Throwable
+    {
+        try (Cluster cluster = init(Cluster.create(1)))
+        {
+            cluster.schemaChange("CREATE TABLE " + KEYSPACE + ".tbl (id int, i int, primary key (id)) WITH COMPACT STORAGE");
+            for (int i = 0; i < 5; i++)
+                cluster.coordinator(1).execute("INSERT INTO "+KEYSPACE+".tbl (id, i) values (?, ?)", ConsistencyLevel.ALL, i, i);
+            cluster.get(1).schemaChangeInternal("ALTER TABLE "+KEYSPACE+".tbl FORCE DROP COMPACT STORAGE");
+            cluster.coordinator(1).execute("DELETE FROM "+KEYSPACE+".tbl WHERE id = 1", ConsistencyLevel.ALL);
+            assertEquals(4, cluster.coordinator(1).execute("select * from "+KEYSPACE+".tbl", ConsistencyLevel.ALL).length);
+        }
+    }
 }

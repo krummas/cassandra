@@ -274,15 +274,22 @@ public class AlterTableStatement extends SchemaAlteringStatement
                                                                     columnFamily()));
                 break;
             case FORCE_DROP_COMPACT_STORAGE:
-                // todo: just testing, wip, cleanup later
-                //todo: obviously broken since we don't know the actual name of the added column; (could be column4)
                 if (!meta.isCompactTable())
                     throw new InvalidRequestException("Cannot FORCE DROP COMPACT STORAGE on table without COMPACT STORAGE");
-                ColumnDefinition csValDef = meta.compactValueColumn();
+                if (meta.isSuper())
+                    throw new InvalidRequestException("Can't FORCE DROP COMPACT STORAGE on super column families");
+                if (!meta.isStaticCompactTable() && !meta.isDense())
+                    throw new InvalidRequestException("Can only FORCE DROP COMPACT STORAGE on static compact and dense tables");
+
+                ColumnDefinition compactValueDefinition = meta.compactValueColumn();
                 cfm = meta.asNonCompact();
 
-                if (csValDef != null)
-                    cfm.hideColumn(csValDef);
+                if (compactValueDefinition != null)
+                {
+                    assert cfm.partitionColumns().regulars.size() == 1;
+                    assert cfm.partitionColumns().regulars.getSimple(0).equals(compactValueDefinition);
+                    cfm.hideColumn(compactValueDefinition);
+                }
 
                 if (meta.isStaticCompactTable())
                 {
