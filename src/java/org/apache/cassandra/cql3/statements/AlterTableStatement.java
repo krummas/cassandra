@@ -28,6 +28,7 @@ import org.apache.cassandra.cql3.CFName;
 import org.apache.cassandra.cql3.CQL3Type;
 import org.apache.cassandra.cql3.ColumnIdentifier;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.CompactTables;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -284,7 +285,7 @@ public class AlterTableStatement extends SchemaAlteringStatement
                 ColumnDefinition compactValueDefinition = meta.compactValueColumn();
                 cfm = meta.asNonCompact();
 
-                if (compactValueDefinition != null)
+                if (compactValueDefinition != null && CompactTables.hasEmptyCompactValue(meta))
                 {
                     assert cfm.partitionColumns().regulars.size() == 1;
                     assert cfm.partitionColumns().regulars.getSimple(0).equals(compactValueDefinition);
