@@ -18,6 +18,8 @@
 
 package org.apache.cassandra.distributed.test;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.junit.Test;
 
 import net.bytebuddy.ByteBuddy;
@@ -31,10 +33,12 @@ import org.apache.cassandra.transport.messages.ResultMessage;
 import static net.bytebuddy.matcher.ElementMatchers.named;
 import static org.apache.cassandra.distributed.api.Feature.GOSSIP;
 import static org.apache.cassandra.distributed.api.Feature.NETWORK;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class StreamPrepareFailTest extends TestBaseImpl
 {
-    @Test(expected = RuntimeException.class)
+    @Test
     public void streamPrepareFailTest() throws Throwable
     {
         try(Cluster cluster = init(Cluster.build(2)
@@ -43,12 +47,22 @@ public class StreamPrepareFailTest extends TestBaseImpl
                                           .start()))
         {
             cluster.schemaChange("create table " + KEYSPACE + ".tbl (id int primary key, t int)");
-            cluster.get(1).runOnInstance(() -> StorageService.instance.rebuild(null));
+            try
+            {
+                cluster.get(1).runOnInstance(() -> StorageService.instance.rebuild(null));
+                fail("rebuild should throw exception");
+            }
+            catch (RuntimeException e)
+            {
+                cluster.get(2).runOnInstance(() -> assertTrue(StreamFailHelper.thrown.get()));
+                assertTrue(e.getMessage().contains("Stream failed"));
+            }
         }
     }
 
     public static class StreamFailHelper
     {
+        static AtomicBoolean thrown = new AtomicBoolean();
         static void install(ClassLoader cl, int nodeNumber)
         {
             new ByteBuddy().redefine(StreamSession.class)
@@ -59,6 +73,7 @@ public class StreamPrepareFailTest extends TestBaseImpl
         }
         public static ResultMessage prepareAsync()
         {
+            thrown.set(true);
             throw new RuntimeException();
         }
     }

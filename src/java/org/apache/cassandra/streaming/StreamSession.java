@@ -702,7 +702,6 @@ public class StreamSession implements IEndpointStateChangeSubscriber
             catch (Exception e)
             {
                 onError(e);
-                throw e;
             }
         });
     }
