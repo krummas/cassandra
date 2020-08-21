@@ -23,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
@@ -69,13 +68,10 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     PrepareMessage prepareMessage = (PrepareMessage) message.payload;
                     logger.debug("Preparing, {}", prepareMessage);
 
-                    // Snapshot values so failure message is consistent with decision
-                    int pendingCompactions = CompactionManager.instance.getPendingTasks();
-                    int pendingThreshold = ActiveRepairService.instance.getRepairPendingCompactionRejectThreshold();
-                    if (pendingCompactions > pendingThreshold)
+                    if (!ActiveRepairService.verifyCompactionsPendingThreshold(prepareMessage.parentRepairSession, prepareMessage.previewKind))
                     {
-                        logErrorAndSendFailureResponse(String.format("Rejecting incoming repair, pending compactions (%d) above threshold (%d)",
-                                                                      pendingCompactions, pendingThreshold), message);
+                        // error is logged in verifyCompactionsPendingThreshold
+                        sendFailureResponse(message);
                         return;
                     }
 
@@ -233,7 +229,12 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
     private void logErrorAndSendFailureResponse(String errorMessage, Message<?> respondTo)
     {
         logger.error(errorMessage);
-        Message reply = respondTo.failureResponse(RequestFailureReason.UNKNOWN);
+        sendFailureResponse(respondTo);
+    }
+
+    private void sendFailureResponse(Message<?> respondTo)
+    {
+        Message<?> reply = respondTo.failureResponse(RequestFailureReason.UNKNOWN);
         MessagingService.instance().send(reply, respondTo.from());
     }
 }
