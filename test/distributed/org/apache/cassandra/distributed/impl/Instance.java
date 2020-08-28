@@ -121,6 +121,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     }};
 
     public final IInstanceConfig config;
+    private volatile Throwable thrownThrowable;
 
     // should never be invoked directly, so that it is instantiated on other class loader;
     // only visible for inheritance
@@ -655,7 +656,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     public Future<Void> shutdown(boolean graceful)
     {
         Future<?> future = async((ExecutorService executor) -> {
-            Throwable error = null;
+            Throwable error = thrownThrowable;
 
             error = parallelRun(error, executor,
                     () -> StorageService.instance.setRpcReady(false),
@@ -780,6 +781,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     {
         System.out.println(String.format("Exception %s occurred on thread %s", throwable.getMessage(), thread.getName()));
         throwable.printStackTrace();
+        thrownThrowable = throwable;
     }
 
     public long killAttempts()
