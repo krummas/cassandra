@@ -43,7 +43,7 @@ public class NetworkTopologyTest extends TestBaseImpl
                                                     .withRack("elsewhere", "firstrack", 1)
                                                     .withRack("elsewhere", "secondrack", 2)
                                                     .withDC("nearthere", 4)
-                                                    .start())
+                                                    .createWithoutStarting())
         {
             Assert.assertEquals(1, cluster.stream("somewhere").count());
             Assert.assertEquals(1, cluster.stream("elsewhere", "firstrack").count());
@@ -64,7 +64,7 @@ public class NetworkTopologyTest extends TestBaseImpl
 
     {
         try (ICluster cluster = builder().withRacks(2, 1, 3)
-                                         .start())
+                                         .createWithoutStarting())
         {
             Assert.assertEquals(6, cluster.stream().count());
             Assert.assertEquals(3, cluster.stream("datacenter1").count());
