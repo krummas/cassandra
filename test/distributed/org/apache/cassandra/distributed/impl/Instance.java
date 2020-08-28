@@ -127,6 +127,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     }};
 
     public final IInstanceConfig config;
+    private final List<Throwable> uncaughtExceptions = new CopyOnWriteArrayList<>();
 
     // should never be invoked directly, so that it is instantiated on other class loader;
     // only visible for inheritance
@@ -661,6 +662,11 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
         }
     }
 
+    public List<Throwable> getUncaughtExceptions()
+    {
+        return uncaughtExceptions;
+    }
+
     public Future<Void> shutdown()
     {
         return shutdown(true);
@@ -800,6 +806,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     {
         System.out.println(String.format("Exception %s occurred on thread %s", throwable.getMessage(), thread.getName()));
         throwable.printStackTrace();
+        uncaughtExceptions.add(throwable);
     }
 
     public long killAttempts()
@@ -845,4 +852,6 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
         }
         return accumulate;
     }
+
+
 }
