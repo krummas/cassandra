@@ -118,6 +118,7 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
     // mutated by user-facing API
     private final MessageFilters filters;
     private final BiConsumer<ClassLoader, Integer> instanceInitializer;
+    private final int datadirCount;
 
     private volatile Thread.UncaughtExceptionHandler previousHandler = null;
 
@@ -267,6 +268,7 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
         this.initialVersion = builder.getVersion();
         this.filters = new MessageFilters();
         this.instanceInitializer = builder.getInstanceInitializer();
+        this.datadirCount = builder.getDatadirCount();
 
         int generation = GENERATION.incrementAndGet();
         for (int i = 0; i < builder.getNodeCount(); ++i)
@@ -297,7 +299,7 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
 
         NetworkTopology topology = NetworkTopology.build(ipPrefix, broadcastPort, nodeIdTopology);
 
-        InstanceConfig config = InstanceConfig.generate(nodeNum, ipAddress, topology, root, String.valueOf(token), seedIp);
+        InstanceConfig config = InstanceConfig.generate(nodeNum, ipAddress, topology, root, String.valueOf(token), seedIp, datadirCount);
         if (configUpdater != null)
             configUpdater.accept(config);
 
