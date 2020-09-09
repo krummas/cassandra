@@ -261,8 +261,7 @@ public abstract class AbstractCompactionStrategy
     {
         for (SSTableReader remove : removed)
             removeSSTable(remove);
-        for (SSTableReader add : added)
-            addSSTable(add);
+        addSSTables(added);
     }
 
     public abstract void addSSTable(SSTableReader added);

@@ -362,7 +362,6 @@ public class CompactionStrategyManager implements INotificationConsumer
      * @param sstable
      * @return
      */
-    @VisibleForTesting
     int compactionStrategyIndexFor(SSTableReader sstable)
     {
         // should not call maybeReloadDiskBoundaries because it may be called from within lock
@@ -570,7 +569,7 @@ public class CompactionStrategyManager implements INotificationConsumer
         {
             if (repaired.first() instanceof LeveledCompactionStrategy)
             {
-                int[] res = new int[LeveledManifest.MAX_LEVEL_COUNT];
+                int[] res = new int[LeveledGenerations.MAX_LEVEL_COUNT];
                 for (AbstractCompactionStrategy strategy : getAllStrategies())
                 {
                     int[] repairedCountPerLevel = ((LeveledCompactionStrategy) strategy).getAllLevelSize();
@@ -673,8 +672,7 @@ public class CompactionStrategyManager implements INotificationConsumer
      *
      * lives in matches the list index of the holder that's responsible for it
      */
-    @VisibleForTesting
-    List<GroupedSSTableContainer> groupSSTables(Iterable<SSTableReader> sstables)
+    public List<GroupedSSTableContainer> groupSSTables(Iterable<SSTableReader> sstables)
     {
         List<GroupedSSTableContainer> classified = new ArrayList<>(holders.size());
         for (AbstractStrategyHolder holder : holders)
@@ -732,7 +730,6 @@ public class CompactionStrategyManager implements INotificationConsumer
                     continue;
 
                 AbstractStrategyHolder dstHolder = holders.get(i);
-
                 for (AbstractStrategyHolder holder : holders)
                 {
                     if (holder != dstHolder)
