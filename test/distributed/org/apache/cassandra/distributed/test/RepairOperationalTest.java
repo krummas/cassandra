@@ -22,19 +22,13 @@ import java.io.IOException;
 
 import org.junit.Test;
 
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
-import net.bytebuddy.implementation.MethodDelegation;
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.distributed.Cluster;
 import org.apache.cassandra.distributed.api.ConsistencyLevel;
 import org.apache.cassandra.distributed.api.IInvokableInstance;
-import org.assertj.core.api.Assertions;
 
-import static net.bytebuddy.matcher.ElementMatchers.named;
 import static org.apache.cassandra.distributed.api.Feature.GOSSIP;
 import static org.apache.cassandra.distributed.api.Feature.NETWORK;
+import static org.junit.Assert.assertEquals;
 
 public class RepairOperationalTest extends TestBaseImpl
 {
@@ -79,7 +73,7 @@ public class RepairOperationalTest extends TestBaseImpl
 
             // choose a node in the DC that doesn't have any replicas
             IInvokableInstance node = cluster.get(3);
-            Assertions.assertThat(node.config().localDatacenter()).isEqualTo("datacenter2");
+            assertEquals("datacenter2", node.config().localDatacenter());
             // fails with "the local data center must be part of the repair"
             node.nodetoolResult("repair", "-full",
                                 "-dc", "datacenter1", "-dc", "datacenter2",
@@ -105,7 +99,7 @@ public class RepairOperationalTest extends TestBaseImpl
 
             // choose a node in the DC that doesn't have any replicas
             IInvokableInstance node = cluster.get(3);
-            Assertions.assertThat(node.config().localDatacenter()).isEqualTo("datacenter2");
+            assertEquals("datacenter2", node.config().localDatacenter());
             // fails with "Specified hosts [127.0.0.3, 127.0.0.1] do not share range (0,1000] needed for repair. Either restrict repair ranges with -st/-et options, or specify one of the neighbors that share this range with this node: [].. Check the logs on the repair participants for further details"
             node.nodetoolResult("repair", "-full",
                                 "-hosts", cluster.get(1).broadcastAddress().getAddress().getHostAddress(),
@@ -132,7 +126,7 @@ public class RepairOperationalTest extends TestBaseImpl
 
             // choose a node in the DC that doesn't have any replicas
             IInvokableInstance node = cluster.get(3);
-            Assertions.assertThat(node.config().localDatacenter()).isEqualTo("datacenter2");
+            assertEquals("datacenter2", node.config().localDatacenter());
             // fails with [2020-09-10 11:30:04,139] Repair command #1 failed with error Nothing to repair for (0,1000] in distributed_test_keyspace - aborting. Check the logs on the repair participants for further details
             node.nodetoolResult("repair", "-full",
                                 "--ignore-unreplicated-keyspaces",
@@ -157,7 +151,7 @@ public class RepairOperationalTest extends TestBaseImpl
 
             // choose a node in the DC that doesn't have any replicas
             IInvokableInstance node = cluster.get(1);
-            Assertions.assertThat(node.config().localDatacenter()).isEqualTo("datacenter1");
+            assertEquals("datacenter2", node.config().localDatacenter());
             node.nodetoolResult("repair", "-full",
                                 "--ignore-unreplicated-keyspaces",
                                 "-st", "0", "-et", "1000",
