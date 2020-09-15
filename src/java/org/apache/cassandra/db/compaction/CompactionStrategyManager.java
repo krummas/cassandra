@@ -136,10 +136,10 @@ public class CompactionStrategyManager implements INotificationConsumer
         we will use the new compaction parameters.
      */
     private volatile CompactionParams schemaCompactionParams;
-    private boolean supportsEarlyOpen;
-    private int fanout;
-    private long maxSSTableSizeBytes;
-    private String name;
+    private volatile boolean supportsEarlyOpen;
+    private volatile int fanout;
+    private volatile long maxSSTableSizeBytes;
+    private volatile String name;
 
     public CompactionStrategyManager(ColumnFamilyStore cfs)
     {

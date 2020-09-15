@@ -94,6 +94,8 @@ class LeveledGenerations
      *
      * If the sstable is already in the manifest we skip it.
      *
+     * If the sstable exists in the manifest but has the wrong level, it is removed from the wrong level and added to the correct one
+     *
      * todo: group sstables per level, add all if level is currently empty, improve startup speed
      */
     void addAll(Iterable<SSTableReader> readers)
@@ -105,10 +107,18 @@ class LeveledGenerations
             int existingLevel = getLevelIfExists(sstable);
             if (existingLevel != -1)
             {
-                if (strictLCSChecksTest)
-                    assert sstable.getSSTableLevel() == existingLevel : "SSTable not in matching level in manifest: "+sstable + ": "+existingLevel+" != " + sstable.getSSTableLevel();
-                logger.info("Manifest already contains sstable {} at level {} - sstable level = {} - ignoring", sstable, existingLevel, sstable.getSSTableLevel());
-                continue;
+                if (sstable.getSSTableLevel() != existingLevel)
+                {
+                    logger.error("SSTable {} on the wrong level in the manifest - {} instead of {} as recorded in the sstable metadata, removing from level {}", sstable, existingLevel, sstable.getSSTableLevel(), existingLevel);
+                    if (strictLCSChecksTest)
+                        throw new AssertionError("SSTable not in matching level in manifest: "+sstable + ": "+existingLevel+" != " + sstable.getSSTableLevel());
+                    get(existingLevel).remove(sstable);
+                }
+                else
+                {
+                    logger.info("Manifest already contains {} in level {} - skipping", sstable, existingLevel);
+                    continue;
+                }
             }
 
             if (sstable.getSSTableLevel() == 0)
@@ -118,13 +128,13 @@ class LeveledGenerations
             }
 
             TreeSet<SSTableReader> level = levels[sstable.getSSTableLevel() - 1];
-/*
-current level: |-----||----||----|        |---||---|
-  new sstable:                      |--|
-                              ^ before
-                                            ^ after
-    overlap if before.last >= newsstable.first or after.first <= newsstable.last
- */
+            /*
+            current level: |-----||----||----|        |---||---|
+              new sstable:                      |--|
+                                          ^ before
+                                                        ^ after
+                overlap if before.last >= newsstable.first or after.first <= newsstable.last
+             */
             SSTableReader after = level.ceiling(sstable);
             SSTableReader before = level.floor(sstable);
 
@@ -269,6 +279,11 @@ current level: |-----||----||----|        |---||---|
         return levelsCopy;
     }
 
+    /**
+     * do extra verification of the sstables in the generations
+     *
+     * only used during tests
+     */
     private void maybeVerifyLevels()
     {
         if (!strictLCSChecksTest || System.nanoTime() - lastOverlapCheck <= TimeUnit.NANOSECONDS.convert(5, TimeUnit.SECONDS))
