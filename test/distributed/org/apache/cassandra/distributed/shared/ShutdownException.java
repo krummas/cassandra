@@ -22,24 +22,9 @@ import java.util.List;
 
 public class ShutdownException extends RuntimeException
 {
-    public final List<Throwable> uncaughtExceptions;
-
     public ShutdownException(List<Throwable> uncaughtExceptions)
     {
-        super(generateSuppressed(uncaughtExceptions));
-        this.uncaughtExceptions = uncaughtExceptions;
-    }
-
-    private static Throwable generateSuppressed(List<Throwable> throwables)
-    {
-        Throwable throwable = null;
-        for (Throwable t : throwables)
-        {
-            if (throwable == null)
-                throwable = t;
-            else
-                throwable.addSuppressed(t);
-        }
-        return throwable;
+        super("Uncaught exceptions were thrown during test");
+        uncaughtExceptions.forEach(super::addSuppressed);
     }
 }

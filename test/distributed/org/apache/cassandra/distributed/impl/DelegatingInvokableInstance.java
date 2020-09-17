@@ -123,11 +123,6 @@ public abstract class DelegatingInvokableInstance implements IInvokableInstance
         return delegate().listen();
     }
 
-    public List<Throwable> getUncaughtExceptions()
-    {
-        return delegate().getUncaughtExceptions();
-    }
-
     @Override
     public Future<Void> shutdown()
     {

@@ -28,11 +28,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -124,6 +127,8 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
     private final INodeProvisionStrategy.Strategy nodeProvisionStrategy;
     private final BiConsumer<ClassLoader, Integer> instanceInitializer;
     private volatile Thread.UncaughtExceptionHandler previousHandler = null;
+    private volatile BiPredicate<Integer, Throwable> ignoreUncaughtThrowable = null;
+    private final List<Throwable> uncaughtExceptions = new CopyOnWriteArrayList<>();
 
     /**
      * Common builder, add methods that are applicable to both Cluster and Upgradable cluster here.
@@ -653,15 +658,24 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
                 handler.uncaughtException(thread, error);
             return;
         }
+
         InstanceClassLoader cl = (InstanceClassLoader) thread.getContextClassLoader();
         get(cl.getInstanceId()).uncaughtException(thread, error);
+
+        BiPredicate<Integer, Throwable> ignore = ignoreUncaughtThrowable;
+        if (ignore == null || !ignore.test(cl.getInstanceId(), error))
+            uncaughtExceptions.add(error);
+    }
+
+    @Override
+    public void setUncaughtExceptionsFilter(BiPredicate<Integer, Throwable> ignoreUncaughtThrowable)
+    {
+        this.ignoreUncaughtThrowable = ignoreUncaughtThrowable;
     }
 
     @Override
     public void close()
     {
-        List<Throwable> uncaughtExceptions = instances.stream().map(IInstance::getUncaughtExceptions).flatMap(Collection::stream).collect(Collectors.toList());
-
         FBUtilities.waitOnFutures(instances.stream()
                                            .filter(i -> !i.isShutdown())
                                            .map(IInstance::shutdown)

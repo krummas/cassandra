@@ -130,7 +130,6 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     }};
 
     public final IInstanceConfig config;
-    private final List<Throwable> uncaughtExceptions = new CopyOnWriteArrayList<>();
 
     // should never be invoked directly, so that it is instantiated on other class loader;
     // only visible for inheritance
@@ -255,7 +254,6 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
     public void uncaughtException(Thread thread, Throwable throwable)
     {
         sync(CassandraDaemon::uncaughtException).accept(thread, throwable);
-        uncaughtExceptions.add(throwable);
     }
 
     private static IMessage serializeMessage(InetAddressAndPort from, InetAddressAndPort to, Message<?> messageOut)
@@ -525,11 +523,6 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
         {
             throw new RuntimeException(e);
         }
-    }
-
-    public List<Throwable> getUncaughtExceptions()
-    {
-        return uncaughtExceptions;
     }
 
     public Future<Void> shutdown()
