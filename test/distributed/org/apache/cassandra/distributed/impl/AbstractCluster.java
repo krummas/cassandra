@@ -689,11 +689,21 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
             FileUtils.deleteRecursive(root);
         Thread.setDefaultUncaughtExceptionHandler(previousHandler);
         previousHandler = null;
-        if (!uncaughtExceptions.isEmpty())
-            throw new ShutdownException(uncaughtExceptions);
-
+        checkAndResetUncaughtExceptions();
         //checkForThreadLeaks();
         //withThreadLeakCheck(futures);
+    }
+
+    @Override
+    public void checkAndResetUncaughtExceptions()
+    {
+        List<Throwable> drain = new ArrayList<>(uncaughtExceptions.size());
+        uncaughtExceptions.removeIf(e -> {
+            drain.add(e);
+            return true;
+        });
+        if (!drain.isEmpty())
+            throw new ShutdownException(drain);
     }
 
     private void checkForThreadLeaks()
