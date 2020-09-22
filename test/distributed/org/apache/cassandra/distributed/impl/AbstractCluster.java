@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
@@ -128,7 +129,8 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
     private final BiConsumer<ClassLoader, Integer> instanceInitializer;
     private final int datadirCount;
     private volatile Thread.UncaughtExceptionHandler previousHandler = null;
-    private volatile BiPredicate<Integer, Throwable> ignoreUncaughtThrowable = null;
+
+    private volatile BiPredicate<Integer, Throwable> ignoreUncaughtThrowable = defaultIgnoreUncaughtThrowable();
     private final List<Throwable> uncaughtExceptions = new CopyOnWriteArrayList<>();
 
     /**
@@ -672,7 +674,21 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
     @Override
     public void setUncaughtExceptionsFilter(BiPredicate<Integer, Throwable> ignoreUncaughtThrowable)
     {
-        this.ignoreUncaughtThrowable = ignoreUncaughtThrowable;
+        this.ignoreUncaughtThrowable = ignoreUncaughtThrowable == null ? defaultIgnoreUncaughtThrowable()
+                                                                       : ignoreUncaughtThrowable.or(defaultIgnoreUncaughtThrowable());
+    }
+    // todo: remove this - it is needed due to submitting tasks to already shutdown executors, probably due to incorrect order of jvm dtest shutdown
+    private static BiPredicate<Integer, Throwable> defaultIgnoreUncaughtThrowable()
+    {
+        return (i, throwable) -> {
+            do
+            {
+                if (throwable.getClass().getCanonicalName().equals(RejectedExecutionException.class.getCanonicalName()))
+                    return true;
+                throwable = throwable.getCause();
+            } while (throwable != null);
+            return false;
+        };
     }
 
     @Override
