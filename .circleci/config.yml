@@ -86,8 +86,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -167,8 +167,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -225,8 +225,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -324,8 +324,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -370,8 +370,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -462,8 +462,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -520,8 +520,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -612,8 +612,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -658,8 +658,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -750,8 +750,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
@@ -825,8 +825,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: master
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/15160
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
