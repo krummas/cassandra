@@ -151,7 +151,7 @@ public class RepairOperationalTest extends TestBaseImpl
 
             // choose a node in the DC that doesn't have any replicas
             IInvokableInstance node = cluster.get(1);
-            assertEquals("datacenter2", node.config().localDatacenter());
+            assertEquals("datacenter1", node.config().localDatacenter());
             node.nodetoolResult("repair", "-full",
                                 "--ignore-unreplicated-keyspaces",
                                 "-st", "0", "-et", "1000",
