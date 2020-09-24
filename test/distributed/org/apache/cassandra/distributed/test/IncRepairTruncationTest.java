@@ -19,9 +19,6 @@
 package org.apache.cassandra.distributed.test;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,26 +28,19 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.junit.Test;
 
-import net.bytebuddy.ByteBuddy;
-import net.bytebuddy.dynamic.loading.ClassLoadingStrategy;
-import net.bytebuddy.implementation.MethodDelegation;
-import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.repair.PendingAntiCompaction;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.distributed.Cluster;
 import org.apache.cassandra.distributed.api.ConsistencyLevel;
-import org.apache.cassandra.distributed.shared.RepairResult;
+import org.apache.cassandra.distributed.api.IMessage;
+import org.apache.cassandra.distributed.api.IMessageFilters;
+import org.apache.cassandra.distributed.api.NodeToolResult;
+import org.apache.cassandra.net.Verb;
+import org.apache.cassandra.utils.concurrent.SimpleCondition;
 
-import static net.bytebuddy.matcher.ElementMatchers.named;
-import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 import static org.apache.cassandra.distributed.api.Feature.GOSSIP;
 import static org.apache.cassandra.distributed.api.Feature.NETWORK;
 import static org.apache.cassandra.distributed.test.PreviewRepairTest.insert;
-import static org.apache.cassandra.distributed.test.PreviewRepairTest.options;
-import static org.apache.cassandra.distributed.test.PreviewRepairTest.repair;
-import static org.junit.Assert.assertFalse;
 
 public class IncRepairTruncationTest extends TestBaseImpl
 {
@@ -62,43 +52,81 @@ public class IncRepairTruncationTest extends TestBaseImpl
                                           .withConfig(config -> config.set("disable_incremental_repair", false)
                                                                       .with(GOSSIP)
                                                                       .with(NETWORK))
-                                          .withInstanceInitializer(BBHelper::install)
                                           .start()))
         {
             cluster.schemaChange("create table " + KEYSPACE + ".tbl (id int primary key, t int)");
 
             insert(cluster.coordinator(1), 0, 100);
             cluster.forEach((node) -> node.flush(KEYSPACE));
-            // everything repaired
-            cluster.get(1).callOnInstance(repair(options(false, false)));
+            // mark everything repaired
+            cluster.get(1).nodetoolResult("repair", KEYSPACE, "tbl").asserts().success();
 
-            /*
-            start repair:
-            node1 executes its anticompaction immediately
-            node2 will sleep for 3 seconds (see the bytebuddy-modified getAcquisitionCallable below)
-             */
-            Future<RepairResult> repairResult = es.submit(() -> cluster.get(1).callOnInstance(repair(options(false, false))));
             /*
             make sure we are out-of-sync to make node2 stream data to node1:
              */
             cluster.get(2).executeInternal("insert into "+KEYSPACE+".tbl (id, t) values (5, 5)");
+            cluster.get(2).flush(KEYSPACE);
             /*
-            at this point node1 will have anticompacted the sstables while node2 is still waiting for the 3s sleep
+            start repair:
+            block streaming from 2 -> 1 until truncation below has executed
              */
-            Future<?> f = es.submit( () -> cluster.coordinator(1).execute("TRUNCATE "+KEYSPACE+".tbl", ConsistencyLevel.ALL));
+            BlockMessage node2Streaming = new BlockMessage();
+            cluster.filters().inbound().verbs(Verb.VALIDATION_RSP.id).from(2).to(1).messagesMatching(node2Streaming).drop();
+
             /*
-            now truncation waits for 5 seconds on node2, meaning node1 clears its sstables but node2 still has them
-
-            during these 5 seconds the incremental will finish unless truncation aborts it, streaming data to node1
-
-            once the 5 second truncation-sleep has finished node2 will get truncated while nothing will happen on node1 and we have a mismatch
+            block truncation on node2:
              */
+            BlockMessage node2Truncation = new BlockMessage();
+            cluster.filters().inbound().verbs(Verb.TRUNCATE_REQ.id).from(1).to(2).messagesMatching(node2Truncation).drop();
 
-            f.get();
-            repairResult.get();
+            Future<NodeToolResult> repairResult = es.submit(() -> cluster.get(1).nodetoolResult("repair", KEYSPACE, "tbl"));
 
-            assertFalse(cluster.get(1).callOnInstance(repair(options(true, false))).wasInconsistent);
+            Future<?> truncationFuture = es.submit(() -> {
+                try
+                {
+                    /*
+                    wait for streaming message to sent before truncating, to make sure we have a mismatch to make us stream later
+                     */
+                    node2Streaming.gotMessage.await();
+                }
+                catch (InterruptedException e)
+                {
+                    throw new RuntimeException(e);
+                }
+                cluster.coordinator(1).execute("TRUNCATE "+KEYSPACE+".tbl", ConsistencyLevel.ALL);
+            });
 
+            node2Truncation.gotMessage.await();
+            // make sure node1 finishes truncation, removing its files
+            cluster.get(1).runOnInstance(() -> {
+                ColumnFamilyStore cfs = Keyspace.open(KEYSPACE).getColumnFamilyStore("tbl");
+                while (!cfs.getLiveSSTables().isEmpty())
+                    Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
+            });
+
+            /* let repair finish, streaming files from 2 -> 1 */
+            node2Streaming.allowMessage.signalAll();
+
+            /* and the repair should fail: */
+            repairResult.get().asserts().failure();
+
+            /*
+            and let truncation finish on node2
+             */
+            node2Truncation.allowMessage.signalAll();
+            truncationFuture.get();
+
+            /* wait for truncation to remove files on node2 */
+            cluster.get(2).runOnInstance(() -> {
+                ColumnFamilyStore cfs = Keyspace.open(KEYSPACE).getColumnFamilyStore("tbl");
+                while (!cfs.getLiveSSTables().isEmpty())
+                {
+                    System.out.println(cfs.getLiveSSTables());
+                    Uninterruptibles.sleepUninterruptibly(100, TimeUnit.MILLISECONDS);
+                }
+            });
+
+            cluster.get(1).nodetoolResult("repair", "-vd", KEYSPACE, "tbl").asserts().success().notificationContains("Repair preview completed successfully");
         }
         finally
         {
@@ -106,38 +134,23 @@ public class IncRepairTruncationTest extends TestBaseImpl
         }
     }
 
-    public static class BBHelper
+    private static class BlockMessage implements IMessageFilters.Matcher
     {
-        @SuppressWarnings({ "unused", "UnstableApiUsage" })
-        public static PendingAntiCompaction.AcquisitionCallable getAcquisitionCallable(ColumnFamilyStore cfs, Collection<Range<Token>> ranges, UUID prsId, int acquireRetrySeconds, int acquireSleepMillis, @SuperCall Callable<PendingAntiCompaction.AcquisitionCallable> zuper) throws Exception
-        {
-            Uninterruptibles.sleepUninterruptibly(3, TimeUnit.SECONDS);
-            return zuper.call();
-        }
+        private final SimpleCondition gotMessage = new SimpleCondition();
+        private final SimpleCondition allowMessage = new SimpleCondition();
 
-        @SuppressWarnings({ "unused", "UnstableApiUsage" })
-        public static <V> V runWithCompactionsDisabled(Callable<V> callable, boolean interruptValidation, boolean interruptViews, @SuperCall Callable<V> zuper) throws Exception
+        public boolean matches(int from, int to, IMessage message)
         {
-            Uninterruptibles.sleepUninterruptibly(5, TimeUnit.SECONDS);
-            return zuper.call();
-        }
-
-        public static void install(ClassLoader classLoader, Integer num)
-        {
-            if (num == 2)
+            gotMessage.signalAll();
+            try
             {
-                new ByteBuddy().rebase(PendingAntiCompaction.class)
-                               .method(named("getAcquisitionCallable"))
-                               .intercept(MethodDelegation.to(BBHelper.class))
-                               .make()
-                               .load(classLoader, ClassLoadingStrategy.Default.INJECTION);
-
-                new ByteBuddy().rebase(ColumnFamilyStore.class)
-                               .method(named("runWithCompactionsDisabled").and(takesArguments(3)))
-                               .intercept(MethodDelegation.to(BBHelper.class))
-                               .make()
-                               .load(classLoader, ClassLoadingStrategy.Default.INJECTION);
+                allowMessage.await();
             }
+            catch (InterruptedException e)
+            {
+                throw new RuntimeException(e);
+            }
+            return false;
         }
     }
 }

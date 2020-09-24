@@ -37,6 +37,7 @@ import org.apache.cassandra.repair.asymmetric.HostDifferences;
 import org.apache.cassandra.repair.asymmetric.PreferedNodeFilter;
 import org.apache.cassandra.repair.asymmetric.ReduceHelper;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -188,6 +189,8 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                                                            session.isIncremental,
                                                            session.pullRepair,
                                                            session.previewKind);
+        // this throws if the parent session has failed
+        ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
         return executeTasks(syncTasks);
     }
 
@@ -268,6 +271,8 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                                                                    session.isIncremental,
                                                                    session.previewKind);
 
+        // this throws if the parent session has failed
+        ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
         return executeTasks(syncTasks);
     }
 
