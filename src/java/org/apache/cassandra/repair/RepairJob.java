@@ -189,8 +189,6 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                                                            session.isIncremental,
                                                            session.pullRepair,
                                                            session.previewKind);
-        // this throws if the parent session has failed
-        ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
         return executeTasks(syncTasks);
     }
 
@@ -271,14 +269,14 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                                                                    session.isIncremental,
                                                                    session.previewKind);
 
-        // this throws if the parent session has failed
-        ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
         return executeTasks(syncTasks);
     }
 
     @VisibleForTesting
     ListenableFuture<List<SyncStat>> executeTasks(List<SyncTask> syncTasks)
     {
+        // this throws if the parent session has failed
+        ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
         for (SyncTask task : syncTasks)
         {
             if (!task.isLocal())
