@@ -1262,6 +1262,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public void apply(PartitionUpdate update, UpdateTransaction indexer, OpOrder.Group opGroup, CommitLogPosition commitLogPosition)
 
     {
+        if (!metadata.keyspace.contains("system"))
+            logger.info("XYZ {}", update);
         long start = System.nanoTime();
         try
         {
