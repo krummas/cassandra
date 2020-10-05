@@ -1263,7 +1263,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     {
         if (!metadata.keyspace.contains("system"))
-            logger.info("XYZ {}", update);
+            logger.info("XYZ {}", update, new RuntimeException());
         long start = System.nanoTime();
         try
         {
