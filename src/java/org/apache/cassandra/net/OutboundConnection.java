@@ -50,6 +50,7 @@ import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.PromiseNotifier;
 import io.netty.util.concurrent.SucceededFuture;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.Mutation;
 import org.apache.cassandra.io.util.DataOutputBufferFixed;
 import org.apache.cassandra.net.OutboundConnectionInitiator.Result.MessagingSuccess;
 import org.apache.cassandra.tracing.Tracing;
@@ -322,7 +323,10 @@ public class OutboundConnection
     {
         if (isClosing())
             throw new ClosedChannelException();
-
+        if (message.payload instanceof Mutation)
+        {
+            logger.info("XXX enqueuing message {}", message.payload, new RuntimeException());
+        }
         final int canonicalSize = canonicalSize(message);
         if (canonicalSize > DatabaseDescriptor.getInternodeMaxMessageSizeInBytes())
             throw new Message.OversizedMessageException(canonicalSize);
@@ -810,6 +814,8 @@ public class OutboundConnection
                         }
 
                         Tracing.instance.traceOutgoingMessage(next, messageSize, settings.connectTo);
+                        if (next.payload instanceof Mutation)
+                            logger.info("XXX Sending message to {}", settings.connectTo, new RuntimeException());
                         Message.serializer.serialize(next, out, messagingVersion);
 
                         if (sending.length() != sendingBytes + messageSize)
