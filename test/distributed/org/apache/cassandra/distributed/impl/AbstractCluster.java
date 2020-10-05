@@ -624,7 +624,8 @@ public abstract class AbstractCluster<I extends IInstance> implements ICluster<I
         get(cl.getInstanceId()).uncaughtException(thread, error);
 
         BiPredicate<Integer, Throwable> ignore = ignoreUncaughtThrowable;
-        if (ignore == null || !ignore.test(cl.getInstanceId(), error))
+        I instance = get(cl.getInstanceId());
+        if ((ignore == null || !ignore.test(cl.getInstanceId(), error)) && instance != null && !instance.isShutdown())
             uncaughtExceptions.add(error);
     }
 
