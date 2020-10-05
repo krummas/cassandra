@@ -25,6 +25,9 @@ import com.google.common.base.Preconditions;
 import com.codahale.metrics.Meter;
 import com.google.common.base.Predicates;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -118,11 +121,13 @@ public abstract class AbstractReadRepair<E extends Endpoints<E>, P extends Repli
     }
 
     abstract Meter getRepairMeter();
-
+    private static final Logger logger = LoggerFactory.getLogger(AbstractReadRepair.class);
     // digestResolver isn't used here because we resend read requests to all participants
     public void startRepair(DigestResolver<E, P> digestResolver, Consumer<PartitionIterator> resultConsumer)
     {
+        logger.info("XYZ MARKING RR {}", getRepairMeter().getCount());
         getRepairMeter().mark();
+        logger.info("XYZ MARKED RR {}", getRepairMeter().getCount());
 
         // Do a full data read to resolve the correct response (and repair node that need be)
         DataResolver<E, P> resolver = new DataResolver<>(command, replicaPlan, this, queryStartNanoTime);
