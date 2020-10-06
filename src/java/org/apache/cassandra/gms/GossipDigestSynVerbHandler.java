@@ -38,8 +38,7 @@ public class GossipDigestSynVerbHandler extends GossipVerbHandler<GossipDigestSy
     public void doVerb(Message<GossipDigestSyn> message)
     {
         InetAddressAndPort from = message.from();
-        if (logger.isTraceEnabled())
-            logger.trace("Received a GossipDigestSynMessage from {}", from);
+        logger.info("Received a GossipDigestSynMessage from {}", from);
         if (!Gossiper.instance.isEnabled() && !Gossiper.instance.isInShadowRound())
         {
             if (logger.isTraceEnabled())
@@ -102,8 +101,7 @@ public class GossipDigestSynVerbHandler extends GossipVerbHandler<GossipDigestSy
         Gossiper.instance.examineGossiper(gDigestList, deltaGossipDigestList, deltaEpStateMap);
         logger.trace("sending {} digests and {} deltas", deltaGossipDigestList.size(), deltaEpStateMap.size());
         Message<GossipDigestAck> gDigestAckMessage = Message.out(GOSSIP_DIGEST_ACK, new GossipDigestAck(deltaGossipDigestList, deltaEpStateMap));
-        if (logger.isTraceEnabled())
-            logger.trace("Sending a GossipDigestAckMessage to {}", from);
+        logger.info("Sending a GossipDigestAckMessage to {}", from);
         MessagingService.instance().send(gDigestAckMessage, from);
 
         super.doVerb(message);

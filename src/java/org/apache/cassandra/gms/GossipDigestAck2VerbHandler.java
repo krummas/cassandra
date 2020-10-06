@@ -33,11 +33,8 @@ public class GossipDigestAck2VerbHandler extends GossipVerbHandler<GossipDigestA
 
     public void doVerb(Message<GossipDigestAck2> message)
     {
-        if (logger.isTraceEnabled())
-        {
-            InetAddressAndPort from = message.from();
-            logger.trace("Received a GossipDigestAck2Message from {}", from);
-        }
+        InetAddressAndPort from = message.from();
+        logger.info("Received a GossipDigestAck2Message from {}", from);
         if (!Gossiper.instance.isEnabled())
         {
             if (logger.isTraceEnabled())
@@ -48,7 +45,7 @@ public class GossipDigestAck2VerbHandler extends GossipVerbHandler<GossipDigestA
         /* Notify the Failure Detector */
         Gossiper.instance.notifyFailureDetector(remoteEpStateMap);
         Gossiper.instance.applyStateLocally(remoteEpStateMap);
-
+        logger.info("APPLY STATE LOCALLY {}", remoteEpStateMap);
         super.doVerb(message);
     }
 }
