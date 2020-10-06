@@ -39,7 +39,7 @@ public class GossipDigestAckVerbHandler extends GossipVerbHandler<GossipDigestAc
     public void doVerb(Message<GossipDigestAck> message)
     {
         InetAddressAndPort from = message.from();
-        logger.info("Received a GossipDigestAckMessage from {}", from);
+        logger.info("Received a GossipDigestAckMessage {} from {}", message.payload.epStateMap, from);
         if (!Gossiper.instance.isEnabled() && !Gossiper.instance.isInShadowRound())
         {
             if (logger.isTraceEnabled())

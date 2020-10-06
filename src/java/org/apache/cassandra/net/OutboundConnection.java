@@ -1225,7 +1225,7 @@ public class OutboundConnection
                         return;
                     if (future.isSuccess()) //noinspection unchecked
                     {
-                        logger.info("completed handshake");
+                        logger.info("completed handshake", new RuntimeException());
                         onCompletedHandshake((Result<MessagingSuccess>) future.getNow());
                     }
                     else
