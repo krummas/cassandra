@@ -19,6 +19,7 @@ package org.apache.cassandra.service;
  * under the License.
  *
  */
+import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
@@ -37,12 +38,18 @@ public class EchoVerbHandler implements IVerbHandler<NoPayload>
 
     public void doVerb(Message<NoPayload> message)
     {
-        logger.info("Sending ECHO_RSP to {}", message.from());
-        logger.info("ENDPOINTSTATEMAP: {}", Gossiper.instance.endpointStateMap);
         // only respond if we think we are alive
+        Message response;
         if (!StorageService.instance.isShutdown())
-            MessagingService.instance().send(message.emptyResponse(), message.from());
+        {
+            logger.trace("Sending ECHO_RSP to {}", message.from());
+            response = message.emptyResponse();
+        }
         else
-            logger.warn("Not replying to ECHO_REQ from {}", message.from());
+        {
+            logger.trace("Not sending ECHO_RSP to {} - we are shutdown", message.from());
+            response = message.failureResponse(RequestFailureReason.SHUTDOWN_NODE);
+        }
+        MessagingService.instance().send(response, message.from());
     }
 }
