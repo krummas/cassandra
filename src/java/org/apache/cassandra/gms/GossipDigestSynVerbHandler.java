@@ -101,7 +101,7 @@ public class GossipDigestSynVerbHandler extends GossipVerbHandler<GossipDigestSy
         Gossiper.instance.examineGossiper(gDigestList, deltaGossipDigestList, deltaEpStateMap);
         logger.trace("sending {} digests and {} deltas", deltaGossipDigestList.size(), deltaEpStateMap.size());
         Message<GossipDigestAck> gDigestAckMessage = Message.out(GOSSIP_DIGEST_ACK, new GossipDigestAck(deltaGossipDigestList, deltaEpStateMap));
-        logger.info("Sending a GossipDigestAckMessage to {}", from);
+        logger.info("Sending a GossipDigestAckMessage {} to {}", gDigestAckMessage.payload.epStateMap, from);
         MessagingService.instance().send(gDigestAckMessage, from);
 
         super.doVerb(message);
