@@ -19,10 +19,12 @@ package org.apache.cassandra.service;
  * under the License.
  *
  */
+import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.NoPayload;
+import org.apache.cassandra.utils.FBUtilities;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +38,10 @@ public class EchoVerbHandler implements IVerbHandler<NoPayload>
     public void doVerb(Message<NoPayload> message)
     {
         logger.info("Sending ECHO_RSP to {}", message.from());
-        MessagingService.instance().send(message.emptyResponse(), message.from());
+        // only respond if we think we are alive
+        if (Gossiper.instance.getEndpointStateForEndpoint(FBUtilities.getBroadcastAddressAndPort()).isAlive())
+            MessagingService.instance().send(message.emptyResponse(), message.from());
+        else
+            logger.warn("Not replying to ECHO_REQ from {}", message.from());
     }
 }
