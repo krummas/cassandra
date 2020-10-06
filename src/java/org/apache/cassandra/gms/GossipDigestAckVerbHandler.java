@@ -51,7 +51,7 @@ public class GossipDigestAckVerbHandler extends GossipVerbHandler<GossipDigestAc
         List<GossipDigest> gDigestList = gDigestAckMessage.getGossipDigestList();
         Map<InetAddressAndPort, EndpointState> epStateMap = gDigestAckMessage.getEndpointStateMap();
         logger.trace("Received ack with {} digests and {} states", gDigestList.size(), epStateMap.size());
-
+        logger.info("GossipDigestAck epstates: {}", epStateMap);
         if (Gossiper.instance.isInShadowRound())
         {
             if (logger.isDebugEnabled())
@@ -69,8 +69,7 @@ public class GossipDigestAckVerbHandler extends GossipVerbHandler<GossipDigestAc
             // the regular gossip conversation.
             if ((System.nanoTime() - Gossiper.instance.firstSynSendAt) < 0 || Gossiper.instance.firstSynSendAt == 0)
             {
-                if (logger.isTraceEnabled())
-                    logger.trace("Ignoring unrequested GossipDigestAck from {}", from);
+                logger.info("Ignoring unrequested GossipDigestAck from {}", from);
                 return;
             }
 
@@ -90,7 +89,7 @@ public class GossipDigestAckVerbHandler extends GossipVerbHandler<GossipDigestAc
         }
 
         Message<GossipDigestAck2> gDigestAck2Message = Message.out(GOSSIP_DIGEST_ACK2, new GossipDigestAck2(deltaEpStateMap));
-        logger.info("Sending a GossipDigestAck2Message to {}", from);
+        logger.info("Sending a GossipDigestAck2Message {} to {}", gDigestAck2Message.payload.epStateMap, from);
         MessagingService.instance().send(gDigestAck2Message, from);
 
         super.doVerb(message);

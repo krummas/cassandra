@@ -1829,7 +1829,9 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
             Message message = Message.out(Verb.GOSSIP_SHUTDOWN, noPayload);
             for (InetAddressAndPort ep : liveEndpoints)
                 MessagingService.instance().send(message, ep);
+            logger.info("SENT SHUTDOWN MESSAGES");
             Uninterruptibles.sleepUninterruptibly(Integer.getInteger("cassandra.shutdown_announce_in_ms", 2000), TimeUnit.MILLISECONDS);
+            logger.info("WAITED FOR SHUTDOWN ANNOUNCE");
         }
         else
             logger.warn("No local state, state is in silent shutdown, or node hasn't joined, not announcing shutdown");

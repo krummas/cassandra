@@ -31,12 +31,14 @@ public class GossipShutdownVerbHandler implements IVerbHandler
 
     public void doVerb(Message message)
     {
+        logger.info("GOT SHUTDOWN VERB");
         if (!Gossiper.instance.isEnabled())
         {
             logger.debug("Ignoring shutdown message from {} because gossip is disabled", message.from());
             return;
         }
         Gossiper.instance.markAsShutdown(message.from());
+        logger.info("PROCESSED SHUTDOWN VERB");
     }
 
 }
