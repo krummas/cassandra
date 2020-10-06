@@ -1218,13 +1218,16 @@ public class OutboundConnection
 
                 // ensure we connect to the correct SSL port
                 settings = settings.withLegacyPortIfNecessary(messagingVersion);
-
+                logger.info("xyz initiating messaging");
                 initiateMessaging(eventLoop, type, settings, messagingVersion, result)
                 .addListener(future -> {
                     if (future.isCancelled())
                         return;
                     if (future.isSuccess()) //noinspection unchecked
+                    {
+                        logger.info("completed handshake");
                         onCompletedHandshake((Result<MessagingSuccess>) future.getNow());
+                    }
                     else
                         onFailure(future.cause());
                 });
