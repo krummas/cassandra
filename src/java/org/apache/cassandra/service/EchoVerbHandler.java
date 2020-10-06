@@ -40,7 +40,7 @@ public class EchoVerbHandler implements IVerbHandler<NoPayload>
         logger.info("Sending ECHO_RSP to {}", message.from());
         logger.info("ENDPOINTSTATEMAP: {}", Gossiper.instance.endpointStateMap);
         // only respond if we think we are alive
-        if (Gossiper.instance.getEndpointStateForEndpoint(FBUtilities.getBroadcastAddressAndPort()).isAlive())
+        if (!StorageService.instance.isShutdown())
             MessagingService.instance().send(message.emptyResponse(), message.from());
         else
             logger.warn("Not replying to ECHO_REQ from {}", message.from());
