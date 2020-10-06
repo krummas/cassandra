@@ -1165,7 +1165,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
         localState.markDead();
 
         Message<NoPayload> echoMessage = Message.out(ECHO_REQ, noPayload);
-        logger.trace("Sending ECHO_REQ to {}", addr);
+        logger.info("Sending ECHO_REQ to {}", addr, new RuntimeException());
         RequestCallback echoHandler = msg ->
         {
             // force processing of the echo response onto the gossip stage, as it comes in on the REQUEST_RESPONSE stage
