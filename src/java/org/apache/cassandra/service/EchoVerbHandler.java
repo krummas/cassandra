@@ -38,6 +38,7 @@ public class EchoVerbHandler implements IVerbHandler<NoPayload>
     public void doVerb(Message<NoPayload> message)
     {
         logger.info("Sending ECHO_RSP to {}", message.from());
+        logger.info("ENDPOINTSTATEMAP: {}", Gossiper.instance.endpointStateMap);
         // only respond if we think we are alive
         if (Gossiper.instance.getEndpointStateForEndpoint(FBUtilities.getBroadcastAddressAndPort()).isAlive())
             MessagingService.instance().send(message.emptyResponse(), message.from());
