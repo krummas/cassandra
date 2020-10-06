@@ -19,6 +19,7 @@ package org.apache.cassandra.service;
  * under the License.
  *
  */
+import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.MessagingService;
@@ -35,7 +36,18 @@ public class EchoVerbHandler implements IVerbHandler<NoPayload>
 
     public void doVerb(Message<NoPayload> message)
     {
-        logger.trace("Sending ECHO_RSP to {}", message.from());
-        MessagingService.instance().send(message.emptyResponse(), message.from());
+        // only respond if we are not shutdown
+        Message response;
+        if (!StorageService.instance.isShutdown())
+        {
+            logger.trace("Sending ECHO_RSP to {}", message.from());
+            response = message.emptyResponse();
+        }
+        else
+        {
+            logger.trace("Not sending ECHO_RSP to {} - we are shutdown", message.from());
+            response = message.failureResponse(RequestFailureReason.SHUTDOWN_NODE);
+        }
+        MessagingService.instance().send(response, message.from());
     }
 }
