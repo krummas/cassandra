@@ -21,6 +21,7 @@ package org.apache.cassandra.distributed.test;
 import java.io.IOException;
 
 import com.google.common.collect.Iterables;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -235,6 +236,7 @@ public class FakeTombstonesTest extends TestBaseImpl
     }
 
     @Test
+    @Ignore
     public void perfTest() throws IOException
     {
         try (Cluster cluster = init(builder().withNodes(1).start()))
