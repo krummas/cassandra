@@ -942,7 +942,7 @@ public class SinglePartitionReadCommand extends ReadCommand implements SinglePar
         }
 
         NavigableSet<Clustering<?>> toRemove = null;
-        try (UnfilteredRowIterator iterator = result.unfilteredIterator(columnFilter(), filter.getSlices(metadata()), false))
+        try (UnfilteredRowIterator iterator = result.unfilteredIterator(columnFilter(), clusterings, false))
         {
             while (iterator.hasNext())
             {

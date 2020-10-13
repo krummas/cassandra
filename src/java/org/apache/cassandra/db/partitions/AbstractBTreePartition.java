@@ -130,6 +130,7 @@ public abstract class AbstractBTreePartition implements Partition, Iterable<Row>
 
         if (row == null)
         {
+            //review:  we used to return null if the partition deletion deleted everything, now only if there is no deletion active
             return activeDeletion.isLive()
                    ? null
                    : BTreeRow.emptyDeletedRow(clustering, Row.Deletion.regular(activeDeletion));

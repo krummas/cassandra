@@ -127,7 +127,7 @@ public class UpdateStatement extends ModificationStatement
 
             checkFalse(columnNames == null, "Column names for INSERT must be provided when using VALUES");
             checkFalse(columnNames.isEmpty(), "No columns provided to INSERT");
-            checkFalse(columnNames.size() != columnValues.size(), "Unmatched column names/values");
+            checkFalse(columnNames.size() != columnValues.size(), "Unmatched column names/values names: "+columnNames.size()+", values: "+columnValues.size());
             checkContainsNoDuplicates(columnNames, "The column names contains duplicates");
 
             WhereClause.Builder whereClause = new WhereClause.Builder();

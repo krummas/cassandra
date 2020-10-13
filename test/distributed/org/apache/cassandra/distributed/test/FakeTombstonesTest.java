@@ -18,6 +18,8 @@
 
 package org.apache.cassandra.distributed.test;
 
+import java.io.IOException;
+
 import com.google.common.collect.Iterables;
 import org.junit.Test;
 
@@ -52,6 +54,12 @@ public class FakeTombstonesTest extends TestBaseImpl
                 partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
                 Row[info=[ts=-9223372036854775808] del=deletedAt=1602162729030000, localDeletion=1602162729 ]: ck=15 |
                  */
+                /*
+                XXX DecoratedKey(-7509452495886106294, 00000005)
+                partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
+                Marker INCL_START_BOUND(15)@1602498476594000/1602498476
+                Marker INCL_END_BOUND(15)@1602498476594000/1602498476
+                */
             });
         }
     }
@@ -81,6 +89,12 @@ public class FakeTombstonesTest extends TestBaseImpl
                 Marker INCL_START_BOUND(15)@1602162932497000/1602162932
                 Marker INCL_END_BOUND(15)@1602162932497000/1602162932
                  */
+                /*
+                XXX DecoratedKey(-7509452495886106294, 00000005)
+                partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
+                Marker INCL_START_BOUND(15)@1602498524469000/1602498524
+                Marker INCL_END_BOUND(15)@1602498524469000/1602498524
+                */
             });
         }
     }
@@ -103,6 +117,12 @@ public class FakeTombstonesTest extends TestBaseImpl
                 partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
                 Marker EXCL_START_BOUND(15)@1602163225503000/1602163225
                 Marker EXCL_END_BOUND(20)@1602163225503000/1602163225
+                 */
+                /*
+                XXX DecoratedKey(-7509452495886106294, 00000005)
+                partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
+                Marker EXCL_START_BOUND(15)@1602499763070000/1602499763
+                Marker EXCL_END_BOUND(20)@1602499763070000/1602499763
                  */
             });
         }
@@ -129,6 +149,12 @@ public class FakeTombstonesTest extends TestBaseImpl
                 Marker EXCL_START_BOUND(15)@1602163277639000/1602163277
                 Marker EXCL_END_BOUND(20)@1602163277639000/1602163277
                  */
+                /*
+                XXX DecoratedKey(-7509452495886106294, 00000005)
+                partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
+                Marker EXCL_START_BOUND(15)@1602498932246000/1602498932
+                Marker EXCL_END_BOUND(20)@1602498932246000/1602498932
+                 */
             });
         }
     }
@@ -153,6 +179,13 @@ public class FakeTombstonesTest extends TestBaseImpl
                 Marker EXCL_START_BOUND(10)@1602163579254000/1602163579
                 Marker EXCL_END_BOUND(20)@1602163579254000/1602163579
                 */
+
+                /*
+                XXX DecoratedKey(-7509452495886106294, 00000005)
+                partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
+                Marker EXCL_START_BOUND(10)@1602498900980000/1602498900
+                Marker EXCL_END_BOUND(20)@1602498900980000/1602498900
+                 */
             });
         }
     }
@@ -175,9 +208,100 @@ public class FakeTombstonesTest extends TestBaseImpl
                 partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
                 Row[info=[ts=-9223372036854775808] del=deletedAt=1602163749938000, localDeletion=1602163749 ]: ck=10 |
                  */
+                /*
+                XXX DecoratedKey(-7509452495886106294, 00000005)
+                partitionLevelDeletion: deletedAt=-9223372036854775808, localDeletion=2147483647
+                Row[info=[ts=-9223372036854775808] del=deletedAt=1602498612164000, localDeletion=1602498612 ]: ck=10 |
+                 */
             });
         }
     }
+
+    @Test
+    public void rrFake7Test() throws IOException
+    {
+        try (Cluster cluster = init(builder().withNodes(2).start()))
+        {
+            cluster.schemaChange("CREATE TABLE "+KEYSPACE+".tbl (id int, ck int, v int, PRIMARY KEY (id, ck))");
+            cluster.get(2).executeInternal("DELETE FROM "+KEYSPACE+".tbl WHERE id = 5");
+            cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl WHERE id = 5 and ck = 10", ConsistencyLevel.ALL);
+            cluster.get(1).flush(KEYSPACE);
+
+            cluster.get(1).runOnInstance(() -> {
+                ColumnFamilyStore cfs = Keyspace.open(KEYSPACE).getColumnFamilyStore("tbl");
+                dump(cfs);
+            });
+        }
+    }
+
+    @Test
+    public void perfTest() throws IOException
+    {
+        try (Cluster cluster = init(builder().withNodes(1).start()))
+        {
+            StringBuilder table = new StringBuilder("CREATE TABLE ").append(KEYSPACE).append(".tbl (id int");
+            StringBuilder cols = new StringBuilder();
+            StringBuilder cks = new StringBuilder();
+            StringBuilder pk = new StringBuilder(", PRIMARY KEY (id");
+            StringBuilder markers = new StringBuilder("");
+            StringBuilder where = new StringBuilder(" ");
+
+            StringBuilder insert = new StringBuilder("INSERT INTO ").append(KEYSPACE).append(".tbl").append("(id");
+
+            for (int i = 0; i < 100; i++)
+            {
+                cks.append(", ck").append(i).append(" int");
+                cols.append(", col").append(i).append(" int");
+                pk.append(", ck").append(i);
+                if (i > 0)
+                    markers.append(',');
+                markers.append('?');
+                insert.append(", ck").append(i);
+                where.append(" AND ck").append(i).append("=?");
+            }
+            insert.append(", col%d) VALUES (1, ?, ").append(markers).append(')');
+
+            table.append(cks).append(cols).append(pk).append(")) WITH COMPACTION = {'class': 'SizeTieredCompactionStrategy', 'enabled':'false'}");
+            cluster.schemaChange(table.toString());
+
+            for (int i = 0; i < 100; i++)
+            {
+                Integer [] vals = vals(101, 1000 - i);
+                cluster.coordinator(1).execute(String.format(insert.toString(), i), ConsistencyLevel.ALL, (Object[]) vals);
+                cluster.get(1).flush(KEYSPACE);
+            }
+
+            long [] times = new long[10];
+            for (int j = 0; j < times.length; j++)
+            {
+                long start = System.nanoTime();
+                for (int i = 0; i < 1000; i++)
+                {
+                    cluster.coordinator(1).execute("SELECT ck0, ck1 FROM " + KEYSPACE + ".tbl WHERE id=1 " + where, ConsistencyLevel.ALL, (Object[]) vals(100, 99));
+                }
+                times[j] = System.nanoTime() - start;
+                System.out.println("xxx: "+(System.nanoTime() - start));
+            }
+            long sum = 0;
+            for (long t : times)
+                sum += t;
+            System.out.println("xxxavg: "+(sum / times.length));
+            //xxxavg: 3490811780
+            //xxxavg: 3015965839 <- trunk
+        }
+    }
+
+    private Integer[] vals(int count, int lastVal)
+    {
+        Integer [] v = new Integer[count];
+        for (int i = 0; i < count; i++)
+        {
+            v[i] = i;
+        }
+        v[count-1]=lastVal;
+        return v;
+    }
+
 
 
 
