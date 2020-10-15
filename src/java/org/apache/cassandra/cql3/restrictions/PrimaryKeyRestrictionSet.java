@@ -34,7 +34,7 @@ import org.apache.cassandra.utils.btree.BTreeSet;
 /**
  * A set of single column restrictions on a primary key part (partition key or clustering key).
  */
-final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions implements Iterable<Restriction>
+final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions
 {
     /**
      * The restrictions.
@@ -160,14 +160,16 @@ final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions impl
     @Override
     public NavigableSet<Clustering> valuesAsClustering(QueryOptions options) throws InvalidRequestException
     {
-        return appendTo(MultiCBuilder.create(comparator), options).build();
+        return appendTo(MultiCBuilder.create(comparator, size()), options).build();
     }
 
     @Override
     public MultiCBuilder appendTo(MultiCBuilder builder, QueryOptions options)
     {
-        for (Restriction r : restrictions)
+        List<Restriction> restrictionsList = restrictions.restrictionsList();
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
         {
+            Restriction r = restrictionsList.get(i);
             r.appendTo(builder, options);
             if (builder.hasMissingElements())
                 break;
@@ -184,10 +186,12 @@ final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions impl
     @Override
     public NavigableSet<Slice.Bound> boundsAsClustering(Bound bound, QueryOptions options) throws InvalidRequestException
     {
-        MultiCBuilder builder = MultiCBuilder.create(comparator);
+        MultiCBuilder builder = MultiCBuilder.create(comparator, restrictions.size());
         int keyPosition = 0;
-        for (Restriction r : restrictions)
+        List<Restriction> restrictionsList = restrictions.restrictionsList();
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
         {
+            Restriction r = restrictionsList.get(i);
             ColumnDefinition def = r.getFirstColumn();
 
             if (keyPosition != def.position() || r.isContains())
@@ -260,9 +264,10 @@ final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions impl
                                QueryOptions options) throws InvalidRequestException
     {
         int position = 0;
-
-        for (Restriction restriction : restrictions)
+        List<Restriction> restrictionsList = restrictions.restrictionsList();
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
         {
+            Restriction restriction = restrictionsList.get(i);
             // We ignore all the clustering columns that can be handled by slices.
             if (isPartitionKey || handleInFilter(restriction, position) || restriction.hasSupportingIndex(indexManager))
             {
@@ -299,8 +304,10 @@ final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions impl
         // As that suggests, this should only be called on clustering column
         // and not partition key restrictions.
         int position = 0;
-        for (Restriction restriction : restrictions)
+        List<Restriction> restrictionsList = restrictions.restrictionsList();
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
         {
+            Restriction restriction = restrictionsList.get(i);
             if (handleInFilter(restriction, position))
                 return true;
 
@@ -316,8 +323,18 @@ final class PrimaryKeyRestrictionSet extends AbstractPrimaryKeyRestrictions impl
         return restriction.isContains() || index != restriction.getFirstColumn().position();
     }
 
-    public Iterator<Restriction> iterator()
+    public boolean isEmpty()
     {
-        return restrictions.iterator();
+        return restrictions.isEmpty();
+    }
+
+    public int size()
+    {
+        return restrictions.size();
+    }
+
+    public List<Restriction> restrictionsList()
+    {
+        return restrictions.restrictionsList();
     }
 }

@@ -46,16 +46,4 @@ abstract class AbstractPrimaryKeyRestrictions extends AbstractRestriction implem
     {
         return values(options);
     }
-
-    @Override
-    public final boolean isEmpty()
-    {
-        return getColumnDefs().isEmpty();
-    }
-
-    @Override
-    public final int size()
-    {
-        return getColumnDefs().size();
-    }
 }

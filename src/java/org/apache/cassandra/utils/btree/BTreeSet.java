@@ -590,6 +590,11 @@ public class BTreeSet<V> implements NavigableSet<V>, List<V>
             builder= BTree.builder(comparator);
         }
 
+        protected Builder(Comparator<? super V> comparator, int initialSize)
+        {
+            builder = BTree.builder(comparator, initialSize);
+        }
+
         public Builder<V> add(V v)
         {
             builder.add(v);
@@ -615,6 +620,11 @@ public class BTreeSet<V> implements NavigableSet<V>, List<V>
     public static <V> Builder<V> builder(Comparator<? super V> comparator)
     {
         return new Builder<>(comparator);
+    }
+
+    public static <V> Builder<V> builder(Comparator<? super V> comparator, int initialSize)
+    {
+        return new Builder<>(comparator, initialSize);
     }
 
     public static <V> BTreeSet<V> wrap(Object[] btree, Comparator<V> comparator)

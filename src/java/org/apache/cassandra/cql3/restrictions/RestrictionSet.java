@@ -19,6 +19,8 @@ package org.apache.cassandra.cql3.restrictions;
 
 import java.util.*;
 
+import com.google.common.collect.ImmutableList;
+
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.cql3.QueryOptions;
 import org.apache.cassandra.cql3.functions.Function;
@@ -33,7 +35,7 @@ import org.apache.cassandra.index.SecondaryIndexManager;
  * <p>This class is immutable in order to be use within {@link PrimaryKeyRestrictionSet} which as
  * an implementation of {@link Restriction} need to be immutable.
  */
-final class RestrictionSet implements Restrictions, Iterable<Restriction>
+final class RestrictionSet implements Restrictions
 {
     /**
      * The comparator used to sort the <code>Restriction</code>s.
@@ -51,16 +53,35 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
     /**
      * The restrictions per column.
      */
-    protected final TreeMap<ColumnDefinition, Restriction> restrictions;
+    private static final TreeMap<ColumnDefinition, Restriction> EMPTY = new TreeMap<>(COLUMN_DEFINITION_COMPARATOR);
+    private final NavigableMap<ColumnDefinition, Restriction> restrictions;
+    private final ImmutableList<Restriction> restrictionsList;
 
     public RestrictionSet()
     {
-        this(new TreeMap<ColumnDefinition, Restriction>(COLUMN_DEFINITION_COMPARATOR));
+        this(EMPTY);
     }
 
-    private RestrictionSet(TreeMap<ColumnDefinition, Restriction> restrictions)
+    private RestrictionSet(NavigableMap<ColumnDefinition, Restriction> restrictions)
     {
         this.restrictions = restrictions;
+        restrictionsList = uniqueRestrictions(restrictions.values());
+    }
+
+    private static ImmutableList<Restriction> uniqueRestrictions(Collection<Restriction> restrictions)
+    {
+        ImmutableList.Builder<Restriction> builder = new ImmutableList.Builder<>();
+
+        Restriction prev = null;
+        for (Restriction r : restrictions)
+        {
+            if (prev == null || !prev.equals(r)) // this happens on multi-column restrictions, see CASSANDRA-12153
+            {
+                prev = r;
+                builder.add(r);
+            }
+        }
+        return builder.build();
     }
 
     @Override
@@ -79,28 +100,20 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
     @Override
     public void addFunctionsTo(List<Function> functions)
     {
-        Restriction previous = null;
-        for (Restriction restriction : restrictions.values())
-        {
-            // For muti-column restriction, we can have multiple time the same restriction.
-            if (!restriction.equals(previous))
-            {
-                previous = restriction;
-                restriction.addFunctionsTo(functions);
-            }
-        }
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
+            restrictionsList.get(i).addFunctionsTo(functions);
     }
 
     @Override
     public final boolean isEmpty()
     {
-        return getColumnDefs().isEmpty();
+        return restrictions.isEmpty();
     }
 
     @Override
     public final int size()
     {
-        return getColumnDefs().size();
+        return restrictions.size();
     }
 
     /**
@@ -164,9 +177,9 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
     @Override
     public final boolean hasSupportingIndex(SecondaryIndexManager indexManager)
     {
-        for (Restriction restriction : restrictions.values())
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
         {
-            if (restriction.hasSupportingIndex(indexManager))
+            if (restrictionsList.get(i).hasSupportingIndex(indexManager))
                 return true;
         }
         return false;
@@ -248,9 +261,8 @@ final class RestrictionSet implements Restrictions, Iterable<Restriction>
         return numberOfContains > 1;
     }
 
-    @Override
-    public Iterator<Restriction> iterator()
+    public List<Restriction> restrictionsList()
     {
-        return new LinkedHashSet<>(restrictions.values()).iterator();
+        return restrictionsList;
     }
 }

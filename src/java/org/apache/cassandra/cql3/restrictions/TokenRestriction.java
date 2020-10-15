@@ -191,6 +191,16 @@ public abstract class TokenRestriction extends AbstractPrimaryKeyRestrictions
         }
     }
 
+    public boolean isEmpty()
+    {
+        return columnDefs.isEmpty();
+    }
+
+    public int size()
+    {
+        return columnDefs.size();
+    }
+
     public static class SliceRestriction extends TokenRestriction
     {
         private final TermSlice slice;

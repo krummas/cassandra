@@ -176,13 +176,13 @@ public class PartitionColumns implements Iterable<ColumnDefinition>
         public Builder addAll(PartitionColumns columns)
         {
             if (regularColumns == null && !columns.regulars.isEmpty())
-                regularColumns = BTreeSet.builder(naturalOrder());
+                regularColumns = BTreeSet.builder(naturalOrder(), columns.regulars.size());
 
             for (ColumnDefinition c : columns.regulars)
                 regularColumns.add(c);
 
             if (staticColumns == null && !columns.statics.isEmpty())
-                staticColumns = BTreeSet.builder(naturalOrder());
+                staticColumns = BTreeSet.builder(naturalOrder(), columns.statics.size());
 
             for (ColumnDefinition c : columns.statics)
                 staticColumns.add(c);

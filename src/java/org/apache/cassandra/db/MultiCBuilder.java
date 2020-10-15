@@ -39,7 +39,7 @@ public class MultiCBuilder
     /**
      * The elements of the clusterings
      */
-    private final List<List<ByteBuffer>> elementsList = new ArrayList<>();
+    private final List<List<ByteBuffer>> elementsList;
 
     /**
      * The number of elements that have been added.
@@ -66,17 +66,18 @@ public class MultiCBuilder
      */
     private boolean hasMissingElements;
 
-    private MultiCBuilder(ClusteringComparator comparator)
+    private MultiCBuilder(ClusteringComparator comparator, int initialSize)
     {
         this.comparator = comparator;
+        this.elementsList = new ArrayList<>(initialSize);
     }
 
     /**
      * Creates a new empty {@code MultiCBuilder}.
      */
-    public static MultiCBuilder create(ClusteringComparator comparator)
+    public static MultiCBuilder create(ClusteringComparator comparator, int initialSize)
     {
-        return new MultiCBuilder(comparator);
+        return new MultiCBuilder(comparator, initialSize);
     }
 
     /**
@@ -104,7 +105,7 @@ public class MultiCBuilder
         checkUpdateable();
 
         if (isEmpty())
-            elementsList.add(new ArrayList<ByteBuffer>());
+            elementsList.add(new ArrayList<>(comparator.size()));
 
         for (int i = 0, m = elementsList.size(); i < m; i++)
         {

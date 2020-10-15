@@ -20,6 +20,7 @@ package org.apache.cassandra.cql3.statements;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.collect.HashMultiset;
 import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -294,8 +295,8 @@ public abstract class ModificationStatement implements CQLStatement
     throws InvalidRequestException
     {
         List<ByteBuffer> partitionKeys = restrictions.getPartitionKeys(options);
-        for (ByteBuffer key : partitionKeys)
-            QueryProcessor.validateKey(key);
+        for (int i = 0, isize = partitionKeys.size(); i < isize; i++)
+            QueryProcessor.validateKey(partitionKeys.get(i));
 
         return partitionKeys;
     }
@@ -332,11 +333,7 @@ public abstract class ModificationStatement implements CQLStatement
     public boolean requiresRead()
     {
         // Lists SET operation incurs a read.
-        for (Operation op : allOperations())
-            if (op.requiresRead())
-                return true;
-
-        return false;
+        return !requiresRead.isEmpty();
     }
 
     private Map<DecoratedKey, Partition> readRequiredLists(Collection<ByteBuffer> partitionKeys,
@@ -628,19 +625,24 @@ public abstract class ModificationStatement implements CQLStatement
      */
     private Collection<? extends IMutation> getMutations(QueryOptions options, boolean local, long now)
     {
-        UpdatesCollector collector = new UpdatesCollector(Collections.singletonMap(cfm.cfId, updatedColumns), 1);
-        addUpdates(collector, options, local, now);
+        List<ByteBuffer> keys = buildPartitionKeyNames(options);
+        HashMultiset<ByteBuffer> perPartitionKeyCounts = HashMultiset.create();
+        for (int i = 0; i < keys.size(); i++)
+            perPartitionKeyCounts.add(keys.get(i)); // avoid .addAll since that allocates an iterator
+
+        UpdatesCollector collector = new UpdatesCollector(Collections.singletonMap(cfm.cfId, updatedColumns), Collections.singletonMap(cfm.cfId, perPartitionKeyCounts));
+        addUpdates(collector, keys, options, local, now);
         collector.validateIndexedColumns();
 
         return collector.toMutations();
     }
 
     final void addUpdates(UpdatesCollector collector,
+                          List<ByteBuffer> keys,
                           QueryOptions options,
                           boolean local,
                           long now)
     {
-        List<ByteBuffer> keys = buildPartitionKeyNames(options);
 
         if (hasSlices())
         {
@@ -655,7 +657,8 @@ public abstract class ModificationStatement implements CQLStatement
                                                            options,
                                                            DataLimits.NONE,
                                                            local,
-                                                           now);
+                                                           now,
+                                                           (int) (collector.createdAt / 1000));
             for (ByteBuffer key : keys)
             {
                 ThriftValidation.validateKey(cfm, key);
@@ -675,7 +678,7 @@ public abstract class ModificationStatement implements CQLStatement
             if (restrictions.hasClusteringColumnsRestriction() && clusterings.isEmpty())
                 return;
 
-            UpdateParameters params = makeUpdateParameters(keys, clusterings, options, local, now);
+            UpdateParameters params = makeUpdateParameters(keys, clusterings, options, local, now, (int) (collector.createdAt / 1000));
 
             for (ByteBuffer key : keys)
             {
@@ -719,7 +722,8 @@ public abstract class ModificationStatement implements CQLStatement
                                                   NavigableSet<Clustering> clusterings,
                                                   QueryOptions options,
                                                   boolean local,
-                                                  long now)
+                                                  long now,
+                                                  int nowInSec)
     {
         if (clusterings.contains(Clustering.STATIC_CLUSTERING))
             return makeUpdateParameters(keys,
@@ -727,14 +731,16 @@ public abstract class ModificationStatement implements CQLStatement
                                         options,
                                         DataLimits.cqlLimits(1),
                                         local,
-                                        now);
+                                        now,
+                                        nowInSec);
 
         return makeUpdateParameters(keys,
                                     new ClusteringIndexNamesFilter(clusterings, false),
                                     options,
                                     DataLimits.NONE,
                                     local,
-                                    now);
+                                    now,
+                                    nowInSec);
     }
 
     private UpdateParameters makeUpdateParameters(Collection<ByteBuffer> keys,
@@ -742,11 +748,12 @@ public abstract class ModificationStatement implements CQLStatement
                                                   QueryOptions options,
                                                   DataLimits limits,
                                                   boolean local,
-                                                  long now)
+                                                  long now,
+                                                  int nowInSec)
     {
         // Some lists operation requires reading
         Map<DecoratedKey, Partition> lists = readRequiredLists(keys, filter, limits, local, options.getConsistency());
-        return new UpdateParameters(cfm, updatedColumns(), options, getTimestamp(now, options), getTimeToLive(options), lists);
+        return new UpdateParameters(cfm, updatedColumns(), options, getTimestamp(now, options), getTimeToLive(options), lists, nowInSec);
     }
 
     private Slices toSlices(SortedSet<Slice.Bound> startBounds, SortedSet<Slice.Bound> endBounds)

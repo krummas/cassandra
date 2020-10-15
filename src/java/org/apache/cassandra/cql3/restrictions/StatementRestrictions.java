@@ -541,11 +541,11 @@ public final class StatementRestrictions
         if (hasQueriableIndex)
             return;
 
-        Iterator<Restriction> iter = ((PrimaryKeyRestrictionSet) clusteringColumnsRestrictions).iterator();
+        List<Restriction> restrictionsList = ((PrimaryKeyRestrictionSet) clusteringColumnsRestrictions).restrictionsList();
         Restriction previousRestriction = null;
-        while (iter.hasNext())
+        for (int i = 0, isize = restrictionsList.size(); i < isize; i++)
         {
-            Restriction restriction = iter.next();
+            Restriction restriction = restrictionsList.get(i);
 
             if (previousRestriction != null)
             {
@@ -876,8 +876,8 @@ public final class StatementRestrictions
         assert cfm.isSuper() && cfm.isDense();
 
         if (cached == null)
-            cached = new SuperColumnCompatibility.SuperColumnRestrictions(Iterators.concat(((PrimaryKeyRestrictionSet) clusteringColumnsRestrictions).iterator(),
-                                                                                           nonPrimaryKeyRestrictions.iterator()));
+            cached = new SuperColumnCompatibility.SuperColumnRestrictions(Iterators.concat(((PrimaryKeyRestrictionSet) clusteringColumnsRestrictions).restrictionsList().iterator(),
+                                                                                           nonPrimaryKeyRestrictions.restrictionsList().iterator()));
         return cached;
     }
 }
