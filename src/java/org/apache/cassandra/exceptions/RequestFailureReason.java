@@ -35,8 +35,7 @@ public enum RequestFailureReason
     UNKNOWN                  (0),
     READ_TOO_MANY_TOMBSTONES (1),
     TIMEOUT                  (2),
-    INCOMPATIBLE_SCHEMA      (3),
-    SHUTDOWN_NODE            (4);
+    INCOMPATIBLE_SCHEMA      (3);
 
     public static final Serializer serializer = new Serializer();
 

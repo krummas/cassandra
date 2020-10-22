@@ -37,17 +37,14 @@ public class EchoVerbHandler implements IVerbHandler<NoPayload>
     public void doVerb(Message<NoPayload> message)
     {
         // only respond if we are not shutdown
-        Message response;
         if (!StorageService.instance.isShutdown())
         {
             logger.trace("Sending ECHO_RSP to {}", message.from());
-            response = message.emptyResponse();
+            MessagingService.instance().send(message.emptyResponse(), message.from());
         }
         else
         {
-            logger.trace("Not sending ECHO_RSP to {} - we are shutdown", message.from());
-            response = message.failureResponse(RequestFailureReason.SHUTDOWN_NODE);
+            logger.trace("Not sending ECHO_RSP to {} - we are shutting down", message.from());
         }
-        MessagingService.instance().send(response, message.from());
     }
 }
