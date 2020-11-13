@@ -347,6 +347,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
         }
         logger.info("Created {} optimised sync tasks based on {} merkle tree responses for {} (took: {}ms)",
                     syncTasks.size(), trees.size(), desc.parentSessionId, System.currentTimeMillis() - startedAt);
+        logger.debug("Optimised sync tasks for {}: {}", desc.parentSessionId, syncTasks);
         return syncTasks;
     }
 
