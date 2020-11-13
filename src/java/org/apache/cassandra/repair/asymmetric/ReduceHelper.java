@@ -84,7 +84,7 @@ public class ReduceHelper
             HostDifferences hostDifferences = differences.get(hostWithDifference);
             for (InetAddressAndPort differingHost : hostDifferences.hosts())
             {
-                List<Range<Token>> differingRanges = hostDifferences.get(differingHost);
+                Iterable<Range<Token>> differingRanges = hostDifferences.get(differingHost);
                 // hostWithDifference has mismatching ranges differingRanges with differingHost:
                 for (Range<Token> range : differingRanges)
                 {

@@ -322,7 +322,7 @@ public class RepairJob extends AbstractFuture<RepairResult> implements Runnable
                 Preconditions.checkArgument(streamsFor.get(address).isEmpty(), "We should not fetch ranges from ourselves");
                 for (InetAddressAndPort fetchFrom : streamsFor.hosts())
                 {
-                    List<Range<Token>> toFetch = streamsFor.get(fetchFrom);
+                    List<Range<Token>> toFetch = new ArrayList<>(streamsFor.get(fetchFrom));
                     assert !toFetch.isEmpty();
 
                     logger.debug("{} is about to fetch {} from {}", address, toFetch, fetchFrom);

@@ -18,12 +18,15 @@
 
 package org.apache.cassandra.distributed.test;
 
+import java.io.IOException;
+
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
@@ -155,6 +158,42 @@ public class OptimiseStreamsRepairTest extends TestBaseImpl
             Set<Range<Token>> node2ToNode3 = new HashSet<>(fetching.get(InetAddressAndPort.getByName("127.0.0.3")).get(InetAddressAndPort.getByName("127.0.0.2")));
             assertEquals(node2ToNode1, allRanges);
             assertEquals(node2ToNode3, allRanges);
+        }
+    }
+
+    @Test
+    public void randomTest() throws IOException
+    {
+        try(Cluster cluster = init(Cluster.build(3)
+                                          .withConfig(config -> config.set("hinted_handoff_enabled", false)
+                                                                      .with(GOSSIP)
+                                                                      .with(NETWORK))
+                                          .start()))
+        {
+            cluster.schemaChange("create table " + KEYSPACE + ".tbl (id int primary key, t int) with compaction={'class': 'SizeTieredCompactionStrategy'}");
+            for (int i = 0; i < 10_000; i++)
+            {
+                cluster.coordinator(1).execute("INSERT INTO " + KEYSPACE + ".tbl (id, t) values (?,?)", ConsistencyLevel.ALL, i, i);
+                if (i % 10000 == 0)
+                    System.out.println(i);
+            }
+            cluster.forEach((i) -> i.flush(KEYSPACE));
+
+            Random r = new Random();
+            for (int i = 0; i < 20000; i++)
+                for (int j = 1; j <= 3; j++)
+                    cluster.get(j).executeInternal("INSERT INTO "+KEYSPACE+".tbl (id, t) values (?,?)", r.nextInt(), i * 2 + 2);
+
+            NodeToolResult res = cluster.get(1).nodetoolResult("repair", KEYSPACE, "-os");
+            res.asserts().success();
+
+            res = cluster.get(1).nodetoolResult("repair", KEYSPACE, "-vd");
+            res.asserts().success();
+            res.asserts().notificationContains("Repaired data is in sync");
+
+            res = cluster.get(1).nodetoolResult("repair", KEYSPACE, "--preview", "--full");
+            res.asserts().success();
+            res.asserts().notificationContains("Previewed data was in sync");
         }
     }
 }

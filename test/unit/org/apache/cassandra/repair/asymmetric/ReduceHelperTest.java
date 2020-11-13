@@ -22,6 +22,7 @@ package org.apache.cassandra.repair.asymmetric;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -428,7 +429,7 @@ public class ReduceHelperTest
         assertEquals(Sets.newHashSet(range(-10, 0), range(100, 110)), RangeDenormalizer.subtractFromAllRanges(ranges, range(0, 100)));
     }
 
-    private void assertStreamFromEither(List<Range<Token>> r1, List<Range<Token>> r2)
+    private void assertStreamFromEither(Collection<Range<Token>> r1, Collection<Range<Token>> r2)
     {
         assertTrue(r1.size() > 0 ^ r2.size() > 0);
     }
