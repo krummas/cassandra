@@ -105,17 +105,23 @@ public class ReduceHelper
         return trackers.computeIfAbsent(host, (h) -> new IncomingRepairStreamTracker(differences));
     }
 
+    private static final Comparator<InetAddressAndPort> comparator = Comparator.comparing(InetAddressAndPort::getHostAddressAndPort);
     /**
      * Consistently picks the node after the streaming node to stream from
      *
      * this is done to reduce the amount of sstables created on the receiving node
+     *
+     * todo: note that this can be improved - if we have a case like:
+     *         addr3 will stream range1 from addr1 or addr2
+     *                           range2 from addr1
+     *       in a perfect world we would stream both range1 and range2 from addr1 - but in this case we might stream
+     *       range1 from addr2 depending on how the addresses sort
      */
     private static Collection<InetAddressAndPort> pickConsistent(InetAddressAndPort streamingNode,
-                                                          StreamFromOptions toStreamFrom,
-                                                          PreferedNodeFilter filter)
+                                                                 StreamFromOptions toStreamFrom,
+                                                                 PreferedNodeFilter filter)
     {
         Set<InetAddressAndPort> retSet = new HashSet<>();
-        Comparator<InetAddressAndPort> comparator = Comparator.comparing(InetAddressAndPort::getHostAddressAndPort);
         for (Set<InetAddressAndPort> toStream : toStreamFrom.allStreams())
         {
             List<InetAddressAndPort> toSearch = new ArrayList<>(filter.apply(streamingNode, toStream));

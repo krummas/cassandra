@@ -3215,7 +3215,7 @@ public class DatabaseDescriptor
 
     public static boolean autoOptimiseFullRepairStreams()
     {
-        return conf.auto_optimise_inc_repair_streams;
+        return conf.auto_optimise_full_repair_streams;
     }
 
     public static void setAutoOptimiseFullRepairStreams(boolean enabled)
@@ -3227,7 +3227,7 @@ public class DatabaseDescriptor
 
     public static boolean autoOptimisePreviewRepairStreams()
     {
-        return conf.auto_optimise_inc_repair_streams;
+        return conf.auto_optimise_preview_repair_streams;
     }
 
     public static void setAutoOptimisePreviewRepairStreams(boolean enabled)

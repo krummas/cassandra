@@ -172,11 +172,7 @@ public class OptimiseStreamsRepairTest extends TestBaseImpl
         {
             cluster.schemaChange("create table " + KEYSPACE + ".tbl (id int primary key, t int) with compaction={'class': 'SizeTieredCompactionStrategy'}");
             for (int i = 0; i < 10_000; i++)
-            {
                 cluster.coordinator(1).execute("INSERT INTO " + KEYSPACE + ".tbl (id, t) values (?,?)", ConsistencyLevel.ALL, i, i);
-                if (i % 10000 == 0)
-                    System.out.println(i);
-            }
             cluster.forEach((i) -> i.flush(KEYSPACE));
 
             Random r = new Random();

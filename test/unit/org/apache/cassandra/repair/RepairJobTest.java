@@ -611,7 +611,7 @@ public class RepairJobTest
     }
 
     @Test
-    public void testOptimizedCreateStandardSyncTasksAllDifferent()
+    public void testOptimisedCreateStandardSyncTasksAllDifferent()
     {
         List<TreeResponse> treeResponses = Arrays.asList(treeResponse(addr1, RANGE_1, "one", RANGE_2, "one", RANGE_3, "one"),
                                                          treeResponse(addr2, RANGE_1, "two", RANGE_2, "two", RANGE_3, "two"),
@@ -637,14 +637,14 @@ public class RepairJobTest
     }
 
     @Test
-    public void testOptimizedCreateStandardSyncTasks()
+    public void testOptimisedCreateStandardSyncTasks()
     {
         /*
         addr1 will stream range1 from addr3
                           range2 from addr2 or addr3
         addr2 will stream range1 from addr3
                           range2 from addr1
-        addr3 will stream range1 from addr1 or addr3
+        addr3 will stream range1 from addr1 or addr2
                           range2 from addr1
          */
 
@@ -678,7 +678,7 @@ public class RepairJobTest
     }
 
     @Test
-    public void testOptimizedCreateStandardSyncTasksWithTransient()
+    public void testOptimisedCreateStandardSyncTasksWithTransient()
     {
         List<TreeResponse> treeResponses = Arrays.asList(treeResponse(addr1, RANGE_1, "same", RANGE_2, "same", RANGE_3, "same"),
                                                          treeResponse(addr2, RANGE_1, "different", RANGE_2, "same", RANGE_3, "different"),
