@@ -17,19 +17,11 @@
  */
 package org.apache.cassandra.repair;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.hash.Funnel;
-import com.google.common.hash.HashCode;
-import com.google.common.hash.HashFunction;
-import com.google.common.hash.Hasher;
-import com.google.common.hash.Hashing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +34,7 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterators;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.metrics.TopPartitionTracker;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.repair.messages.ValidationResponse;
@@ -84,6 +77,7 @@ public class Validator implements Runnable
     private DecoratedKey lastKey;
 
     private final PreviewKind previewKind;
+    public TopPartitionTracker.Collector topPartitionCollector;
 
     public Validator(RepairJobDesc desc, InetAddressAndPort initiator, int nowInSec, PreviewKind previewKind)
     {
@@ -108,9 +102,10 @@ public class Validator implements Runnable
         this.evenTreeDistribution = evenTreeDistribution;
     }
 
-    public void prepare(ColumnFamilyStore cfs, MerkleTrees tree)
+    public void prepare(ColumnFamilyStore cfs, MerkleTrees tree, TopPartitionTracker.Collector topPartitionCollector)
     {
         this.trees = tree;
+        this.topPartitionCollector = topPartitionCollector;
 
         if (!tree.partitioner().preservesOrder() || evenTreeDistribution)
         {
@@ -182,6 +177,8 @@ public class Validator implements Runnable
         RowHash rowHash = rowHash(partition);
         if (rowHash != null)
         {
+            if(topPartitionCollector != null)
+                topPartitionCollector.trackSize(partition.partitionKey(), rowHash.size);
             range.addHash(rowHash);
         }
     }
@@ -255,6 +252,11 @@ public class Validator implements Runnable
 
         }
         respond(new ValidationResponse(desc, trees));
+    }
+
+    public PreviewKind getPreviewKind()
+    {
+        return previewKind;
     }
 
     private boolean initiatorIsRemote()

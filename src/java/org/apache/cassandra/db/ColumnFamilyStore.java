@@ -74,6 +74,7 @@ import org.apache.cassandra.metrics.Sampler;
 import org.apache.cassandra.metrics.Sampler.Sample;
 import org.apache.cassandra.metrics.Sampler.SamplerType;
 import org.apache.cassandra.metrics.TableMetrics;
+import org.apache.cassandra.metrics.TopPartitionTracker;
 import org.apache.cassandra.repair.TableRepairManager;
 import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
 import org.apache.cassandra.repair.consistent.admin.PendingStat;
@@ -213,6 +214,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     private final CassandraStreamManager streamManager;
 
     private final TableRepairManager repairManager;
+
+    public final TopPartitionTracker topPartitions;
 
     private final SSTableImporter sstableImporter;
 
@@ -455,6 +458,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         streamManager = new CassandraStreamManager(this);
         repairManager = new CassandraTableRepairManager(this);
         sstableImporter = new SSTableImporter(this);
+
+        if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName()))
+            topPartitions = new TopPartitionTracker(metadata().partitioner, keyspace.getName(), name);
+        else
+            topPartitions = null;
     }
 
     public static String getTableMBeanName(String ks, String name, boolean isIndex)
@@ -2776,5 +2784,19 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public boolean getNeverPurgeTombstones()
     {
         return neverPurgeTombstones;
+    }
+
+    public Map<String, Long> getTopSizePartitions()
+    {
+        if (topPartitions == null)
+            return Collections.emptyMap();
+        return topPartitions.getTopSizePartitionMap(metadata());
+    }
+
+    public Map<String, Long> getTopTombstonePartitions()
+    {
+        if (topPartitions == null)
+            return Collections.emptyMap();
+        return topPartitions.getTopTombstonePartitionMap(metadata());
     }
 }

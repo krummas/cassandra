@@ -218,4 +218,8 @@ public interface ColumnFamilyStoreMBean
     public void setNeverPurgeTombstones(boolean value);
 
     public boolean getNeverPurgeTombstones();
+
+    public Map<String, Long> getTopSizePartitions();
+
+    public Map<String, Long> getTopTombstonePartitions();
 }
