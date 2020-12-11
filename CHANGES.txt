@@ -1,4 +1,5 @@
 4.0-beta5
+ * Expose data dirs to ColumnFamilyStoreMBean (CASSANDRA-16335)
  * Add possibility to copy SSTables in SSTableImporter instead of moving them (CASSANDRA-16407)
  * Avoid processing redundant application states on endpoint changes (CASSANDRA-16381)
  * Prevent parent repair sessions leak (CASSANDRA-16446)
