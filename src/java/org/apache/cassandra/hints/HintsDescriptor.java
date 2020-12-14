@@ -31,6 +31,7 @@ import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 import javax.crypto.Cipher;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
@@ -238,26 +239,32 @@ final class HintsDescriptor
         }
         catch (IOException e)
         {
-            try
-            {
-                if (Files.size(path) > 0)
-                {
-                    String newFileName = path.getFileName().toString().replace(".hints", ".corrupt.hints");
-                    Path target = path.getParent().resolve(newFileName);
-                    logger.error("Failed to deserialize hints descriptor {} - saving file as {}", path.toString(), target, e);
-                    Files.move(path, target);
-                }
-                else
-                {
-                    logger.warn("Found empty hints file {} on startup, removing", path.toString());
-                    Files.delete(path);
-                }
-            }
-            catch (IOException ex)
-            {
-                logger.error("Error handling corrupt hints file {}", path.toString(), ex);
-            }
+            handleDescriptorIOE(e, path);
             return Optional.empty();
+        }
+    }
+
+    @VisibleForTesting
+    static void handleDescriptorIOE(IOException e, Path path)
+    {
+        try
+        {
+            if (Files.size(path) > 0)
+            {
+                String newFileName = path.getFileName().toString().replace(".hints", ".corrupt.hints");
+                Path target = path.getParent().resolve(newFileName);
+                logger.error("Failed to deserialize hints descriptor {} - saving file as {}", path.toString(), target, e);
+                Files.move(path, target);
+            }
+            else
+            {
+                logger.warn("Found empty hints file {} on startup, removing", path.toString());
+                Files.delete(path);
+            }
+        }
+        catch (IOException ex)
+        {
+            logger.error("Error handling corrupt hints file {}", path.toString(), ex);
         }
     }
 
