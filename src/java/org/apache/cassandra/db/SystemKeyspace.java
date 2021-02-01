@@ -102,7 +102,7 @@ public final class SystemKeyspace
     public static final String AVAILABLE_RANGES = "available_ranges";
     public static final String VIEWS_BUILDS_IN_PROGRESS = "views_builds_in_progress";
     public static final String BUILT_VIEWS = "built_views";
-
+    public static final String SCHEDULED_COMPACTIONS_CF = "scheduled_compactions";
     @Deprecated public static final String LEGACY_HINTS = "hints";
     @Deprecated public static final String LEGACY_BATCHLOG = "batchlog";
     @Deprecated public static final String LEGACY_KEYSPACES = "schema_keyspaces";
@@ -268,6 +268,17 @@ public final class SystemKeyspace
                 + "keyspace_name text,"
                 + "view_name text,"
                 + "PRIMARY KEY ((keyspace_name), view_name))");
+
+    private static final CFMetaData ScheduledCompactionsCf =
+        compile(SCHEDULED_COMPACTIONS_CF,
+                "Keeps track of where scheduled compactions should start on node restart",
+                "CREATE TABLE  %s ("
+                + "keyspace_name text,"
+                + "columnfamily_name text,"
+                + "repaired boolean,"
+                + "end_token blob,"
+                + "start_time bigint,"
+                + "PRIMARY KEY (keyspace_name, columnfamily_name, repaired))");
 
     @Deprecated
     public static final CFMetaData LegacyHints =
@@ -437,6 +448,7 @@ public final class SystemKeyspace
                          AvailableRanges,
                          ViewsBuildsInProgress,
                          BuiltViews,
+                         ScheduledCompactionsCf,
                          LegacyHints,
                          LegacyBatchlog,
                          LegacyKeyspaces,
@@ -1470,4 +1482,52 @@ public final class SystemKeyspace
         }
     }
 
+    private static byte[] tokenToBytes(Token token)
+    {
+        try (DataOutputBuffer dob = new DataOutputBuffer())
+        {
+            Token.serializer.serialize(token, dob, MessagingService.current_version);
+            return dob.toByteArray();
+        }
+        catch (IOException e)
+        {
+            logger.error("Could not serialize token {}", token, e);
+            throw new RuntimeException("Could not serialize token", e);
+        }
+    }
+
+    public static void successfulScheduledCompaction(String keyspaceName, String columnFamilyName, boolean repaired, Token token, long startTime)
+    {
+        String cql = String.format("INSERT INTO %s.%s (keyspace_name, columnfamily_name, repaired, end_token, start_time) values (?, ?, ?, ?, ?)",
+                                   SystemKeyspace.NAME,
+                                   SCHEDULED_COMPACTIONS_CF);
+        executeInternal(cql, keyspaceName, columnFamilyName, repaired, ByteBuffer.wrap(tokenToBytes(token)), startTime);
+    }
+
+    public static Pair<Token, Long> getLastSuccessfulScheduledCompaction(String keyspaceName, String columnFamilyName, boolean repaired)
+    {
+        String cql = String.format("SELECT * FROM %s.%s WHERE keyspace_name = ? and columnfamily_name = ? and repaired = ?", SystemKeyspace.NAME, SCHEDULED_COMPACTIONS_CF);
+        UntypedResultSet results = executeInternal(cql, keyspaceName, columnFamilyName, repaired);
+        if (results.isEmpty())
+            return null;
+        UntypedResultSet.Row row = results.one();
+        ByteBuffer tokenBytes = row.getBytes("end_token");
+        Token token;
+        try
+        {
+            ColumnFamilyStore cfs = Keyspace.open(keyspaceName).getColumnFamilyStore(columnFamilyName);
+            token = Token.serializer.deserialize(ByteStreams.newDataInput(ByteBufferUtil.getArray(tokenBytes)), cfs.getPartitioner(), MessagingService.current_version);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+
+        return Pair.create(token, row.getLong("start_time"));
+    }
+
+    public static void resetScheduledCompactions(String keyspaceName, String columnFamilyName)
+    {
+        executeInternal(String.format("DELETE FROM %s.%s WHERE keyspace_name = ? and columnfamily_name = ?", SystemKeyspace.NAME, SCHEDULED_COMPACTIONS_CF), keyspaceName, columnFamilyName);
+    }
 }

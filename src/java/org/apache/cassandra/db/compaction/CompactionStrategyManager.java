@@ -452,6 +452,16 @@ public class CompactionStrategyManager implements INotificationConsumer
         return Arrays.asList(repaired, unrepaired);
     }
 
+    public AbstractCompactionStrategy getRepaired()
+    {
+        return repaired;
+    }
+
+    public AbstractCompactionStrategy getUnrepaired()
+    {
+        return unrepaired;
+    }
+
     public synchronized void setNewLocalCompactionStrategy(CompactionParams params)
     {
         logger.info("Switching local compaction strategy from {} to {}}", this.params, params);
