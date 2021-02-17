@@ -440,4 +440,19 @@ public class ReadRepairTest extends TestBaseImpl
             assertEquals("No read repair requests were expected, found " + requests, 0, requests);
         }
     }
+
+    @Test
+    public void partitionDeletionRTTimestampTieTest() throws Throwable
+    {
+        try (Cluster cluster = init(builder().withNodes(3).start()))
+        {
+            cluster.schemaChange(withKeyspace("CREATE TABLE distributed_test_keyspace.tbl0 (pk bigint,ck bigint,value bigint, PRIMARY KEY (pk, ck)) WITH  CLUSTERING ORDER BY (ck ASC);"));
+            long pk = 0L;
+            cluster.coordinator(1).execute("INSERT INTO distributed_test_keyspace.tbl0 (pk, ck, value) VALUES (?,?,?) USING TIMESTAMP 1", ConsistencyLevel.ALL, pk, 1L, 1L, 1L);
+            cluster.coordinator(1).execute("DELETE FROM distributed_test_keyspace.tbl0 USING TIMESTAMP 2 WHERE pk=? AND ck>?;", ConsistencyLevel.ALL, pk, 2L);
+            cluster.get(3).executeInternal("DELETE FROM distributed_test_keyspace.tbl0 USING TIMESTAMP 2 WHERE pk=?;", pk);
+            assertRows(cluster.coordinator(1).execute("SELECT * FROM distributed_test_keyspace.tbl0 WHERE pk=? AND ck>=? AND ck<?;",
+                                                      ConsistencyLevel.ALL, pk, 1L, 3L));
+        }
+    }
 }
