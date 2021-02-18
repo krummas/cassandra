@@ -284,42 +284,42 @@ public class RowIteratorMergeListener<E extends Endpoints<E>>
                 // Another case we have to consider here is a partition deletion that has the same timestamp
                 // as the deletion and same local deletion time. In such case, since partition deletion covers
                 // an entire partition, we do not include it into repair.
-                if (markerToRepair[i] == null && currentDeletion.equals(partitionRepairDeletion))
-                    continue;
-
-                if (markerToRepair[i] == null && currentDeletion.supersedes(partitionRepairDeletion))
+                if (currentDeletion.supersedes(partitionRepairDeletion))
                 {
-                    /*
-                     * Since there is an ongoing merged deletion, the only two ways we don't have an open repair for
-                     * this source are that:
-                     *
-                     * 1) it had a range open with the same deletion as current marker, and the marker is coming from
-                     *    a short read protection response - repeating the open RT bound, or
-                     * 2) it had a range open with the same deletion as current marker, and the marker is closing it.
-                     */
-                    if (!marker.isBoundary() && marker.isOpen(isReversed)) // (1)
+                    if (markerToRepair[i] == null)
                     {
-                        assert currentDeletion.equals(marker.openDeletionTime(isReversed))
-                        : String.format("currentDeletion=%s, marker=%s", currentDeletion, marker.toString(command.metadata()));
-                    }
-                    else // (2)
-                    {
-                        assert marker.isClose(isReversed) && currentDeletion.equals(marker.closeDeletionTime(isReversed))
-                        : String.format("currentDeletion=%s, marker=%s", currentDeletion, marker.toString(command.metadata()));
-                    }
+                        /*
+                         * Since there is an ongoing merged deletion, the only two ways we don't have an open repair for
+                         * this source are that:
+                         *
+                         * 1) it had a range open with the same deletion as current marker, and the marker is coming from
+                         *    a short read protection response - repeating the open RT bound, or
+                         * 2) it had a range open with the same deletion as current marker, and the marker is closing it.
+                         */
+                        if (!marker.isBoundary() && marker.isOpen(isReversed)) // (1)
+                        {
+                            assert currentDeletion.equals(marker.openDeletionTime(isReversed))
+                            : String.format("currentDeletion=%s, marker=%s", currentDeletion, marker.toString(command.metadata()));
+                        }
+                        else // (2)
+                        {
+                            assert marker.isClose(isReversed) && currentDeletion.equals(marker.closeDeletionTime(isReversed))
+                            : String.format("currentDeletion=%s, marker=%s", currentDeletion, marker.toString(command.metadata()));
+                        }
 
-                    // and so unless it's a boundary whose opening deletion time is still equal to the current
-                    // deletion (see comment above for why this can actually happen), we have to repair the source
-                    // from that point on.
-                    if (!(marker.isOpen(isReversed) && currentDeletion.equals(marker.openDeletionTime(isReversed))))
-                        markerToRepair[i] = marker.closeBound(isReversed).invert();
-                }
-                // In case 2) above, we only have something to do if the source is up-to-date after that point
-                // (which, since the source isn't up-to-date before that point, means we're opening a new deletion
-                // that is equal to the current one).
-                else if (marker.isOpen(isReversed) && currentDeletion.equals(marker.openDeletionTime(isReversed)))
-                {
-                    closeOpenMarker(i, marker.openBound(isReversed).invert());
+                        // and so unless it's a boundary whose opening deletion time is still equal to the current
+                        // deletion (see comment above for why this can actually happen), we have to repair the source
+                        // from that point on.
+                        if (!(marker.isOpen(isReversed) && currentDeletion.equals(marker.openDeletionTime(isReversed))))
+                            markerToRepair[i] = marker.closeBound(isReversed).invert();
+                    }
+                    // In case 2) above, we only have something to do if the source is up-to-date after that point
+                    // (which, since the source isn't up-to-date before that point, means we're opening a new deletion
+                    // that is equal to the current one).
+                    else if (marker.isOpen(isReversed) && currentDeletion.equals(marker.openDeletionTime(isReversed)))
+                    {
+                        closeOpenMarker(i, marker.openBound(isReversed).invert());
+                    }
                 }
             }
             else
