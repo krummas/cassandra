@@ -734,6 +734,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return sstableImporter.importNewSSTables(options);
     }
 
+    public List<String> importNewSSTables(Set<String> srcPaths, boolean resetLevel, boolean clearRepaired, boolean verifySSTables, boolean verifyTokens, boolean invalidateCaches, boolean extendedVerify)
+    {
+        return importNewSSTables(srcPaths, resetLevel, clearRepaired, verifySSTables, verifyTokens, invalidateCaches, extendedVerify, false);
+    }
+
     Descriptor getUniqueDescriptorFor(Descriptor descriptor, File targetDirectory)
     {
         Descriptor newDescriptor;
