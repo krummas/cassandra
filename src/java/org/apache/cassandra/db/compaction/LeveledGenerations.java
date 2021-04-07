@@ -212,11 +212,11 @@ class LeveledGenerations
         {
             int level = sstable.getSSTableLevel();
             minLevel = Math.min(minLevel, level);
-            SSTableReader correctInstance = allSSTables.get(sstable);
-            if (correctInstance != null)
+            SSTableReader versionInManifest = allSSTables.get(sstable);
+            if (versionInManifest != null)
             {
-                get(level).remove(correctInstance);
-                allSSTables.remove(correctInstance);
+                get(level).remove(versionInManifest);
+                allSSTables.remove(versionInManifest);
             }
         }
         return minLevel;
@@ -331,10 +331,10 @@ class LeveledGenerations
 
     void newLevel(SSTableReader sstable, int oldLevel)
     {
-        SSTableReader correctInstance = allSSTables.remove(sstable);
+        SSTableReader versionInManifest = allSSTables.remove(sstable);
         boolean removed = false;
-        if (correctInstance != null)
-            removed = get(oldLevel).remove(correctInstance);
+        if (versionInManifest != null)
+            removed = get(oldLevel).remove(versionInManifest);
         if (!removed)
             logger.warn("Could not remove "+sstable+" from "+oldLevel);
         addAll(Collections.singleton(sstable));
