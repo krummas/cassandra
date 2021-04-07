@@ -482,9 +482,17 @@ public class CompactionsCQLTest extends CQLTester
         getCurrentColumnFamilyStore().forceBlockingFlush();
 
         LeveledCompactionStrategy lcs = (LeveledCompactionStrategy) getCurrentColumnFamilyStore().getCompactionStrategyManager().getUnrepairedUnsafe().first();
-
-        LeveledCompactionTask lcsTask = (LeveledCompactionTask) lcs.getNextBackgroundTask(0);
-        lcsTask.execute(CompactionManager.instance.active);
+        LeveledCompactionTask lcsTask;
+        while (true)
+        {
+            lcsTask = (LeveledCompactionTask) lcs.getNextBackgroundTask(0);
+            if (lcsTask != null)
+            {
+                lcsTask.execute(CompactionManager.instance.active);
+                break;
+            }
+            Thread.sleep(1000);
+        }
         // now all sstables are non-overlapping in L1 - we need them to be in L2:
         for (SSTableReader sstable : getCurrentColumnFamilyStore().getLiveSSTables())
         {
