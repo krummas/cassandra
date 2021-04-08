@@ -64,7 +64,6 @@
     <property name="test.memory.src" value="${test.dir}/memory"/>
     <property name="test.microbench.src" value="${test.dir}/microbench"/>
     <property name="test.distributed.src" value="${test.dir}/distributed"/>
-    <property name="test.junit.src" value="${test.dir}/junit"/>
     <property name="test.compression_algo" value="LZ4"/>
     <property name="test.driver.connection_timeout_ms" value="5000"/>
     <property name="test.driver.read_timeout_ms" value="12000"/>
@@ -1302,7 +1301,6 @@
      <src path="${test.memory.src}"/>
      <src path="${test.microbench.src}"/>
      <src path="${test.distributed.src}"/>
-     <src path="${test.junit.src}"/>
     </javac>
 
     <!-- Non-java resources needed by the test suite -->
@@ -1335,7 +1333,7 @@
                  else="">
         <istrue value="${usejacoco}"/>
       </condition>
-      <taskdef name="junit-timeout" classname="org.apache.cassandra.jstackjunit.JStackJUnitTask">
+      <taskdef name="junit-timeout" classname="org.apache.cassandra.JStackJUnitTask">
         <classpath>
           <pathelement location="${test.classes}"/>
         </classpath>
