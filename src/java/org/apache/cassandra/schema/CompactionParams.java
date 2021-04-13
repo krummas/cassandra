@@ -65,7 +65,8 @@ public final class CompactionParams
 
         private static final TombstoneOption[] copyOfValues = values();
 
-        public static Optional<TombstoneOption> forName(String name) {
+        public static Optional<TombstoneOption> forName(String name)
+        {
             return Arrays.stream(copyOfValues).filter(x -> x.name().equals(name)).findFirst();
         }
     }
@@ -103,9 +104,10 @@ public final class CompactionParams
                           ? Boolean.parseBoolean(options.get(Option.ENABLED.toString()))
                           : DEFAULT_ENABLED;
         String overlappingTombstoneParm = options.getOrDefault(Option.PROVIDE_OVERLAPPING_TOMBSTONES.toString(),
-                                                        DEFAULT_PROVIDE_OVERLAPPING_TOMBSTONES.toString()).toUpperCase();
+                                                               DEFAULT_PROVIDE_OVERLAPPING_TOMBSTONES.toString()).toUpperCase();
         Optional<TombstoneOption> tombstoneOptional = TombstoneOption.forName(overlappingTombstoneParm);
-        if (!tombstoneOptional.isPresent()) {
+        if (!tombstoneOptional.isPresent())
+        {
             throw new ConfigurationException(format("Invalid value %s for 'provide_overlapping_tombstones' compaction sub-option - must be one of the following [%s].",
                                                     overlappingTombstoneParm,
                                                     StringUtils.join(TombstoneOption.values(), ", ")));
