@@ -58,6 +58,7 @@ import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -443,9 +444,14 @@ public class Verifier implements Closeable
 
     private void deserializeBloomFilter(SSTableReader sstable) throws IOException
     {
-        try (DataInputStream stream = new DataInputStream(new BufferedInputStream(Files.newInputStream(Paths.get(sstable.descriptor.filenameFor(Component.FILTER)))));
-             IFilter bf = BloomFilterSerializer.deserialize(stream, sstable.descriptor.version.hasOldBfFormat()))
-        {}
+        Path bfPath = Paths.get(sstable.descriptor.filenameFor(Component.FILTER));
+        if (Files.exists(bfPath))
+        {
+            try (DataInputStream stream = new DataInputStream(new BufferedInputStream(Files.newInputStream(bfPath)));
+                 IFilter bf = BloomFilterSerializer.deserialize(stream, sstable.descriptor.version.hasOldBfFormat()))
+            {
+            }
+        }
     }
 
     public void close()

@@ -69,6 +69,7 @@ import static org.apache.cassandra.SchemaLoader.counterCFMD;
 import static org.apache.cassandra.SchemaLoader.createKeyspace;
 import static org.apache.cassandra.SchemaLoader.loadSchema;
 import static org.apache.cassandra.SchemaLoader.standardCFMD;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -91,6 +92,7 @@ public class VerifyTest
     public static final String CORRUPTCOUNTER_CF2 = "CounterCorrupt2";
 
     public static final String CF_UUID = "UUIDKeys";
+    public static final String BF_ALWAYS_PRESENT = "BfAlwaysPresent";
 
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
@@ -112,7 +114,8 @@ public class VerifyTest
                        counterCFMD(KEYSPACE, COUNTER_CF4),
                        counterCFMD(KEYSPACE, CORRUPTCOUNTER_CF),
                        counterCFMD(KEYSPACE, CORRUPTCOUNTER_CF2),
-                       standardCFMD(KEYSPACE, CF_UUID, 0, UUIDType.instance));
+                       standardCFMD(KEYSPACE, CF_UUID, 0, UUIDType.instance),
+                       standardCFMD(KEYSPACE, BF_ALWAYS_PRESENT).bloomFilterFpChance(1.0));
     }
 
 
@@ -703,6 +706,26 @@ public class VerifyTest
             }
         }
     }
+
+    @Test
+    public void testNoFilterFile()
+    {
+        CompactionManager.instance.disableAutoCompaction();
+        Keyspace keyspace = Keyspace.open(KEYSPACE);
+        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(BF_ALWAYS_PRESENT);
+        fillCF(cfs, 100);
+        assertEquals(1.0, cfs.metadata().params.bloomFilterFpChance, 0.0);
+        for (SSTableReader sstable : cfs.getLiveSSTables())
+        {
+            File f = new File(sstable.descriptor.filenameFor(Component.FILTER));
+            assertFalse(f.exists());
+            try (Verifier verifier = new Verifier(cfs, sstable, false, Verifier.options().build()))
+            {
+                verifier.verify();
+            }
+        }
+    }
+
 
 
     private DecoratedKey dk(long l)
