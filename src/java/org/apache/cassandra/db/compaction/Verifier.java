@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSet;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 
+import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
@@ -180,7 +181,7 @@ public class Verifier implements Closeable
             markAndThrow();
         }
 
-        if (options.checkOwnsTokens && !isOffline)
+        if (options.checkOwnsTokens && !isOffline && !(cfs.getPartitioner() instanceof LocalPartitioner))
         {
             outputHandler.debug("Checking that all tokens are owned by the current node");
             try (KeyIterator iter = new KeyIterator(sstable.descriptor, sstable.metadata()))
@@ -270,7 +271,7 @@ public class Verifier implements Closeable
                     // check for null key below
                 }
 
-                if (options.checkOwnsTokens && ownedRanges.size() > 0)
+                if (options.checkOwnsTokens && ownedRanges.size() > 0 && !(cfs.getPartitioner() instanceof LocalPartitioner))
                 {
                     try
                     {
