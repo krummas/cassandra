@@ -533,7 +533,8 @@ public class CompactionManager implements CompactionManagerMBean
                     }
 
                     @Override
-                    protected int getLevel() {
+                    protected int getLevel()
+                    {
                         return txn.onlyOne().getSSTableLevel();
                     }
                 };

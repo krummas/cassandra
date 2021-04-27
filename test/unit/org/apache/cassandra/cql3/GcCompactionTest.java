@@ -152,15 +152,15 @@ public class GcCompactionTest extends CQLTester
     }
 
     @Test
-    public void testGarbageCollectRetainsLCSLevel() throws Throwable {
+    public void testGarbageCollectRetainsLCSLevel() throws Throwable
+    {
 
       createTable("CREATE TABLE %s(" +
                   "  key int," +
                   "  column int," +
                   "  data int," +
                   "  PRIMARY KEY ((key), column)" +
-                  ") WITH compaction = { 'class' : 'LeveledCompactionStrategy' };"
-      );
+                  ") WITH compaction = { 'class' : 'LeveledCompactionStrategy' };");
 
       assertEquals("LeveledCompactionStrategy", getCurrentColumnFamilyStore().getCompactionStrategyManager().getName());
 
