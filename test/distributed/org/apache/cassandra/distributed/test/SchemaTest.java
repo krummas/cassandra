@@ -18,9 +18,11 @@
 
 package org.apache.cassandra.distributed.test;
 
+
 import java.util.function.Consumer;
 
 import org.junit.Test;
+
 
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.distributed.Cluster;
@@ -28,6 +30,7 @@ import org.apache.cassandra.distributed.api.ConsistencyLevel;
 import org.apache.cassandra.distributed.api.IInstanceConfig;
 
 import static org.apache.cassandra.distributed.shared.AssertUtils.assertRows;
+import static org.junit.Assert.assertTrue;
 
 public class SchemaTest extends TestBaseImpl
 {
@@ -112,6 +115,46 @@ public class SchemaTest extends TestBaseImpl
             assertRows(cluster.coordinator(1).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), allExpected1);
             assertRows(cluster.coordinator(2).execute("SELECT id, v1 FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), someExpected);
             assertRows(cluster.coordinator(2).execute("SELECT * FROM "+KEYSPACE+".tbl", ConsistencyLevel.ALL), allExpected2);
+        }
+    }
+
+
+    @Test
+    public void readRepair() throws Throwable
+    {
+        try (Cluster cluster = init(Cluster.build(2).start()))
+        {
+            cluster.schemaChange("CREATE TABLE " + KEYSPACE + ".tbl (pk int, ck int, v1 int, v2 int,  primary key (pk, ck))");
+            String name = "aaa";
+            cluster.get(1).schemaChangeInternal("ALTER TABLE " + KEYSPACE + ".tbl ADD " + name + " list<int>");
+            cluster.get(1).executeInternal("INSERT INTO " + KEYSPACE + ".tbl (pk, ck, v1, v2) values (?,1,1,1)", 1);
+            selectSilent(cluster, name);
+
+            cluster.get(2).flush(KEYSPACE);
+            cluster.get(2).schemaChangeInternal("ALTER TABLE " + KEYSPACE + ".tbl ADD " + name + " list<int>");
+            cluster.get(2).shutdown();
+            cluster.get(2).startup();
+            cluster.get(2).forceCompact(KEYSPACE, "tbl");
+        }
+    }
+
+    private void selectSilent(Cluster cluster, String name)
+    {
+        try
+        {
+            cluster.coordinator(1).execute(withKeyspace("SELECT * FROM %s.tbl WHERE pk = ?"), ConsistencyLevel.ALL, 1);
+        }
+        catch (Exception e)
+        {
+            boolean causeIsUnknownColumn = false;
+            Throwable cause = e;
+            while (cause != null)
+            {
+                if (cause.getMessage() != null && cause.getMessage().contains("Unknown column "+name+" during deserialization"))
+                    causeIsUnknownColumn = true;
+                cause = cause.getCause();
+            }
+            assertTrue(causeIsUnknownColumn);
         }
     }
 }
