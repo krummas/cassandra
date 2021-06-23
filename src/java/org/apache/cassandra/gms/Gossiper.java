@@ -1711,6 +1711,7 @@ public class Gossiper implements IFailureDetectionEventListener, GossiperMBean
                                                               Gossiper.intervalInMillis,
                                                               Gossiper.intervalInMillis,
                                                               TimeUnit.MILLISECONDS);
+        expireUpgradeFromVersion();
     }
 
     public synchronized Map<InetAddressAndPort, EndpointState> doShadowRound()
