@@ -104,8 +104,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -278,8 +278,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -398,8 +398,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -518,8 +518,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -615,8 +615,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -689,8 +689,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -804,8 +804,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -866,8 +866,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -974,8 +974,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -1048,8 +1048,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -1156,8 +1156,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -1218,8 +1218,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -1326,8 +1326,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -1500,8 +1500,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
@@ -1594,8 +1594,8 @@ jobs:
     - CASS_DRIVER_NO_EXTENSIONS: true
     - CASS_DRIVER_NO_CYTHON: true
     - CASSANDRA_SKIP_SYNC: true
-    - DTEST_REPO: git://github.com/apache/cassandra-dtest.git
-    - DTEST_BRANCH: trunk
+    - DTEST_REPO: git://github.com/krummas/cassandra-dtest.git
+    - DTEST_BRANCH: marcuse/indev
     - CCM_MAX_HEAP_SIZE: 2048M
     - CCM_HEAP_NEWSIZE: 512M
     - REPEATED_UTEST_TARGET: testsome
