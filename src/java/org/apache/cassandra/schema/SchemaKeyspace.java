@@ -432,14 +432,14 @@ public final class SchemaKeyspace
 
         // We want to skip the 'cdc' column. A simple solution for that is based on the fact that
         // 'PartitionUpdate.fromIterator()' will ignore any columns that are marked as 'fetched' but not 'queried'.
-        ColumnFilter.Builder builder = ColumnFilter.allColumnsBuilder(partition.metadata());
+        ColumnFilter.Builder builder = ColumnFilter.selectionBuilder();
         for (ColumnDefinition column : filter.fetchedColumns())
         {
             if (!column.name.toString().equals("cdc"))
                 builder.add(column);
         }
 
-        return PartitionUpdate.fromIterator(partition, builder.build());
+        return PartitionUpdate.fromIteratorExplicitColumns(partition, builder.build());
     }
 
     private static boolean isSystemKeyspaceSchemaPartition(DecoratedKey partitionKey)
