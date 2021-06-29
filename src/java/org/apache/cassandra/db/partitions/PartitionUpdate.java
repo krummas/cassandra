@@ -241,31 +241,9 @@ public class PartitionUpdate extends AbstractBTreePartition
     public static PartitionUpdate fromIteratorExplicitColumns(UnfilteredRowIterator iterator, ColumnFilter filter)
     {
         iterator = UnfilteredRowIterators.withOnlyQueriedData(iterator, filter);
-        Holder holder = buildForColumns(iterator, filter.fetchedColumns());
+        Holder holder = build(iterator, 16, true, null, filter.fetchedColumns());
         MutableDeletionInfo deletionInfo = (MutableDeletionInfo) holder.deletionInfo;
         return new PartitionUpdate(iterator.metadata(), iterator.partitionKey(), holder, deletionInfo, false, FBUtilities.nowInSeconds());
-    }
-
-    private static Holder buildForColumns(UnfilteredRowIterator iterator, PartitionColumns fetchedColumns)
-    {
-        CFMetaData metadata = iterator.metadata();
-        boolean reversed = iterator.isReverseOrder();
-
-        BTree.Builder<Row> builder = BTree.builder(metadata.comparator, 16);
-        MutableDeletionInfo.Builder deletionBuilder = MutableDeletionInfo.builder(iterator.partitionLevelDeletion(), metadata.comparator, reversed);
-
-        while (iterator.hasNext())
-        {
-            Unfiltered unfiltered = iterator.next();
-            if (unfiltered.kind() == Unfiltered.Kind.ROW)
-                builder.add((Row)unfiltered);
-            else
-                deletionBuilder.add((RangeTombstoneMarker)unfiltered);
-        }
-
-        if (reversed)
-            builder.reverse();
-        return new Holder(fetchedColumns, builder.build(), deletionBuilder.build(), iterator.staticRow(), iterator.stats());
     }
 
     private static final NoSpamLogger rowMergingLogger = NoSpamLogger.getLogger(logger, 1, TimeUnit.MINUTES);
