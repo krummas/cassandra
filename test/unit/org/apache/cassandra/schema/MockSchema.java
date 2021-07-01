@@ -45,6 +45,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.Memory;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
 
 import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABLE;
 
@@ -54,7 +55,7 @@ public class MockSchema
     {
         Memory offsets = Memory.allocate(4);
         offsets.setInt(0, 0);
-        indexSummary = new IndexSummary(Murmur3Partitioner.instance, offsets, 0, Memory.allocate(4), 0, 0, 0, 1);
+        indexSummary = new IndexSummary(Murmur3Partitioner.instance, offsets, 0, Memory.allocate(4), 0, 0, 1, 1);
     }
     private static final AtomicInteger id = new AtomicInteger();
     public static final Keyspace ks = Keyspace.mockKS(KeyspaceMetadata.create("mockks", KeyspaceParams.simpleTransient(1)));
@@ -102,12 +103,22 @@ public class MockSchema
         return sstable(generation, size, false, generation, generation, level, cfs);
     }
 
+    public static SSTableReader sstableWithTimestamp(int generation, int size, long timestamp, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, size, false, generation, generation, 0, Integer.MAX_VALUE, timestamp, cfs);
+    }
+
     public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, ColumnFamilyStore cfs)
     {
         return sstable(generation, size, keepRef, firstToken, lastToken, 0, cfs);
     }
 
     public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, int level, ColumnFamilyStore cfs)
+    {
+        return sstable(generation, size, keepRef, firstToken, lastToken, level, Integer.MAX_VALUE, System.currentTimeMillis(), cfs);
+    }
+
+    public static SSTableReader sstable(int generation, int size, boolean keepRef, long firstToken, long lastToken, int level, int minLocalDeletionTime, long timestamp, ColumnFamilyStore cfs)
     {
         Descriptor descriptor = new Descriptor(cfs.getDirectories().getDirectoryForNewSSTables(),
                                                cfs.keyspace.getName(),
@@ -145,6 +156,8 @@ public class MockSchema
                 }
             }
             SerializationHeader header = SerializationHeader.make(cfs.metadata(), Collections.emptyList());
+            MetadataCollector collector = new MetadataCollector(cfs.metadata().comparator);
+            collector.update(new DeletionTime(timestamp, minLocalDeletionTime));
             StatsMetadata metadata = (StatsMetadata) new MetadataCollector(cfs.metadata().comparator)
                                                      .sstableLevel(level)
                                                      .finalizeMetadata(cfs.metadata().partitioner.getClass().getCanonicalName(), 0.01f, UNREPAIRED_SSTABLE, null, false, header)

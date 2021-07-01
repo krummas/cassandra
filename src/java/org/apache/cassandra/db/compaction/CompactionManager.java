@@ -2166,6 +2166,36 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
+    public boolean getCompactBiggestSTCSBucketInL0()
+    {
+        return DatabaseDescriptor.getCompactBiggestSTCSBucketInL0();
+    }
+
+    public void setCompactBiggestSTCSBucketInL0(boolean value)
+    {
+        DatabaseDescriptor.setCompactBiggestSTCSBucketInL0(value);
+    }
+
+    public long getBiggestBucketMaxSizeBytes()
+    {
+        return DatabaseDescriptor.getBiggestBucketMaxSizeBytes();
+    }
+
+    public int getBiggestBucketMaxSSTableCount()
+    {
+        return DatabaseDescriptor.getBiggestBucketMaxSSTableCount();
+    }
+
+    public void setBiggestBucketMaxSizeBytes(long maxSizeBytes)
+    {
+        DatabaseDescriptor.setBiggestBucketMaxSizeBytes(maxSizeBytes);
+    }
+
+    public void setBiggestBucketMaxSSTableCount(int maxSSTableCount)
+    {
+        DatabaseDescriptor.setBiggestBucketMaxSSTableCount(maxSSTableCount);
+    }
+
     /**
      * Try to stop all of the compactions for given ColumnFamilies.
      *

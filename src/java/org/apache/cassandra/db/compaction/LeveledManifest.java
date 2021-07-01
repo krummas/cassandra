@@ -42,6 +42,7 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.db.compaction.LeveledGenerations.MAX_LEVEL_COUNT;
+import static org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy.bestBucket;
 
 public class LeveledManifest
 {
@@ -194,7 +195,7 @@ public class LeveledManifest
         // the streamed files can be placed in their original levels
         if (StorageService.instance.isBootstrapMode())
         {
-            List<SSTableReader> mostInteresting = getSSTablesForSTCS(generations.get(0));
+            List<SSTableReader> mostInteresting = getSSTablesForSTCS(cfs, options, generations.get(0));
             if (!mostInteresting.isEmpty())
             {
                 logger.info("Bootstrapping - doing STCS in L0");
@@ -297,7 +298,7 @@ public class LeveledManifest
     {
         if (!DatabaseDescriptor.getDisableSTCSInL0() && generations.get(0).size() > MAX_COMPACTING_L0)
         {
-            List<SSTableReader> mostInteresting = getSSTablesForSTCS(generations.get(0));
+            List<SSTableReader> mostInteresting = getSSTablesForSTCS(cfs, options, generations.get(0));
             if (!mostInteresting.isEmpty())
             {
                 logger.debug("L0 is too far behind, performing size-tiering there first");
@@ -308,16 +309,27 @@ public class LeveledManifest
         return null;
     }
 
-    private List<SSTableReader> getSSTablesForSTCS(Collection<SSTableReader> sstables)
+    @VisibleForTesting
+    static List<SSTableReader> getSSTablesForSTCS(ColumnFamilyStore cfs, SizeTieredCompactionStrategyOptions options, Collection<SSTableReader> sstables)
     {
+        logger.debug("Getting SSTables for STCS in L0 for {}.{} (sstables size = {})", cfs.keyspace.getName(), cfs.getTableName(), sstables.size());
         Iterable<SSTableReader> candidates = cfs.getTracker().getUncompacting(sstables);
         List<Pair<SSTableReader,Long>> pairs = SizeTieredCompactionStrategy.createSSTableAndLengthPairs(AbstractCompactionStrategy.filterSuspectSSTables(candidates));
         List<List<SSTableReader>> buckets = SizeTieredCompactionStrategy.getBuckets(pairs,
                                                                                     options.bucketHigh,
                                                                                     options.bucketLow,
                                                                                     options.minSSTableSize);
+
+        if (DatabaseDescriptor.getCompactBiggestSTCSBucketInL0())
+            return bestBucket(buckets,
+                              cfs.getMinimumCompactionThreshold(),
+                              cfs.getMaximumCompactionThreshold(),
+                              DatabaseDescriptor.getBiggestBucketMaxSizeBytes(),
+                              DatabaseDescriptor.getBiggestBucketMaxSSTableCount(),
+                              false);
+
         return SizeTieredCompactionStrategy.mostInterestingBucket(buckets,
-                cfs.getMinimumCompactionThreshold(), cfs.getMaximumCompactionThreshold());
+                                                                  cfs.getMinimumCompactionThreshold(), cfs.getMaximumCompactionThreshold());
     }
 
     /**

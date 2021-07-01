@@ -46,6 +46,7 @@ import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.UpdateBuilder;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.Keyspace;
@@ -67,6 +68,7 @@ import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.FBUtilities;
 
 import static java.util.Collections.singleton;
+import static org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy.bestBucket;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -851,5 +853,110 @@ public class LeveledCompactionStrategyTest
         Collection<SSTableReader> compactionCandidates = lm.getCompactionCandidates().sstables;
         assertThat(compactionCandidates).containsAll(sstablesOnL7);
         assertThat(compactionCandidates).doesNotContainAnyElementsOf(sstablesOnL8);
+    }
+
+
+    @Test
+    public void testGetBestBucket()
+    {
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        List<SSTableReader> sstables = new ArrayList<>();
+        // first 100 sstables:
+        for (int i = 0; i < 100; i++)
+            sstables.add(MockSchema.sstable(i, i, cfs));
+
+        // then 40 400-byte sstables which should not be included in the compaction:
+        for (int i = 0; i < 40; i++)
+            sstables.add(MockSchema.sstable(i, 400, cfs));
+
+        Map<String, String> optionsMap = new HashMap<>();
+        optionsMap.put("min_sstable_size","200"); // make sure the small sstables get put in the same bucket
+        SizeTieredCompactionStrategyOptions options = new SizeTieredCompactionStrategyOptions(optionsMap);
+        DatabaseDescriptor.setCompactBiggestSTCSBucketInL0(true);
+        DatabaseDescriptor.setBiggestBucketMaxSSTableCount(33);
+
+        List<SSTableReader> biggestBucket = LeveledManifest.getSSTablesForSTCS(cfs, options, sstables);
+        assertEquals(33, biggestBucket.size()); // all 100 small sstables should be in the biggest bucket
+        for (SSTableReader sstable : biggestBucket)
+        {
+            assertEquals(sstable.descriptor.generation, sstable.onDiskLength());
+            assertTrue(sstable.onDiskLength() < 33); // did we actually get the smallest files?
+        }
+
+        // check that max compaction threshold holds:
+        DatabaseDescriptor.setBiggestBucketMaxSSTableCount(50);
+        biggestBucket = LeveledManifest.getSSTablesForSTCS(cfs, options, sstables);
+        assertEquals(50, biggestBucket.size()); // all 100 small sstables should be in the biggest bucket
+        for (SSTableReader sstable : biggestBucket)
+        {
+            assertEquals(sstable.descriptor.generation, sstable.onDiskLength());
+            assertTrue(sstable.onDiskLength() < 50);
+        }
+
+        DatabaseDescriptor.setBiggestBucketMaxSSTableCount(1024);
+        cfs.setMaximumCompactionThreshold(105);
+        biggestBucket = LeveledManifest.getSSTablesForSTCS(cfs, options, sstables);
+        assertEquals(100, biggestBucket.size()); // make sure we get the full smallest (by size) bucket
+        DatabaseDescriptor.setCompactBiggestSTCSBucketInL0(false);
+        DatabaseDescriptor.setBiggestBucketMaxSSTableCount(1024);
+        cfs.setMaximumCompactionThreshold(32);
+    }
+
+    @Test
+    public void testBestBucket2()
+    {
+        ColumnFamilyStore cfs = MockSchema.newCFS();
+        List<List<SSTableReader>> buckets = new ArrayList<>();
+        SSTableReader sstable1 = MockSchema.sstable(1, 1, cfs);
+        SSTableReader sstable2 = MockSchema.sstable(2, 2, cfs);
+        SSTableReader sstable3 = MockSchema.sstable(3, 3, cfs);
+        buckets.add(new ArrayList<>());
+        buckets.add(new ArrayList<>());
+        buckets.add(new ArrayList<>());
+
+        for (int i = 0; i < 50; i++)
+        {
+            buckets.get(0).add(sstable1);
+            buckets.get(1).add(sstable2);
+            buckets.get(2).add(sstable3);
+        }
+
+        buckets.get(1).add(sstable2);
+        buckets.get(2).add(sstable3);
+        buckets.get(2).add(sstable3);
+
+        // now we have:
+        // bucket[0] with 50 sstables with size = 1,
+        // bucket[1] with 51 sstables with size = 2,
+        // bucket[2] with 52 sstables with size = 3,
+        // best bucket should be bucket[0] if we have max_threshold < 50, but bucket[2] if max_threshold > 52:
+        List<SSTableReader> best = bestBucket(buckets, 4, 32, Long.MAX_VALUE, 40, false);
+        assertEquals(40, best.size());
+        assertTrue(best.stream().allMatch(sstable -> sstable.onDiskLength() == 1));
+
+        // make sure bucket size limiting works:
+        best = bestBucket(buckets, 4, 32, 30, 1024, false);
+        assertEquals(30, best.size());
+
+        // this considers all buckets with size >= 51, the one with size=1-sstables is still the best one due to having a
+        // smaller on-disk size
+        best = bestBucket(buckets, 4,51, Long.MAX_VALUE, 40, false);
+        assertEquals(40, best.size());
+        assertTrue(best.stream().allMatch(sstable -> sstable.onDiskLength() == 1));
+
+        // this considers all buckets with size >= 51 and buckets are pruned to 51 sstables - this means that the bucket with
+        // 2-sized sstables is the best
+        best = bestBucket(buckets, 4,51, Long.MAX_VALUE, 51, false);
+        assertEquals(51, best.size());
+        assertTrue(best.stream().allMatch(sstable -> sstable.onDiskLength() == 2));
+
+        best = bestBucket(buckets, 4, 64, 5, 25, false);
+        // only 5 sstables remain after pruning by size - these are each size 1
+        assertEquals(5, best.size());
+        assertTrue(best.stream().allMatch(sstable -> sstable.onDiskLength() == 1));
+
+        // if min threshold is large
+        best = bestBucket(buckets, 55, 64, Long.MAX_VALUE, 1024, false);
+        assertEquals(0, best.size());
     }
 }
