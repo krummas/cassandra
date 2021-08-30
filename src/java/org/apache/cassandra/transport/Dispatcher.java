@@ -35,6 +35,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.net.FrameEncoder;
 import org.apache.cassandra.service.ClientWarn;
 import org.apache.cassandra.service.QueryState;
+import org.apache.cassandra.service.reads.trackwarnings.CoordinatorWarnings;
 import org.apache.cassandra.transport.ClientResourceLimits.Overload;
 import org.apache.cassandra.transport.Flusher.FlushItem;
 import org.apache.cassandra.transport.messages.ErrorMessage;
@@ -87,6 +88,9 @@ public class Dispatcher
         long queryStartNanoTime = System.nanoTime();
         if (connection.getVersion().isGreaterOrEqualTo(ProtocolVersion.V4))
             ClientWarn.instance.captureWarnings();
+        // even if ClientWarn is disabled, still setup CoordinatorTrackWarnings, as this will populate metrics and
+        // emit logs on the server; the warnings will just be ignored and not sent to the client
+        CoordinatorWarnings.init();
 
         if (backpressure == Overload.REQUESTS)
         {
@@ -110,6 +114,7 @@ public class Dispatcher
         Message.logger.trace("Received: {}, v={}", request, connection.getVersion());
         connection.requests.inc();
         Message.Response response = request.execute(qstate, queryStartNanoTime);
+        CoordinatorWarnings.done();
         response.setStreamId(request.getStreamId());
         response.setWarnings(ClientWarn.instance.getWarnings());
         response.attach(connection);
@@ -136,13 +141,16 @@ public class Dispatcher
         catch (Throwable t)
         {
             JVMStabilityInspector.inspectThrowable(t);
+            CoordinatorWarnings.done();
             Predicate<Throwable> handler = ExceptionHandlers.getUnexpectedExceptionHandler(channel, true);
             ErrorMessage error = ErrorMessage.fromException(t, handler);
             error.setStreamId(request.getStreamId());
+            error.setWarnings(ClientWarn.instance.getWarnings());
             toFlush = forFlusher.toFlushItem(channel, request, error);
         }
         finally
         {
+            CoordinatorWarnings.reset();
             ClientWarn.instance.resetWarnings();
         }
         flush(toFlush);

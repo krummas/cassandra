@@ -17,37 +17,41 @@
  */
 package org.apache.cassandra.service.reads;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
-
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.MessageParams;
-import org.apache.cassandra.exceptions.TombstoneAbortException;
-import org.apache.cassandra.locator.ReplicaPlan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.MessageParams;
 import org.apache.cassandra.db.PartitionRangeReadCommand;
 import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.db.ReadResponse;
 import org.apache.cassandra.exceptions.ReadFailureException;
+import org.apache.cassandra.exceptions.ReadSizeAbortException;
 import org.apache.cassandra.exceptions.ReadTimeoutException;
 import org.apache.cassandra.exceptions.RequestFailureReason;
+import org.apache.cassandra.exceptions.TombstoneAbortException;
 import org.apache.cassandra.locator.Endpoints;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.locator.ReplicaPlan;
+import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.ParamType;
 import org.apache.cassandra.net.RequestCallback;
-import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.Verb;
-import org.apache.cassandra.schema.Schema;
-import org.apache.cassandra.service.ClientWarn;
+import org.apache.cassandra.service.reads.trackwarnings.CoordinatorWarnings;
+import org.apache.cassandra.service.reads.trackwarnings.WarningsSnapshot;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.concurrent.SimpleCondition;
 
@@ -56,29 +60,48 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<E>> implements RequestCallback<ReadResponse>
 {
     protected static final Logger logger = LoggerFactory.getLogger( ReadCallback.class );
-    private class WarningCounter
-    {
-        // the highest number of tombstones reported by a node's warning
-        final AtomicInteger tombstoneWarnings = new AtomicInteger();
-        final AtomicInteger maxTombstoneWarningCount = new AtomicInteger();
-        // the highest number of tombstones reported by a node's rejection. This should be the same as
-        // our configured limit, but including to aid in diagnosing misconfigurations
-        final AtomicInteger tombstoneAborts = new AtomicInteger();
-        final AtomicInteger maxTombstoneAbortsCount = new AtomicInteger();
 
-        // TODO: take message as arg and return boolean for 'had warning' etc
-        void addTombstoneWarning(InetAddressAndPort from, int tombstones)
+    private static class WarnAbortCounter
+    {
+        final Set<InetAddressAndPort> warnings = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        // the highest number reported by a node's warning
+        final AtomicLong maxWarningValue = new AtomicLong();
+
+        final Set<InetAddressAndPort> aborts = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        // the highest number reported by a node's rejection.
+        final AtomicLong maxAbortsValue = new AtomicLong();
+
+        void addWarning(InetAddressAndPort from, long value)
         {
-            if (!waitingFor(from)) return;
-            tombstoneWarnings.incrementAndGet();
-            maxTombstoneWarningCount.accumulateAndGet(tombstones, Math::max);
+            maxWarningValue.accumulateAndGet(value, Math::max);
+            // call add last so concurrent reads see empty even if values > 0; if done in different order then
+            // size=1 could have values == 0
+            warnings.add(from);
         }
 
-        void addTombstoneAbort(InetAddressAndPort from, int tombstones)
+        void addAbort(InetAddressAndPort from, long value)
         {
-            if (!waitingFor(from)) return;
-            tombstoneAborts.incrementAndGet();
-            maxTombstoneAbortsCount.accumulateAndGet(tombstones, Math::max);
+            maxAbortsValue.accumulateAndGet(value, Math::max);
+            // call add last so concurrent reads see empty even if values > 0; if done in different order then
+            // size=1 could have values == 0
+            aborts.add(from);
+        }
+
+        WarningsSnapshot.Warnings snapshot()
+        {
+            return WarningsSnapshot.Warnings.create(WarningsSnapshot.Counter.create(warnings, maxWarningValue), WarningsSnapshot.Counter.create(aborts, maxAbortsValue));
+        }
+    }
+
+    private static class WarningContext
+    {
+        final WarnAbortCounter tombstones = new WarnAbortCounter();
+        final WarnAbortCounter localReadSize = new WarnAbortCounter();
+        final WarnAbortCounter rowIndexTooLarge = new WarnAbortCounter();
+
+        private WarningsSnapshot snapshot()
+        {
+            return WarningsSnapshot.create(tombstones.snapshot(), localReadSize.snapshot(), rowIndexTooLarge.snapshot());
         }
     }
 
@@ -94,9 +117,9 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
             = AtomicIntegerFieldUpdater.newUpdater(ReadCallback.class, "failures");
     private volatile int failures = 0;
     private final Map<InetAddressAndPort, RequestFailureReason> failureReasonByEndpoint;
-    private volatile WarningCounter warningCounter;
-    private static final AtomicReferenceFieldUpdater<ReadCallback, ReadCallback.WarningCounter> warningsUpdater
-        = AtomicReferenceFieldUpdater.newUpdater(ReadCallback.class, ReadCallback.WarningCounter.class, "warningCounter");
+    private volatile WarningContext warningContext;
+    private static final AtomicReferenceFieldUpdater<ReadCallback, ReadCallback.WarningContext> warningsUpdater
+        = AtomicReferenceFieldUpdater.newUpdater(ReadCallback.class, ReadCallback.WarningContext.class, "warningContext");
 
     public ReadCallback(ResponseResolver<E, P> resolver, ReadCommand command, ReplicaPlan.Shared<E, P> replicaPlan, long queryStartNanoTime)
     {
@@ -132,20 +155,39 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
     }
 
     @VisibleForTesting
-    public static String tombstoneAbortMessage(int nodes, int tombstones, String cql)
+    public static String tombstoneAbortMessage(int nodes, long tombstones, String cql)
     {
         return String.format("%s nodes scanned over %s tombstones and aborted the query %s (see tombstone_failure_threshold)", nodes, tombstones, cql);
     }
 
     @VisibleForTesting
-    public static String tombstoneWarnMessage(int nodes, int tombstones, String cql)
+    public static String tombstoneWarnMessage(int nodes, long tombstones, String cql)
     {
         return String.format("%s nodes scanned up to %s tombstones and issued tombstone warnings for query %s  (see tombstone_warn_threshold)", nodes, tombstones, cql);
     }
 
-    private ColumnFamilyStore cfs()
+    @VisibleForTesting
+    public static String localReadSizeAbortMessage(long nodes, long bytes, String cql)
     {
-        return Schema.instance.getColumnFamilyStoreInstance(command.metadata().id);
+        return String.format("%s nodes loaded over %s bytes and aborted the query %s (see track_warnings.local_read_size.abort_threshold_kb)", nodes, bytes, cql);
+    }
+
+    @VisibleForTesting
+    public static String localReadSizeWarnMessage(int nodes, long bytes, String cql)
+    {
+        return String.format("%s nodes loaded over %s bytes and issued local read size warnings for query %s  (see track_warnings.local_read_size.warn_threshold_kb)", nodes, bytes, cql);
+    }
+
+    @VisibleForTesting
+    public static String rowIndexSizeAbortMessage(long nodes, long bytes, String cql)
+    {
+        return String.format("%s nodes loaded over %s bytes in RowIndexEntry and aborted the query %s (see track_warnings.row_index_size.abort_threshold_kb)", nodes, bytes, cql);
+    }
+
+    @VisibleForTesting
+    public static String rowIndexSizeWarnMessage(int nodes, long bytes, String cql)
+    {
+        return String.format("%s nodes loaded over %s bytes in RowIndexEntry and issued warnings for query %s  (see track_warnings.row_index_size.warn_threshold_kb)", nodes, bytes, cql);
     }
 
     public void awaitResults() throws ReadFailureException, ReadTimeoutException
@@ -160,24 +202,17 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
          */
         int received = resolver.responses.size();
         boolean failed = failures > 0 && (blockFor > received || !resolver.isDataPresent());
-        WarningCounter warnings = warningCounter;
+        WarningContext warnings = warningContext;
+        // save the snapshot so abort state is not changed between now and when mayAbort gets called
+        WarningsSnapshot snapshot = null;
         if (warnings != null)
         {
-            if (warnings.tombstoneAborts.get() > 0)
-            {
-                String msg = tombstoneAbortMessage(warnings.tombstoneAborts.get(), warnings.maxTombstoneAbortsCount.get(), command.toCQLString());
-                ClientWarn.instance.warn(msg + " with " + command.loggableTokens());
-                logger.warn(msg);
-                cfs().metric.clientTombstoneAborts.mark();
-            }
-
-            if (warnings.tombstoneWarnings.get() > 0)
-            {
-                String msg = tombstoneWarnMessage(warnings.tombstoneWarnings.get(), warnings.maxTombstoneWarningCount.get(), command.toCQLString());
-                ClientWarn.instance.warn(msg + " with " + command.loggableTokens());
-                logger.warn(msg);
-                cfs().metric.clientTombstoneWarnings.mark();
-            }
+            snapshot = warnings.snapshot();
+            // this is possible due to a race condition between waiting and responding
+            // network thread creates the WarningContext to update metrics, but we are actively reading and see it is empty
+            // this is likely to happen when a timeout happens or from a speculative response
+            if (!snapshot.isEmpty())
+                CoordinatorWarnings.update(command, snapshot);
         }
         if (signaled && !failed)
             return;
@@ -193,9 +228,32 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
             logger.debug("{}; received {} of {} responses{}", failed ? "Failed" : "Timed out", received, blockFor, gotData);
         }
 
-        if (warnings != null && warnings.tombstoneAborts.get() > 0)
-            throw new TombstoneAbortException(warnings.tombstoneAborts.get(), warnings.maxTombstoneAbortsCount.get(), command.toCQLString(), resolver.isDataPresent(),
-                                              replicaPlan.get().consistencyLevel(), received, blockFor, failureReasonByEndpoint);
+        if (snapshot != null)
+        {
+            // cache cql queries to lower overhead
+            Supplier<String> cql = new Supplier<String>()
+            {
+                private String cql;
+                @Override
+                public String get()
+                {
+                    if (cql == null)
+                        cql = command.toCQLString();
+                    return cql;
+                }
+            };
+            if (!snapshot.tombstones.aborts.instances.isEmpty())
+                throw new TombstoneAbortException(snapshot.tombstones.aborts.instances.size(), snapshot.tombstones.aborts.maxValue, cql.get(), resolver.isDataPresent(),
+                                                  replicaPlan.get().consistencyLevel(), received, blockFor, failureReasonByEndpoint);
+
+            if (!snapshot.localReadSize.aborts.instances.isEmpty())
+                throw new ReadSizeAbortException(localReadSizeAbortMessage(snapshot.localReadSize.aborts.instances.size(), snapshot.localReadSize.aborts.maxValue, cql.get()),
+                                                 replicaPlan.get().consistencyLevel(), received, blockFor, resolver.isDataPresent(), failureReasonByEndpoint);
+
+            if (!snapshot.rowIndexTooSize.aborts.instances.isEmpty())
+                throw new ReadSizeAbortException(rowIndexSizeAbortMessage(snapshot.rowIndexTooSize.aborts.instances.size(), snapshot.rowIndexTooSize.aborts.maxValue, cql.get()),
+                                                 replicaPlan.get().consistencyLevel(), received, blockFor, resolver.isDataPresent(), failureReasonByEndpoint);
+        }
 
         // Same as for writes, see AbstractWriteResponseHandler
         throw failed
@@ -208,20 +266,43 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
         return blockFor;
     }
 
+    private RequestFailureReason updateCounters(Map<ParamType, Object> params,
+                                                InetAddressAndPort from,
+                                                ParamType abort, ParamType warn,
+                                                RequestFailureReason reason,
+                                                Function<WarningContext, WarnAbortCounter> fieldAccess)
+    {
+        // some checks use int32 others user int64; so rely on Number to handle both cases
+        if (params.containsKey(abort))
+        {
+            fieldAccess.apply(getWarningContext()).addAbort(from, ((Number) params.get(abort)).longValue());
+            return reason;
+        }
+        else if (params.containsKey(warn))
+        {
+            fieldAccess.apply(getWarningContext()).addWarning(from, ((Number) params.get(warn)).longValue());
+        }
+        return null;
+    }
+
     @Override
     public void onResponse(Message<ReadResponse> message)
     {
         assertWaitingFor(message.from());
         Map<ParamType, Object> params = message.header.params();
-        if (params.containsKey(ParamType.TOMBSTONE_ABORT))
+        InetAddressAndPort from = message.from();
+        for (Supplier<RequestFailureReason> fn : Arrays.<Supplier<RequestFailureReason>>asList(
+        () -> updateCounters(params, from, ParamType.TOMBSTONE_ABORT, ParamType.TOMBSTONE_WARNING, RequestFailureReason.READ_TOO_MANY_TOMBSTONES, ctx -> ctx.tombstones),
+        () -> updateCounters(params, from, ParamType.LOCAL_READ_SIZE_ABORT, ParamType.LOCAL_READ_SIZE_WARN, RequestFailureReason.READ_SIZE, ctx -> ctx.localReadSize),
+        () -> updateCounters(params, from, ParamType.ROW_INDEX_SIZE_ABORT, ParamType.ROW_INDEX_SIZE_WARN, RequestFailureReason.READ_SIZE, ctx -> ctx.rowIndexTooLarge)
+        ))
         {
-            getWarningCounter().addTombstoneAbort(message.from(), (Integer) params.get(ParamType.TOMBSTONE_ABORT));
-            onFailure(message.from(), RequestFailureReason.READ_TOO_MANY_TOMBSTONES);
-            return;
-        }
-        else if (params.containsKey(ParamType.TOMBSTONE_WARNING))
-        {
-            getWarningCounter().addTombstoneWarning(message.from(), (Integer) params.get(ParamType.TOMBSTONE_WARNING));
+            RequestFailureReason reason = fn.get();
+            if (reason != null)
+            {
+                onFailure(message.from(), reason);
+                return;
+            }
         }
         resolver.preprocess(message);
 
@@ -235,16 +316,16 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
             condition.signalAll();
     }
 
-    private WarningCounter getWarningCounter()
+    private WarningContext getWarningContext()
     {
-        WarningCounter current;
+        WarningContext current;
         do {
 
-            current = warningCounter;
+            current = warningContext;
             if (current != null)
                 return current;
 
-            current = new WarningCounter();
+            current = new WarningContext();
         } while (!warningsUpdater.compareAndSet(this, null, current));
         return current;
     }
@@ -286,12 +367,8 @@ public class ReadCallback<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<
      */
     private void assertWaitingFor(InetAddressAndPort from)
     {
-        assert waitingFor(from): "Received read response from unexpected replica: " + from;
-    }
-
-    private boolean waitingFor(InetAddressAndPort from)
-    {
-        return !replicaPlan().consistencyLevel().isDatacenterLocal()
-               || DatabaseDescriptor.getLocalDataCenter().equals(DatabaseDescriptor.getEndpointSnitch().getDatacenter(from));
+        assert !replicaPlan().consistencyLevel().isDatacenterLocal()
+               || DatabaseDescriptor.getLocalDataCenter().equals(DatabaseDescriptor.getEndpointSnitch().getDatacenter(from))
+               : "Received read response from unexpected replica: " + from;
     }
 }
