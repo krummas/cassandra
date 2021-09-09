@@ -19,10 +19,8 @@
 package org.apache.cassandra.tools;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
 import com.datastax.driver.core.exceptions.NoHostAvailableException;
-import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.tools.ToolRunner.ToolResult;
 import org.hamcrest.CoreMatchers;
 
@@ -30,7 +28,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 
-@RunWith(OrderedJUnit4ClassRunner.class)
 public class BulkLoaderTest extends OfflineToolUtils
 {
     @Test

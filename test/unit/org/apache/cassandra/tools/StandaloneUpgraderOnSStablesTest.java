@@ -28,9 +28,7 @@ import java.util.stream.Collectors;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
-import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -50,7 +48,6 @@ import static org.junit.Assert.assertEquals;
  * 
  * Caution: heavy hacking ahead.
  */
-@RunWith(OrderedJUnit4ClassRunner.class)
 public class StandaloneUpgraderOnSStablesTest
 {
     String legacyId = LegacySSTableTest.legacyVersions[LegacySSTableTest.legacyVersions.length - 1];

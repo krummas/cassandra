@@ -29,9 +29,7 @@ import java.util.stream.Collectors;
 import com.google.common.io.Files;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
-import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -41,7 +39,6 @@ import org.assertj.core.api.Assertions;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-@RunWith(OrderedJUnit4ClassRunner.class)
 public class StandaloneSplitterWithCQLTesterTest extends CQLTester
 {
     private static String sstableFileName;
