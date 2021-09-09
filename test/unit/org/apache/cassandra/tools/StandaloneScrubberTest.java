@@ -23,9 +23,7 @@ import java.util.Arrays;
 import org.apache.commons.lang3.tuple.Pair;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
-import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.tools.ToolRunner.ToolResult;
 import org.assertj.core.api.Assertions;
 import org.hamcrest.CoreMatchers;
@@ -40,7 +38,6 @@ import static org.junit.Assert.assertTrue;
  * For TTL sstable scrubbing tests look at {@link TTLTest}
  */
 
-@RunWith(OrderedJUnit4ClassRunner.class)
 public class StandaloneScrubberTest extends OfflineToolUtils
 {
     @Test

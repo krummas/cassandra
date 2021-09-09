@@ -24,9 +24,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
-import org.apache.cassandra.OrderedJUnit4ClassRunner;
 import org.apache.cassandra.tools.ToolRunner.ToolResult;
 import org.assertj.core.api.Assertions;
 import org.hamcrest.CoreMatchers;
@@ -34,7 +32,6 @@ import org.hamcrest.CoreMatchers;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 
-@RunWith(OrderedJUnit4ClassRunner.class)
 public class StandaloneSplitterTest extends OfflineToolUtils
 {
     // Note: StandaloneSplitter modifies sstables

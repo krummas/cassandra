@@ -51,7 +51,6 @@ import static org.apache.cassandra.cql3.QueryProcessor.executeInternal;
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 import static org.junit.Assert.*;
 
-@RunWith(OrderedJUnit4ClassRunner.class)
 public class QueryPagerTest
 {
     public static final String KEYSPACE1 = "QueryPagerTest";
