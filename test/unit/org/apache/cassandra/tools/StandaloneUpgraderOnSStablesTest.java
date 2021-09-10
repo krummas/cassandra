@@ -84,6 +84,9 @@ public class StandaloneUpgraderOnSStablesTest
         List<String> newFiles = getSStableFiles("legacy_tables", "legacy_" + legacyId + "_simple");
         origFiles.removeAll(newFiles);
         assertEquals(0, origFiles.size()); // check previous version files are kept
+
+        // need to make sure the new sstables are live, so that they get truncated later
+        Keyspace.open("legacy_tables").getColumnFamilyStore("legacy_" + legacyId + "_simple").loadNewSSTables();
     }
 
     @Test
@@ -131,6 +134,8 @@ public class StandaloneUpgraderOnSStablesTest
         int origSize = origFiles.size();
         origFiles.removeAll(newFiles);
         assertEquals(origSize, origFiles.size()); // check previous version files are gone
+        // need to make sure the new sstables are live, so that they get truncated later
+        Keyspace.open("legacy_tables").getColumnFamilyStore("legacy_" + legacyId + "_simple").loadNewSSTables();
     }
 
     private List<String> getSStableFiles(String ks, String table) throws StartupException
