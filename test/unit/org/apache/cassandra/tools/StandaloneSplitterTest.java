@@ -46,21 +46,6 @@ public class StandaloneSplitterTest extends OfflineToolUtils
     }
 
     @Test
-    public void testNoArgsPrintsHelp()
-    {
-        ToolResult tool = ToolRunner.invokeClass(StandaloneSplitter.class);
-        assertThat(tool.getStdout(), CoreMatchers.containsStringIgnoringCase("usage:"));
-        assertThat(tool.getCleanedStderr(), CoreMatchers.containsStringIgnoringCase("No sstables to split"));
-        assertEquals(1, tool.getExitCode());
-        assertNoUnexpectedThreadsStarted(null, null);
-        assertSchemaNotLoaded();
-        assertCLSMNotLoaded();
-        assertSystemKSNotLoaded();
-        assertKeyspaceNotLoaded();
-        assertServerNotLoaded();
-    }
-
-    @Test
     public void testMaybeChangeDocs()
     {
         // If you added, modified options or help, please update docs if necessary
