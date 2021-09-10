@@ -32,21 +32,6 @@ import static org.junit.Assert.assertThat;
 public class StandaloneUpgraderTest extends OfflineToolUtils
 {
     @Test
-    public void testNoArgsPrintsHelp()
-    {
-        ToolResult tool = ToolRunner.invokeClass(StandaloneUpgrader.class);
-        assertThat(tool.getStdout(), CoreMatchers.containsStringIgnoringCase("usage:"));
-        assertThat(tool.getCleanedStderr(), CoreMatchers.containsStringIgnoringCase("Missing arguments"));
-        assertEquals(1, tool.getExitCode());
-        assertNoUnexpectedThreadsStarted(null, null);
-        assertSchemaNotLoaded();
-        assertCLSMNotLoaded();
-        assertSystemKSNotLoaded();
-        assertKeyspaceNotLoaded();
-        assertServerNotLoaded();
-    }
-
-    @Test
     public void testMaybeChangeDocs()
     {
         // If you added, modified options or help, please update docs if necessary

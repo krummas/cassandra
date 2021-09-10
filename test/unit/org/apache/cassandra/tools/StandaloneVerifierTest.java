@@ -31,22 +31,6 @@ import static org.junit.Assert.assertThat;
 
 public class StandaloneVerifierTest extends OfflineToolUtils
 {
-
-    @Test
-    public void testNoArgsPrintsHelp()
-    {
-        ToolResult tool = ToolRunner.invokeClass(StandaloneVerifier.class);
-        assertThat(tool.getStdout(), CoreMatchers.containsStringIgnoringCase("usage:"));
-        assertThat(tool.getCleanedStderr(), CoreMatchers.containsStringIgnoringCase("Missing arguments"));
-        assertEquals(1, tool.getExitCode());
-        assertNoUnexpectedThreadsStarted(null, null);
-        assertSchemaNotLoaded();
-        assertCLSMNotLoaded();
-        assertSystemKSNotLoaded();
-        assertKeyspaceNotLoaded();
-        assertServerNotLoaded();
-    }
-
     @Test
     public void testMaybeChangeDocs()
     {
