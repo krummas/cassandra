@@ -26,12 +26,11 @@ import org.hamcrest.CoreMatchers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.fail;
 
 public class BulkLoaderTest extends OfflineToolUtils
 {
     @Test
-    public void testBulkLoader_NoArgs() throws Exception
+    public void testBulkLoader_NoArgs()
     {
         ToolResult tool = ToolRunner.invokeClass(BulkLoader.class);
         assertEquals(1, tool.getExitCode());

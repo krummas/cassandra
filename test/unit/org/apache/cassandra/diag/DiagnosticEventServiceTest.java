@@ -237,5 +237,5 @@ public class DiagnosticEventServiceTest
         }
     }
 
-    public enum TestEventType { TEST1, TEST2, TEST3 };
+    public enum TestEventType { TEST1, TEST2, TEST3 }
 }

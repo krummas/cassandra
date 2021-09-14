@@ -26,7 +26,6 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -704,39 +703,45 @@ public class ScrubTest
     public void testFilterOutDuplicates() throws Exception
     {
         IPartitioner oldPart = DatabaseDescriptor.getPartitioner();
-        DatabaseDescriptor.setPartitionerUnsafe(Murmur3Partitioner.instance);
-        QueryProcessor.process(String.format("CREATE TABLE \"%s\".cf_with_duplicates_3_0 (a int, b int, c int, PRIMARY KEY (a, b))", ksName), ConsistencyLevel.ONE);
-
-        ColumnFamilyStore cfs = keyspace.getColumnFamilyStore("cf_with_duplicates_3_0");
-
-        Path legacySSTableRoot = Paths.get(System.getProperty(INVALID_LEGACY_SSTABLE_ROOT_PROP),
-                                           "Keyspace1",
-                                           "cf_with_duplicates_3_0");
-
-        for (String filename : new String[]{ "mb-3-big-CompressionInfo.db",
-                                             "mb-3-big-Digest.crc32",
-                                             "mb-3-big-Index.db",
-                                             "mb-3-big-Summary.db",
-                                             "mb-3-big-Data.db",
-                                             "mb-3-big-Filter.db",
-                                             "mb-3-big-Statistics.db",
-                                             "mb-3-big-TOC.txt" })
+        try
         {
-            Files.copy(Paths.get(legacySSTableRoot.toString(), filename), cfs.getDirectories().getDirectoryForNewSSTables().toPath().resolve(filename));
+            DatabaseDescriptor.setPartitionerUnsafe(Murmur3Partitioner.instance);
+            QueryProcessor.process(String.format("CREATE TABLE \"%s\".cf_with_duplicates_3_0 (a int, b int, c int, PRIMARY KEY (a, b))", ksName), ConsistencyLevel.ONE);
+
+            ColumnFamilyStore cfs = keyspace.getColumnFamilyStore("cf_with_duplicates_3_0");
+
+            Path legacySSTableRoot = Paths.get(System.getProperty(INVALID_LEGACY_SSTABLE_ROOT_PROP),
+                                               "Keyspace1",
+                                               "cf_with_duplicates_3_0");
+
+            for (String filename : new String[]{ "mb-3-big-CompressionInfo.db",
+                                                 "mb-3-big-Digest.crc32",
+                                                 "mb-3-big-Index.db",
+                                                 "mb-3-big-Summary.db",
+                                                 "mb-3-big-Data.db",
+                                                 "mb-3-big-Filter.db",
+                                                 "mb-3-big-Statistics.db",
+                                                 "mb-3-big-TOC.txt" })
+            {
+                Files.copy(Paths.get(legacySSTableRoot.toString(), filename), cfs.getDirectories().getDirectoryForNewSSTables().toPath().resolve(filename));
+            }
+
+            cfs.loadNewSSTables();
+
+            cfs.scrub(true, true, false, false, false, 1);
+
+            UntypedResultSet rs = QueryProcessor.executeInternal(String.format("SELECT * FROM \"%s\".cf_with_duplicates_3_0", ksName));
+            assertNotNull(rs);
+            assertEquals(1, rs.size());
+
+            QueryProcessor.executeInternal(String.format("DELETE FROM \"%s\".cf_with_duplicates_3_0 WHERE a=1 AND b =2", ksName));
+            rs = QueryProcessor.executeInternal(String.format("SELECT * FROM \"%s\".cf_with_duplicates_3_0", ksName));
+            assertNotNull(rs);
+            assertEquals(0, rs.size());
         }
-
-        cfs.loadNewSSTables();
-
-        cfs.scrub(true, true, false, false, false, 1);
-
-        UntypedResultSet rs = QueryProcessor.executeInternal(String.format("SELECT * FROM \"%s\".cf_with_duplicates_3_0", ksName));
-        assertNotNull(rs);
-        assertEquals(1, rs.size());
-
-        QueryProcessor.executeInternal(String.format("DELETE FROM \"%s\".cf_with_duplicates_3_0 WHERE a=1 AND b =2", ksName));
-        rs = QueryProcessor.executeInternal(String.format("SELECT * FROM \"%s\".cf_with_duplicates_3_0", ksName));
-        assertNotNull(rs);
-        assertEquals(0, rs.size());
-        DatabaseDescriptor.setPartitionerUnsafe(oldPart);
+        finally
+        {
+            DatabaseDescriptor.setPartitionerUnsafe(oldPart);
+        }
     }
 }
