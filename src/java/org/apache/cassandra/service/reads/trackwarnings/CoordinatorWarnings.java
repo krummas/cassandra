@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +33,6 @@ import org.apache.cassandra.db.ReadCommand;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.service.ClientWarn;
-import org.apache.cassandra.service.reads.ReadCallback;
 
 public class CoordinatorWarnings
 {
@@ -42,6 +42,7 @@ public class CoordinatorWarnings
     // when .init() is called set the STATE to be INIT; this is to lazy allocate the map only when warnings are generated
     private static final Map<ReadCommand, WarningsSnapshot> INIT = Collections.emptyMap();
     private static final FastThreadLocal<Map<ReadCommand, WarningsSnapshot>> STATE = new FastThreadLocal<>();
+    private static final FastThreadLocal<RuntimeException> INIT_STACKTRACE = new FastThreadLocal<>();
 
     private CoordinatorWarnings() {}
 
@@ -51,9 +52,14 @@ public class CoordinatorWarnings
         if (STATE.get() != null)
         {
             if (ENABLE_DEFENSIVE_CHECKS)
-                throw new AssertionError("CoordinatorTrackWarnings.init called while state is not null: " + STATE.get());
+            {
+                String msg = "CoordinatorTrackWarnings.init called while state is not null: " + STATE.get() + " \n" + ExceptionUtils.getStackTrace(INIT_STACKTRACE.get());
+                throw new AssertionError(msg);
+            }
             return;
         }
+        if (ENABLE_DEFENSIVE_CHECKS)
+            INIT_STACKTRACE.set(new RuntimeException());
         STATE.set(INIT);
     }
 
@@ -61,6 +67,9 @@ public class CoordinatorWarnings
     {
         logger.trace("CoordinatorTrackWarnings.reset()");
         STATE.remove();
+        if (ENABLE_DEFENSIVE_CHECKS)
+            INIT_STACKTRACE.remove();
+
     }
 
     public static void update(ReadCommand cmd, WarningsSnapshot snapshot)
