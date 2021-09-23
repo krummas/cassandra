@@ -145,10 +145,9 @@ public class CoordinatorWarnings
     private static void clearState()
     {
         Map<ReadCommand, WarningsSnapshot> map = STATE.get();
-        if (map == null || map == INIT)
+        if (map == null)
             return;
-        // map is mutable, so set to INIT
-        STATE.set(INIT);
+        STATE.remove();
     }
 
     // utility interface to let callers use static functions
