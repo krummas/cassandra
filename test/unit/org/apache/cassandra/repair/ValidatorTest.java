@@ -200,7 +200,7 @@ public class ValidatorTest
 
         ActiveRepairService.instance.registerParentRepairSession(repairSessionId, host,
                                                                  Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 false, PreviewKind.NONE);
+                                                                 false, PreviewKind.NONE, RepairParallelism.PARALLEL);
 
         final CompletableFuture<Message> outgoingMessageSink = registerOutgoingMessageSink();
         Validator validator = new Validator(desc, host, 0, true, false, PreviewKind.NONE);
@@ -257,7 +257,7 @@ public class ValidatorTest
 
         ActiveRepairService.instance.registerParentRepairSession(repairSessionId, host,
                                                                  Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 false, PreviewKind.NONE);
+                                                                 false, PreviewKind.NONE, RepairParallelism.PARALLEL);
 
         final CompletableFuture<Message> outgoingMessageSink = registerOutgoingMessageSink();
         Validator validator = new Validator(desc, host, 0, true, false, PreviewKind.NONE);
@@ -319,7 +319,7 @@ public class ValidatorTest
 
         ActiveRepairService.instance.registerParentRepairSession(repairSessionId, host,
                                                                  Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 false, PreviewKind.NONE);
+                                                                 false, PreviewKind.NONE, RepairParallelism.PARALLEL);
 
         final CompletableFuture<Message> outgoingMessageSink = registerOutgoingMessageSink();
         Validator validator = new Validator(desc, host, 0, true, false, PreviewKind.NONE);

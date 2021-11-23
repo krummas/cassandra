@@ -61,6 +61,7 @@ import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.locator.TokenMetadata;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.messages.RepairOption;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.streaming.PreviewKind;
@@ -286,7 +287,7 @@ public class ActiveRepairServiceTest
         Set<SSTableReader> original = Sets.newHashSet(store.select(View.select(SSTableSet.CANONICAL, (s) -> !s.isRepaired())).sstables);
         Collection<Range<Token>> ranges = Collections.singleton(new Range<>(store.getPartitioner().getMinimumToken(), store.getPartitioner().getMinimumToken()));
         ActiveRepairService.instance.registerParentRepairSession(prsId, FBUtilities.getBroadcastAddressAndPort(), Collections.singletonList(store),
-                                                                 ranges, true, System.currentTimeMillis(), true, PreviewKind.NONE);
+                                                                 ranges, true, System.currentTimeMillis(), true, PreviewKind.NONE, RepairParallelism.PARALLEL);
         store.getRepairManager().snapshot(prsId.toString(), ranges, false);
 
         UUID prsId2 = UUID.randomUUID();
@@ -294,7 +295,8 @@ public class ActiveRepairServiceTest
                                                                  Collections.singletonList(store),
                                                                  ranges,
                                                                  true, System.currentTimeMillis(),
-                                                                 true, PreviewKind.NONE);
+                                                                 true, PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
         createSSTables(store, 2);
         store.getRepairManager().snapshot(prsId.toString(), ranges, false);
         try (Refs<SSTableReader> refs = store.getSnapshotSSTableReaders(prsId.toString()))

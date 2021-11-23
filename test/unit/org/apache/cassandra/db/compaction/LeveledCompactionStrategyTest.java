@@ -54,6 +54,7 @@ import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableRepairStatusChanged;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.ValidationManager;
 import org.apache.cassandra.schema.MockSchema;
 import org.apache.cassandra.streaming.PreviewKind;
@@ -205,7 +206,8 @@ public class LeveledCompactionStrategyTest
                                                                  false,
                                                                  ActiveRepairService.UNREPAIRED_SSTABLE,
                                                                  true,
-                                                                 PreviewKind.NONE);
+                                                                 PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
         RepairJobDesc desc = new RepairJobDesc(parentRepSession, UUID.randomUUID(), KEYSPACE1, CF_STANDARDDLEVELED, Arrays.asList(range));
         Validator validator = new Validator(desc, FBUtilities.getBroadcastAddressAndPort(), gcBefore, PreviewKind.NONE);
 

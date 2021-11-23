@@ -519,13 +519,26 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         return true;
     }
 
-    public UUID prepareForRepair(UUID parentRepairSession, InetAddressAndPort coordinator, Set<InetAddressAndPort> endpoints, RepairOption options, boolean isForcedRepair, List<ColumnFamilyStore> columnFamilyStores)
+    public UUID prepareForRepair(UUID parentRepairSession,
+                                 InetAddressAndPort coordinator,
+                                 Set<InetAddressAndPort> endpoints,
+                                 RepairOption options,
+                                 boolean isForcedRepair,
+                                 List<ColumnFamilyStore> columnFamilyStores)
     {
         if (!verifyCompactionsPendingThreshold(parentRepairSession, options.getPreviewKind()))
             failRepair(parentRepairSession, "Rejecting incoming repair, pending compactions above threshold"); // failRepair throws exception
 
         long repairedAt = getRepairedAt(options, isForcedRepair);
-        registerParentRepairSession(parentRepairSession, coordinator, columnFamilyStores, options.getRanges(), options.isIncremental(), repairedAt, options.isGlobal(), options.getPreviewKind());
+        registerParentRepairSession(parentRepairSession,
+                                    coordinator,
+                                    columnFamilyStores,
+                                    options.getRanges(),
+                                    options.isIncremental(),
+                                    repairedAt,
+                                    options.isGlobal(),
+                                    options.getPreviewKind(),
+                                    options.getParallelism());
         final CountDownLatch prepareLatch = newCountDownLatch(endpoints.size());
         final AtomicBoolean status = new AtomicBoolean(true);
         final Set<String> failedNodes = synchronizedSet(new HashSet<String>());
@@ -563,7 +576,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         {
             if (FailureDetector.instance.isAlive(neighbour))
             {
-                PrepareMessage message = new PrepareMessage(parentRepairSession, tableIds, options.getRanges(), options.isIncremental(), repairedAt, options.isGlobal(), options.getPreviewKind());
+                PrepareMessage message = new PrepareMessage(parentRepairSession, tableIds, options.getRanges(), options.isIncremental(), repairedAt, options.isGlobal(), options.getPreviewKind(), options.getParallelism());
                 Message<RepairMessage> msg = out(PREPARE_MSG, message);
                 MessagingService.instance().sendWithCallback(msg, neighbour, callback);
             }
@@ -649,7 +662,15 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         throw new RuntimeException(errorMsg);
     }
 
-    public synchronized void registerParentRepairSession(UUID parentRepairSession, InetAddressAndPort coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, long repairedAt, boolean isGlobal, PreviewKind previewKind)
+    public synchronized void registerParentRepairSession(UUID parentRepairSession,
+                                                         InetAddressAndPort coordinator,
+                                                         List<ColumnFamilyStore> columnFamilyStores,
+                                                         Collection<Range<Token>> ranges,
+                                                         boolean isIncremental,
+                                                         long repairedAt,
+                                                         boolean isGlobal,
+                                                         PreviewKind previewKind,
+                                                         RepairParallelism parallelism)
     {
         assert isIncremental || repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE;
         if (!registeredForEndpointChanges)
@@ -661,7 +682,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
 
         if (!parentRepairSessions.containsKey(parentRepairSession))
         {
-            parentRepairSessions.put(parentRepairSession, new ParentRepairSession(coordinator, columnFamilyStores, ranges, isIncremental, repairedAt, isGlobal, previewKind));
+            parentRepairSessions.put(parentRepairSession, new ParentRepairSession(coordinator, columnFamilyStores, ranges, isIncremental, repairedAt, isGlobal, previewKind, parallelism));
         }
     }
 
@@ -701,7 +722,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         if (session == null)
             return null;
 
-        if (session.hasSnapshots)
+        if (session.shouldSnapshot())
         {
             clearSnapshotExecutor.submit(() -> {
                 logger.info("[repair #{}] Clearing snapshots for {}", parentSessionId,
@@ -773,10 +794,16 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         public final long repairedAt;
         public final InetAddressAndPort coordinator;
         public final PreviewKind previewKind;
-        // todo: modify PREPARE message to include whether we will snapshot to keep this immutable
-        public volatile boolean hasSnapshots = false;
+        public final RepairParallelism parallelism;
 
-        public ParentRepairSession(InetAddressAndPort coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, long repairedAt, boolean isGlobal, PreviewKind previewKind)
+        public ParentRepairSession(InetAddressAndPort coordinator,
+                                   List<ColumnFamilyStore> columnFamilyStores,
+                                   Collection<Range<Token>> ranges,
+                                   boolean isIncremental,
+                                   long repairedAt,
+                                   boolean isGlobal,
+                                   PreviewKind previewKind,
+                                   RepairParallelism parallelism)
         {
             this.coordinator = coordinator;
             Set<Keyspace> keyspaces = new HashSet<>();
@@ -794,6 +821,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             this.isIncremental = isIncremental;
             this.isGlobal = isGlobal;
             this.previewKind = previewKind;
+            this.parallelism = parallelism;
         }
 
         public boolean isPreview()
@@ -831,9 +859,9 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                     '}';
         }
 
-        public void setHasSnapshots()
+        public boolean shouldSnapshot()
         {
-            hasSnapshots = true;
+            return parallelism != RepairParallelism.PARALLEL && !isIncremental;
         }
     }
 

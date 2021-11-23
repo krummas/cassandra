@@ -32,6 +32,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.cql3.statements.schema.CreateTableStatement;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.schema.Schema;
@@ -110,7 +111,8 @@ public class CompactionManagerGetSSTablesForValidationTest
                                                                  incremental,
                                                                  incremental ? System.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE,
                                                                  true,
-                                                                 PreviewKind.NONE);
+                                                                 PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
         desc = new RepairJobDesc(sessionID, UUIDGen.getTimeUUID(), ks, tbl, Collections.singleton(range));
     }
 

@@ -173,7 +173,7 @@ public class RepairJobTest
         UUID parentRepairSession = UUID.randomUUID();
         ActiveRepairService.instance.registerParentRepairSession(parentRepairSession, FBUtilities.getBroadcastAddressAndPort(),
                                                                  Collections.singletonList(Keyspace.open(KEYSPACE).getColumnFamilyStore(CF)), FULL_RANGE, false,
-                                                                 ActiveRepairService.UNREPAIRED_SSTABLE, false, PreviewKind.NONE);
+                                                                 ActiveRepairService.UNREPAIRED_SSTABLE, false, PreviewKind.NONE, RepairParallelism.PARALLEL);
 
         this.session = new MeasureableRepairSession(parentRepairSession, UUIDGen.getTimeUUID(),
                                                     new CommonRange(neighbors, Collections.emptySet(), FULL_RANGE),

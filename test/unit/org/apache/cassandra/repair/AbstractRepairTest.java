@@ -94,7 +94,8 @@ public abstract class AbstractRepairTest
                                                                  isIncremental,
                                                                  repairedAt,
                                                                  isGlobal,
-                                                                 PreviewKind.NONE);
+                                                                 PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
         return sessionId;
     }
 }

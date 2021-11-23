@@ -43,6 +43,7 @@ import org.apache.cassandra.io.util.DataOutputBufferFixed;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.SyncNodePair;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.repair.RepairJobDesc;
@@ -173,7 +174,7 @@ public class RepairMessageSerializationsTest
     {
         PrepareMessage msg = new PrepareMessage(UUID.randomUUID(), new ArrayList<TableId>() {{add(TableId.generate());}},
                                                 buildTokenRanges(), true, 100000L, false,
-                                                PreviewKind.NONE);
+                                                PreviewKind.NONE, RepairParallelism.PARALLEL);
         serializeRoundTrip(msg, PrepareMessage.serializer);
     }
 

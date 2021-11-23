@@ -33,6 +33,7 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -87,7 +88,8 @@ public abstract class AbstractConsistentSessionTest
                                                                  true,
                                                                  System.currentTimeMillis(),
                                                                  true,
-                                                                 PreviewKind.NONE);
+                                                                 PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
         return sessionId;
     }
 }

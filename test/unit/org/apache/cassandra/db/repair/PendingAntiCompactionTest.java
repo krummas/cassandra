@@ -44,6 +44,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.cassandra.concurrent.ExecutorPlus;
 import org.apache.cassandra.concurrent.FutureTask;
 import org.apache.cassandra.concurrent.ImmediateExecutor;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.utils.concurrent.Future;
 import org.junit.Assert;
 import org.junit.Test;
@@ -139,7 +140,7 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
 
         // create a session so the anti compaction can fine it
         UUID sessionID = UUIDGen.getTimeUUID();
-        ActiveRepairService.instance.registerParentRepairSession(sessionID, InetAddressAndPort.getLocalHost(), tables, ranges, true, 1, true, PreviewKind.NONE);
+        ActiveRepairService.instance.registerParentRepairSession(sessionID, InetAddressAndPort.getLocalHost(), tables, ranges, true, 1, true, PreviewKind.NONE, RepairParallelism.PARALLEL);
 
         PendingAntiCompaction pac;
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -373,7 +374,8 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                                                                  FULL_RANGE,
                                                                  true,0,
                                                                  true,
-                                                                 PreviewKind.NONE);
+                                                                 PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
         CompactionManager.instance.performAnticompaction(result.cfs, atEndpoint(FULL_RANGE, NO_RANGES), result.refs, result.txn, sessionID, () -> false);
 
     }
@@ -393,7 +395,8 @@ public class PendingAntiCompactionTest extends AbstractPendingAntiCompactionTest
                                                                  FULL_RANGE,
                                                                  true,0,
                                                                  true,
-                                                                 PreviewKind.NONE);
+                                                                 PreviewKind.NONE,
+                                                                 RepairParallelism.PARALLEL);
 
         // attempt to anti-compact the sstable in half
         SSTableReader sstable = Iterables.getOnlyElement(cfs.getLiveSSTables());

@@ -28,18 +28,19 @@ public enum RepairParallelism
     /**
      * One node at a time
      */
-    SEQUENTIAL("sequential"),
+    SEQUENTIAL(0, "sequential"),
 
     /**
      * All nodes at the same time
      */
-    PARALLEL("parallel"),
+    PARALLEL(1, "parallel"),
 
     /**
      * One node per data center at a time
      */
-    DATACENTER_AWARE("dc_parallel");
+    DATACENTER_AWARE(2, "dc_parallel");
 
+    private final int serializationVal;
     private final String name;
 
     /**
@@ -59,8 +60,10 @@ public enum RepairParallelism
             return SEQUENTIAL;
     }
 
-    private RepairParallelism(String name)
+    RepairParallelism(int serializationVal, String name)
     {
+        assert ordinal() == serializationVal;
+        this.serializationVal = serializationVal;
         this.name = name;
     }
 
@@ -73,5 +76,15 @@ public enum RepairParallelism
     public String toString()
     {
         return getName();
+    }
+
+    public int getSerializationVal()
+    {
+        return serializationVal;
+    }
+
+    public static RepairParallelism deserialize(int serializationVal)
+    {
+        return values()[serializationVal];
     }
 }

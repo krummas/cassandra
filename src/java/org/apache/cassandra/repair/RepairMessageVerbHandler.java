@@ -94,7 +94,8 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                                                                              prepareMessage.isIncremental,
                                                                              prepareMessage.timestamp,
                                                                              prepareMessage.isGlobal,
-                                                                             prepareMessage.previewKind);
+                                                                             prepareMessage.previewKind,
+                                                                             prepareMessage.parallelism);
                     MessagingService.instance().send(message.emptyResponse(), message.from());
                     break;
 
@@ -109,7 +110,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     }
 
                     ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
-                    prs.setHasSnapshots();
+                    assert prs.shouldSnapshot();
                     TableRepairManager repairManager = cfs.getRepairManager();
                     if (prs.isGlobal)
                     {

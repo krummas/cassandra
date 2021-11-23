@@ -67,6 +67,7 @@ import org.apache.cassandra.net.Message;
 import org.apache.cassandra.metrics.ClearableHistogram;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.Verb;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.consistent.LocalSessionAccessor;
 import org.apache.cassandra.schema.CachingParams;
 import org.apache.cassandra.schema.KeyspaceMetadata;
@@ -1312,7 +1313,8 @@ public class ReadCommandTest
                                                                      true,
                                                                      repairedAt,
                                                                      true,
-                                                                     PreviewKind.NONE);
+                                                                     PreviewKind.NONE,
+                                                                     RepairParallelism.PARALLEL);
 
             LocalSessionAccessor.prepareUnsafe(pendingSession, null, Sets.newHashSet(REPAIR_COORDINATOR));
         }

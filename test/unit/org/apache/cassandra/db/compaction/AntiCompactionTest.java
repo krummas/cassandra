@@ -43,6 +43,7 @@ import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.repair.NoSuchRepairSessionException;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.schema.MockSchema;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableMetadata;
@@ -113,7 +114,7 @@ public class AntiCompactionTest
                                                                  InetAddressAndPort.getByName("10.0.0.1"),
                                                                  Lists.newArrayList(cfs), ImmutableSet.copyOf(ranges),
                                                                  pendingRepair != null || repairedAt != UNREPAIRED_SSTABLE,
-                                                                 repairedAt, true, PreviewKind.NONE);
+                                                                 repairedAt, true, PreviewKind.NONE, RepairParallelism.PARALLEL);
     }
 
     private static RangesAtEndpoint atEndpoint(Collection<Range<Token>> full, Collection<Range<Token>> trans)

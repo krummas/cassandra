@@ -38,6 +38,7 @@ import org.apache.cassandra.distributed.Cluster;
 import org.apache.cassandra.distributed.api.IInvokableInstance;
 import org.apache.cassandra.distributed.api.NodeToolResult;
 import org.apache.cassandra.locator.InetAddressAndPort;
+import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.consistent.LocalSessionAccessor;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
@@ -156,7 +157,8 @@ public class IncRepairAdminTest extends TestBaseImpl
                                                                          true,
                                                                          currentTimeMillis(),
                                                                          true,
-                                                                         PreviewKind.NONE);
+                                                                         PreviewKind.NONE,
+                                                                         RepairParallelism.PARALLEL);
                 LocalSessionAccessor.prepareUnsafe(sessionId,
                                                    InetAddressAndPort.getByAddress(coordinator.getAddress()),
                                                    participants.stream().map(participant -> InetAddressAndPort.getByAddress(participant.getAddress())).collect(Collectors.toSet()));
