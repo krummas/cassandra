@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.management.openmbean.CompositeData;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -36,7 +37,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
-import com.google.common.util.concurrent.MoreExecutors;
 
 import org.apache.cassandra.concurrent.ExecutorPlus;
 import org.apache.cassandra.config.Config;
@@ -106,6 +106,7 @@ import static org.apache.cassandra.config.DatabaseDescriptor.*;
 import static org.apache.cassandra.net.Message.out;
 import static org.apache.cassandra.net.Verb.PREPARE_MSG;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
+import static org.apache.cassandra.utils.Clock.Global.nanoTime;
 import static org.apache.cassandra.utils.concurrent.CountDownLatch.newCountDownLatch;
 
 /**
@@ -185,6 +186,10 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     private final IFailureDetector failureDetector;
     private final Gossiper gossiper;
     private final Cache<Integer, Pair<ParentRepairStatus, List<String>>> repairStatusByCmd;
+
+    private final ExecutorPlus clearSnapshotExecutor = executorFactory().configurePooled("RepairClearSnapshot", 1)
+                                                                        .withKeepAlive(1, TimeUnit.HOURS)
+                                                                        .build();
 
     public ActiveRepairService(IFailureDetector failureDetector, Gossiper gossiper)
     {
@@ -695,10 +700,22 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         ParentRepairSession session = parentRepairSessions.remove(parentSessionId);
         if (session == null)
             return null;
-        for (ColumnFamilyStore cfs : session.columnFamilyStores.values())
+
+        if (session.hasSnapshots)
         {
-            if (cfs.snapshotExists(snapshotName))
-                cfs.clearSnapshot(snapshotName);
+            clearSnapshotExecutor.submit(() -> {
+                logger.info("[repair #{}] Clearing snapshots for {}", parentSessionId,
+                            session.columnFamilyStores.values()
+                                                      .stream()
+                                                      .map(cfs -> cfs.metadata().toString()).collect(Collectors.joining(", ")));
+                long startNanos = nanoTime();
+                for (ColumnFamilyStore cfs : session.columnFamilyStores.values())
+                {
+                    if (cfs.snapshotExists(snapshotName))
+                        cfs.clearSnapshot(snapshotName);
+                }
+                logger.info("[repair #{}] Cleared snapshots in {}ms", parentSessionId, TimeUnit.NANOSECONDS.toMillis(nanoTime() - startNanos));
+            });
         }
         return session;
     }
@@ -756,6 +773,8 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
         public final long repairedAt;
         public final InetAddressAndPort coordinator;
         public final PreviewKind previewKind;
+        // todo: modify PREPARE message to include whether we will snapshot to keep this immutable
+        public volatile boolean hasSnapshots = false;
 
         public ParentRepairSession(InetAddressAndPort coordinator, List<ColumnFamilyStore> columnFamilyStores, Collection<Range<Token>> ranges, boolean isIncremental, long repairedAt, boolean isGlobal, PreviewKind previewKind)
         {
@@ -810,6 +829,11 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                     ", ranges=" + ranges +
                     ", repairedAt=" + repairedAt +
                     '}';
+        }
+
+        public void setHasSnapshots()
+        {
+            hasSnapshots = true;
         }
     }
 
@@ -877,5 +901,11 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             logger.info(message, parentSessionsToRemove);
             parentSessionsToRemove.forEach(this::removeParentRepairSession);
         }
+    }
+
+    @VisibleForTesting
+    public int parentRepairSessionCount()
+    {
+        return parentRepairSessions.size();
     }
 }
