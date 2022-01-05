@@ -71,6 +71,7 @@ import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.TableMetrics;
 import org.apache.cassandra.metrics.TableMetrics.Sampler;
+import org.apache.cassandra.metrics.TopPartitionTracker;
 import org.apache.cassandra.schema.*;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
@@ -223,6 +224,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     private final ScheduledFuture<?> latencyCalculator;
 
     private volatile boolean compactionSpaceCheck = true;
+
+    public final TopPartitionTracker topPartitions;
 
     public static void shutdownPostFlushExecutor() throws InterruptedException
     {
@@ -488,6 +491,11 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             mbeanName = null;
             oldMBeanName= null;
         }
+
+        if (keyspace.getName().equals(SystemKeyspace.NAME))
+            topPartitions = null;
+        else
+            topPartitions = new TopPartitionTracker(metadata);
     }
 
     public Directories getDirectories()
@@ -545,6 +553,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         indexManager.invalidateAllIndexesBlocking();
 
         invalidateCaches();
+        if (topPartitions != null)
+            topPartitions.shutdown();
     }
 
     /**
@@ -2565,5 +2575,33 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     public static TableMetrics metricsFor(UUID tableId)
     {
         return Objects.requireNonNull(getIfExists(tableId)).metric;
+    }
+
+    public Map<String, Long> getTopSizePartitions()
+    {
+        if (topPartitions == null)
+            return Collections.emptyMap();
+        return topPartitions.getTopSizePartitionMap();
+    }
+
+    public Long getTopSizePartitionsLastUpdate()
+    {
+        if (topPartitions == null)
+            return null;
+        return topPartitions.topSizes().lastUpdate;
+    }
+
+    public Map<String, Long> getTopTombstonePartitions()
+    {
+        if (topPartitions == null)
+            return Collections.emptyMap();
+        return topPartitions.getTopTombstonePartitionMap();
+    }
+
+    public Long getTopTombstonePartitionsLastUpdate()
+    {
+        if (topPartitions == null)
+            return null;
+        return topPartitions.topTombstones().lastUpdate;
     }
 }

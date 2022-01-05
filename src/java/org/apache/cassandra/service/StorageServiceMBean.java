@@ -640,4 +640,14 @@ public interface StorageServiceMBean extends NotificationEmitter
 
     /** Returns a map of schema version -> list of endpoints reporting that version that we need schema updates for */
     public Map<String, Set<InetAddress>> getOutstandingSchemaVersions();
+
+    public boolean topPartitionsEnabled();
+    public int getMaxTopSizePartitionCount();
+    public void setMaxTopSizePartitionCount(int value);
+    public int getMaxTopTombstonePartitionCount();
+    public void setMaxTopTombstonePartitionCount(int value);
+    public long getMinTrackedPartitionSize();
+    public void setMinTrackedPartitionSize(long value);
+    public long getMinTrackedPartitionTombstoneCount();
+    public void setMinTrackedPartitionTombstoneCount(long value);
 }

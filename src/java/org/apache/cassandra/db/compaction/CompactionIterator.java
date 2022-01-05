@@ -36,6 +36,7 @@ import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.index.transactions.CompactionTransaction;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
 import org.apache.cassandra.metrics.CompactionMetrics;
+import org.apache.cassandra.metrics.TopPartitionTracker;
 
 /**
  * Merge multiple iterators over the content of sstable into a "compacted" iterator.
@@ -79,11 +80,17 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
 
     public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId)
     {
-        this(type, scanners, controller, nowInSec, compactionId, null);
+        this(type, scanners, controller, nowInSec, compactionId, null, null);
     }
 
     @SuppressWarnings("resource") // We make sure to close mergedIterator in close() and CompactionIterator is itself an AutoCloseable
-    public CompactionIterator(OperationType type, List<ISSTableScanner> scanners, CompactionController controller, int nowInSec, UUID compactionId, CompactionMetrics metrics)
+    public CompactionIterator(OperationType type,
+                              List<ISSTableScanner> scanners,
+                              CompactionController controller,
+                              int nowInSec,
+                              UUID compactionId,
+                              CompactionMetrics metrics,
+                              TopPartitionTracker.Collector topPartitionCollector)
     {
         this.controller = controller;
         this.type = type;
@@ -105,6 +112,8 @@ public class CompactionIterator extends CompactionInfo.Holder implements Unfilte
         UnfilteredPartitionIterator merged = scanners.isEmpty()
                                              ? EmptyIterators.unfilteredPartition(controller.cfs.metadata, false)
                                              : UnfilteredPartitionIterators.merge(scanners, nowInSec, listener());
+        if (topPartitionCollector != null) // need to count tombstones before they are purged
+            merged = Transformation.apply(merged, new TopPartitionTracker.TombstoneCounter(topPartitionCollector, nowInSec));
         boolean isForThrift = merged.isForThrift(); // to stop capture of iterator in Purger, which is confusing for debug
         merged = Transformation.apply(merged, new Purger(isForThrift, controller, nowInSec));
         this.compacted = DuplicateRowChecker.duringCompaction(merged, type);

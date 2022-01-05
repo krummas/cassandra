@@ -173,4 +173,9 @@ public interface ColumnFamilyStoreMBean
        Enable/Disable compaction space check
      */
     public void compactionDiskSpaceCheck(boolean enable);
+
+    public Map<String, Long> getTopSizePartitions();
+    public Long getTopSizePartitionsLastUpdate();
+    public Map<String, Long> getTopTombstonePartitions();
+    public Long getTopTombstonePartitionsLastUpdate();
 }

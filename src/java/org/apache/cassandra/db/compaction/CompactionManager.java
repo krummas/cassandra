@@ -63,6 +63,7 @@ import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.metrics.CompactionMetrics;
+import org.apache.cassandra.metrics.TopPartitionTracker;
 import org.apache.cassandra.repair.Validator;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
@@ -934,7 +935,7 @@ public class CompactionManager implements CompactionManagerMBean
              ISSTableScanner scanner = cleanupStrategy.getScanner(sstable, getRateLimiter());
              CompactionController controller = new CompactionController(cfs, txn.originals(), getDefaultGcBefore(cfs, nowInSec));
              Refs<SSTableReader> refs = Refs.ref(Collections.singleton(sstable));
-             CompactionIterator ci = new CompactionIterator(OperationType.CLEANUP, Collections.singletonList(scanner), controller, nowInSec, UUIDGen.getTimeUUID(), metrics))
+             CompactionIterator ci = new CompactionIterator(OperationType.CLEANUP, Collections.singletonList(scanner), controller, nowInSec, UUIDGen.getTimeUUID(), metrics, null))
         {
             writer.switchWriter(createWriter(cfs, compactionFileLocation, expectedBloomFilterSize, sstable.getSSTableMetadata().repairedAt, sstable, txn));
 
@@ -1168,12 +1169,16 @@ public class CompactionManager implements CompactionManagerMBean
             // We blindly assume that a partition is evenly distributed on all sstables for now.
             MerkleTrees tree = createMerkleTrees(sstables, validator.desc.ranges, cfs);
             long start = System.nanoTime();
+            TopPartitionTracker.Collector topPartitionCollector = null;
+            if (cfs.topPartitions != null && DatabaseDescriptor.topPartitionsEnabled())
+                topPartitionCollector = new TopPartitionTracker.Collector(validator.desc.ranges);
+
             try (AbstractCompactionStrategy.ScannerList scanners = cfs.getCompactionStrategyManager().getScanners(sstables, validator.desc.ranges);
                  ValidationCompactionController controller = new ValidationCompactionController(cfs, gcBefore);
-                 CompactionIterator ci = new ValidationCompactionIterator(scanners.scanners, controller, nowInSec, metrics))
+                 CompactionIterator ci = new ValidationCompactionIterator(scanners.scanners, controller, nowInSec, metrics, topPartitionCollector))
             {
                 // validate the CF as we iterate over it
-                validator.prepare(cfs, tree);
+                validator.prepare(cfs, tree, topPartitionCollector);
                 while (ci.hasNext())
                 {
                     if (ci.isStopRequested())
@@ -1187,6 +1192,7 @@ public class CompactionManager implements CompactionManagerMBean
             }
             finally
             {
+
                 if (isSnapshotValidation && !isGlobalSnapshotValidation)
                 {
                     // we can only clear the snapshot if we are not doing a global snapshot validation (we then clear it once anticompaction
@@ -1194,6 +1200,9 @@ public class CompactionManager implements CompactionManagerMBean
                     cfs.clearSnapshot(snapshotName);
                 }
             }
+
+            if (topPartitionCollector != null)
+                cfs.topPartitions.merge(topPartitionCollector);
 
             if (logger.isDebugEnabled())
             {
@@ -1380,7 +1389,7 @@ public class CompactionManager implements CompactionManagerMBean
              SSTableRewriter unRepairedSSTableWriter = new SSTableRewriter(sharedTxn, groupMaxDataAge, false, false);
              AbstractCompactionStrategy.ScannerList scanners = strategy.getScanners(anticompactionGroup.originals());
              CompactionController controller = new CompactionController(cfs, sstableAsSet, getDefaultGcBefore(cfs, nowInSec));
-             CompactionIterator ci = new CompactionIterator(OperationType.ANTICOMPACTION, scanners.scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics))
+             CompactionIterator ci = new CompactionIterator(OperationType.ANTICOMPACTION, scanners.scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics, null))
         {
             int expectedBloomFilterSize = Math.max(cfs.metadata.params.minIndexInterval, (int)(SSTableReader.getApproximateKeyCount(sstableAsSet)));
 
@@ -1514,9 +1523,9 @@ public class CompactionManager implements CompactionManagerMBean
 
     private static class ValidationCompactionIterator extends CompactionIterator
     {
-        public ValidationCompactionIterator(List<ISSTableScanner> scanners, ValidationCompactionController controller, int nowInSec, CompactionMetrics metrics)
+        public ValidationCompactionIterator(List<ISSTableScanner> scanners, ValidationCompactionController controller, int nowInSec, CompactionMetrics metrics, TopPartitionTracker.Collector topPartitionCollector)
         {
-            super(OperationType.VALIDATION, scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics);
+            super(OperationType.VALIDATION, scanners, controller, nowInSec, UUIDGen.getTimeUUID(), metrics, topPartitionCollector);
         }
     }
 

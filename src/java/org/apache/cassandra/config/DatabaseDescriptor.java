@@ -2256,4 +2256,48 @@ public class DatabaseDescriptor
         conf.check_for_duplicate_rows_during_compaction = enabled;
     }
 
+    public static boolean topPartitionsEnabled()
+    {
+        return conf.top_partitions_enabled;
+    }
+
+    public static int getMaxTopSizePartitionCount()
+    {
+        return conf.max_top_size_partition_count;
+    }
+
+    public static void setMaxTopSizePartitionCount(int value)
+    {
+        conf.max_top_size_partition_count = value;
+    }
+
+    public static int getMaxTopTombstonePartitionCount()
+    {
+        return conf.max_top_tombstone_partition_count;
+    }
+
+    public static void setMaxTopTombstonePartitionCount(int value)
+    {
+        conf.max_top_tombstone_partition_count = value;
+    }
+
+    public static long getMinTrackedPartitionSize()
+    {
+        return conf.min_tracked_partition_size_bytes;
+    }
+
+    public static void setMinTrackedPartitionSize(long value)
+    {
+        conf.min_tracked_partition_size_bytes = value;
+    }
+
+    public static long getMinTrackedPartitionTombstoneCount()
+    {
+        return conf.min_tracked_partition_tombstone_count;
+    }
+
+    public static void setMinTrackedPartitionTombstoneCount(long value)
+    {
+        conf.min_tracked_partition_tombstone_count = value;
+    }
 }
