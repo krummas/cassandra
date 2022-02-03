@@ -26,6 +26,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -212,18 +213,34 @@ public class LocalSessions
 
     private void maybeUpdateRepairedState(LocalSession session)
     {
-        if (session.getState() != FINALIZED)
-            return;
-
-        // if the session is finalized but has repairedAt set to 0, it was
-        // a forced repair, and we shouldn't update the repaired state
-        if (session.repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
+        if (!shouldStoreSession(session))
             return;
 
         for (TableId tid : session.tableIds)
         {
             RepairedState state = getRepairedState(tid);
             state.add(session.ranges, session.repairedAt);
+        }
+    }
+
+    private boolean shouldStoreSession(LocalSession session)
+    {
+        if (session.getState() != FINALIZED)
+            return false;
+
+        // if the session is finalized but has repairedAt set to 0, it was
+        // a forced repair, and we shouldn't update the repaired state
+        if (session.repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
+            return false;
+        return true;
+    }
+    private void finaliseStates( Map<TableId, List<RepairedState.Level>> initialLevels)
+    {
+        for (Map.Entry<TableId, List<RepairedState.Level>> entry : initialLevels.entrySet()) 
+        {
+            TableId tid = entry.getKey();
+            RepairedState state = getRepairedState(tid);
+            state.add(entry.getValue());
         }
     }
 
@@ -341,13 +358,24 @@ public class LocalSessions
         Preconditions.checkArgument(sessions.isEmpty(), "No sessions should be added before start");
         UntypedResultSet rows = QueryProcessor.executeInternalWithPaging(String.format("SELECT * FROM %s.%s", keyspace, table), 1000);
         Map<UUID, LocalSession> loadedSessions = new HashMap<>();
+        Map<TableId, List<RepairedState.Level>> initialLevels = new HashMap<>();
         for (UntypedResultSet.Row row : rows)
         {
             try
             {
                 LocalSession session = load(row);
-                maybeUpdateRepairedState(session);
                 loadedSessions.put(session.sessionID, session);
+                if (shouldStoreSession(session)) 
+                {
+                    for (TableId tid : session.tableIds)
+                    {
+                        if (!initialLevels.containsKey(tid))
+                            initialLevels.put(tid, new LinkedList<RepairedState.Level>());
+                        List<RepairedState.Level> tableLevels = Verify.verifyNotNull(initialLevels.get(tid));
+                        RepairedState.Level level = new RepairedState.Level(session.ranges, session.repairedAt);
+                        tableLevels.add(level);
+                    }
+                }
             }
             catch (IllegalArgumentException | NullPointerException e)
             {
@@ -356,6 +384,8 @@ public class LocalSessions
                     deleteRow(row.getUUID("parent_id"));
             }
         }
+        finaliseStates(initialLevels);
+        
         sessions = ImmutableMap.copyOf(loadedSessions);
         failOngoingRepairs();
         started = true;

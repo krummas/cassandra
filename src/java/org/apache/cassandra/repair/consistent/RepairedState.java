@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -219,19 +220,21 @@ public class RepairedState
         sections.sort(Section.tokenComparator);
         return sections;
     }
-
-    public synchronized void add(Collection<Range<Token>> ranges, long repairedAt)
+    public void add( List<Level> newLevels)
     {
-        Level newLevel = new Level(ranges, repairedAt);
-
         State lastState = state;
 
-        List<Level> tmp = new ArrayList<>(lastState.levels.size() + 1);
-        tmp.addAll(lastState.levels);
-        tmp.add(newLevel);
-        tmp.sort(Level.timeComparator);
+        List<Level> levels = new ArrayList<>(lastState.levels.size() + newLevels.size());
+        levels.addAll(lastState.levels);
+        levels.addAll(newLevels);
+        levels.sort(Level.timeComparator);
 
-        List<Level> levels = new ArrayList<>(lastState.levels.size() + 1);
+        processLevels(levels);
+    }
+    
+	private void processLevels(List<Level> tmp) {
+
+        List<Level> levels = new ArrayList<>(tmp.size() );
         List<Range<Token>> covered = new ArrayList<>();
 
         for (Level level : tmp)
@@ -257,7 +260,16 @@ public class RepairedState
         sections.sort(Section.tokenComparator);
 
         state = new State(levels, covered, sections);
-    }
+        
+	}
+    public synchronized void add(Collection<Range<Token>> ranges, long repairedAt)
+    {
+        Level newLevel = new Level(ranges, repairedAt);
+        List<Level> levels = new LinkedList<Level>();
+        levels.add(newLevel);
+        add(levels);
+ 
+     }
 
     public long minRepairedAt(Collection<Range<Token>> ranges)
     {
