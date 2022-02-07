@@ -22,11 +22,11 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -231,18 +231,7 @@ public class LocalSessions
 
         // if the session is finalized but has repairedAt set to 0, it was
         // a forced repair, and we shouldn't update the repaired state
-        if (session.repairedAt == ActiveRepairService.UNREPAIRED_SSTABLE)
-            return false;
-        return true;
-    }
-    private void finaliseStates( Map<TableId, List<RepairedState.Level>> initialLevels)
-    {
-        for (Map.Entry<TableId, List<RepairedState.Level>> entry : initialLevels.entrySet()) 
-        {
-            TableId tid = entry.getKey();
-            RepairedState state = getRepairedState(tid);
-            state.add(entry.getValue());
-        }
+        return session.repairedAt != ActiveRepairService.UNREPAIRED_SSTABLE;
     }
 
     /**
@@ -369,13 +358,8 @@ public class LocalSessions
                 if (shouldStoreSession(session)) 
                 {
                     for (TableId tid : session.tableIds)
-                    {
-                        if (!initialLevels.containsKey(tid))
-                            initialLevels.put(tid, new LinkedList<RepairedState.Level>());
-                        List<RepairedState.Level> tableLevels = Verify.verifyNotNull(initialLevels.get(tid));
-                        RepairedState.Level level = new RepairedState.Level(session.ranges, session.repairedAt);
-                        tableLevels.add(level);
-                    }
+                        initialLevels.computeIfAbsent(tid, (t) -> new ArrayList<>())
+                                     .add(new RepairedState.Level(session.ranges, session.repairedAt));
                 }
             }
             catch (IllegalArgumentException | NullPointerException e)
@@ -385,8 +369,9 @@ public class LocalSessions
                     deleteRow(row.getUUID("parent_id"));
             }
         }
-        finaliseStates(initialLevels);
-        
+        for (Map.Entry<TableId, List<RepairedState.Level>> entry : initialLevels.entrySet())
+            getRepairedState(entry.getKey()).addAll(entry.getValue());
+
         sessions = ImmutableMap.copyOf(loadedSessions);
         failOngoingRepairs();
         started = true;
