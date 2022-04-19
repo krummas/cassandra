@@ -4222,12 +4222,12 @@ public class DatabaseDescriptor
 
     public static long getMinTrackedPartitionSize()
     {
-        return conf.min_tracked_partition_size_bytes;
+        return conf.min_tracked_partition_size_bytes.toBytes();
     }
 
     public static void setMinTrackedPartitionSize(long value)
     {
-        conf.min_tracked_partition_size_bytes = value;
+        conf.min_tracked_partition_size_bytes = DataStorageSpec.inBytes(value);
     }
 
     public static long getMinTrackedPartitionTombstoneCount()
