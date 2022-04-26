@@ -86,7 +86,7 @@ public class TopPartitionTracker implements Closeable
         this.metadata = metadata;
         topSizes.set(new TopHolder(SystemKeyspace.getTopPartitions(metadata, SIZES),
                                    DatabaseDescriptor.getMaxTopSizePartitionCount(),
-                                   DatabaseDescriptor.getMinTrackedPartitionSize()));
+                                   DatabaseDescriptor.getMinTrackedPartitionSize().toBytes()));
         topTombstones.set(new TopHolder(SystemKeyspace.getTopPartitions(metadata, TOMBSTONES),
                                         DatabaseDescriptor.getMaxTopTombstonePartitionCount(),
                                         DatabaseDescriptor.getMinTrackedPartitionTombstoneCount()));
@@ -176,7 +176,7 @@ public class TopPartitionTracker implements Closeable
                                             DatabaseDescriptor.getMinTrackedPartitionTombstoneCount(),
                                             ranges);
             this.sizes = new TopHolder(DatabaseDescriptor.getMaxTopSizePartitionCount(),
-                                       DatabaseDescriptor.getMinTrackedPartitionSize(),
+                                       DatabaseDescriptor.getMinTrackedPartitionSize().toBytes(),
                                        ranges);
         }
 

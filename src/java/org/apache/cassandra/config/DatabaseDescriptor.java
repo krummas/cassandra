@@ -4220,14 +4220,14 @@ public class DatabaseDescriptor
         conf.max_top_tombstone_partition_count = value;
     }
 
-    public static long getMinTrackedPartitionSize()
+    public static DataStorageSpec getMinTrackedPartitionSize()
     {
-        return conf.min_tracked_partition_size_bytes.toBytes();
+        return conf.min_tracked_partition_size_bytes;
     }
 
-    public static void setMinTrackedPartitionSize(long value)
+    public static void setMinTrackedPartitionSize(DataStorageSpec spec)
     {
-        conf.min_tracked_partition_size_bytes = DataStorageSpec.inBytes(value);
+        conf.min_tracked_partition_size_bytes = spec;
     }
 
     public static long getMinTrackedPartitionTombstoneCount()

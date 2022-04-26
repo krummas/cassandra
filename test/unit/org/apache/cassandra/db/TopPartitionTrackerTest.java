@@ -30,6 +30,7 @@ import java.util.Set;
 
 import org.junit.Test;
 
+import org.apache.cassandra.config.DataStorageSpec;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.dht.Murmur3Partitioner;
@@ -53,7 +54,7 @@ public class TopPartitionTrackerTest extends CQLTester
     {
         createTable("create table %s (id bigint primary key, x int)");
         DatabaseDescriptor.setMaxTopSizePartitionCount(5);
-        DatabaseDescriptor.setMinTrackedPartitionSize(12);
+        DatabaseDescriptor.setMinTrackedPartitionSize(new DataStorageSpec("12B"));
 
         Collection<Range<Token>> fullRange = Collections.singleton(r(0, 0));
         TopPartitionTracker tpt = new TopPartitionTracker(getCurrentColumnFamilyStore().metadata());
@@ -84,7 +85,7 @@ public class TopPartitionTrackerTest extends CQLTester
     public void testCountLimit()
     {
         createTable("create table %s (id bigint primary key, x int)");
-        DatabaseDescriptor.setMinTrackedPartitionSize(0);
+        DatabaseDescriptor.setMinTrackedPartitionSize(new DataStorageSpec("0B"));
         DatabaseDescriptor.setMaxTopSizePartitionCount(5);
         Collection<Range<Token>> fullRange = Collections.singleton(r(0, 0));
         TopPartitionTracker tpt = new TopPartitionTracker(getCurrentColumnFamilyStore().metadata());
@@ -110,7 +111,7 @@ public class TopPartitionTrackerTest extends CQLTester
     public void testSubRangeMerge()
     {
         createTable("create table %s (id bigint primary key, x int)");
-        DatabaseDescriptor.setMinTrackedPartitionSize(0);
+        DatabaseDescriptor.setMinTrackedPartitionSize(new DataStorageSpec("0B"));
         DatabaseDescriptor.setMaxTopSizePartitionCount(10);
         Collection<Range<Token>> fullRange = Collections.singleton(r(0, 0));
         TopPartitionTracker tpt = new TopPartitionTracker(getCurrentColumnFamilyStore().metadata());
@@ -139,7 +140,7 @@ public class TopPartitionTrackerTest extends CQLTester
     public void testSaveLoad()
     {
         createTable("create table %s (id bigint primary key, x int)");
-        DatabaseDescriptor.setMinTrackedPartitionSize(0);
+        DatabaseDescriptor.setMinTrackedPartitionSize(new DataStorageSpec("0B"));
         DatabaseDescriptor.setMinTrackedPartitionTombstoneCount(0);
         DatabaseDescriptor.setMaxTopSizePartitionCount(10);
         DatabaseDescriptor.setMaxTopTombstonePartitionCount(10);
@@ -204,7 +205,7 @@ public class TopPartitionTrackerTest extends CQLTester
     public void randomTest()
     {
         createTable("create table %s (id bigint primary key, x int)");
-        DatabaseDescriptor.setMinTrackedPartitionSize(0);
+        DatabaseDescriptor.setMinTrackedPartitionSize(new DataStorageSpec("0B"));
         DatabaseDescriptor.setMaxTopSizePartitionCount(1000);
         int keyCount = 10000;
         long seed = System.currentTimeMillis();
@@ -253,7 +254,7 @@ public class TopPartitionTrackerTest extends CQLTester
     public void testRanges() throws UnknownHostException
     {
         createTable("create table %s (id bigint primary key, x int)");
-        DatabaseDescriptor.setMinTrackedPartitionSize(0);
+        DatabaseDescriptor.setMinTrackedPartitionSize(new DataStorageSpec("0B"));
         DatabaseDescriptor.setMaxTopSizePartitionCount(1000);
         long seed = System.currentTimeMillis();
         Random r = new Random(seed);

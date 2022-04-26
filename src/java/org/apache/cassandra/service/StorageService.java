@@ -6742,15 +6742,15 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     }
 
     @Override
-    public long getMinTrackedPartitionSize()
+    public String getMinTrackedPartitionSize()
     {
-        return DatabaseDescriptor.getMinTrackedPartitionSize();
+        return DatabaseDescriptor.getMinTrackedPartitionSize().toString();
     }
 
     @Override
-    public void setMinTrackedPartitionSize(long value)
+    public void setMinTrackedPartitionSize(String value)
     {
-        DatabaseDescriptor.setMinTrackedPartitionSize(value);
+        DatabaseDescriptor.setMinTrackedPartitionSize(parseDataStorageSpec(value));
     }
 
     @Override
