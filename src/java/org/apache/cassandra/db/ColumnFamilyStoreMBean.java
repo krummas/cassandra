@@ -17,12 +17,16 @@
  */
 package org.apache.cassandra.db;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.OpenDataException;
+
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 
 /**
  * The MBean interface for ColumnFamilyStore
@@ -43,7 +47,7 @@ public interface ColumnFamilyStoreMBean
      * @param splitOutput true if the output of the major compaction should be split in several sstables
      */
     public void forceMajorCompaction(boolean splitOutput) throws ExecutionException, InterruptedException;
-
+    public void forceCompactionForTokenRange(Collection<Range<Token>> tokenRanges);
     /**
      * Gets the minimum number of sstables in queue before compaction kicks off
      */

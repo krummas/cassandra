@@ -253,7 +253,7 @@ public interface StorageServiceMBean extends NotificationEmitter
      * Forces major compaction of a single keyspace
      */
     public void forceKeyspaceCompaction(boolean splitOutput, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException;
-
+    public void forceKeyspaceCompactionForTokenRange(String keyspaceName, String startToken, String endToken, String... tableNames) throws IOException;
     /**
      * Trigger a cleanup of keys on a single keyspace
      */
