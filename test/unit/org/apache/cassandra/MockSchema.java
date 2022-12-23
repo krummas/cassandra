@@ -93,7 +93,7 @@ public class MockSchema
 
     public static SSTableReader sstable(int generation, int size, boolean keepRef, ColumnFamilyStore cfs)
     {
-        return sstable(generation, size, keepRef, cfs);
+        return sstable(generation, size, keepRef, System.currentTimeMillis() * 1000, cfs);
     }
 
 
