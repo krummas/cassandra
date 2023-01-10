@@ -72,6 +72,7 @@ import static org.junit.Assert.fail;
 
 public class LogTransactionTest extends AbstractTransactionalTest
 {
+    // for cci
     private static final String KEYSPACE = "TransactionLogsTest";
 
     @BeforeClass
