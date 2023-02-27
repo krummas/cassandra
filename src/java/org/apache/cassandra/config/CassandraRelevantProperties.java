@@ -360,6 +360,12 @@ public enum CassandraRelevantProperties
     FLUSH_LOCAL_SCHEMA_CHANGES("cassandra.test.flush_local_schema_changes", "true"),
 
     TOMBSTONE_HISTOGRAM_TTL_ROUND_SECONDS("cassandra.streaminghistogram.roundseconds", "60"),
+
+    // transactional cluster metadata relevant properties
+    /**
+     * size of in-memory index of max epoch -> sealed period
+     */
+    RECENTLY_SEALED_PERIOD_INDEX_SIZE("cassandra.recently_sealed_period_index_size", "10"),
     ;
 
     CassandraRelevantProperties(String key, String defaultVal)

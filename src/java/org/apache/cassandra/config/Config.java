@@ -165,6 +165,15 @@ public class Config
     @Replaces(oldName = "slow_query_log_timeout_in_ms", converter = Converters.MILLIS_DURATION_LONG, deprecated = true)
     public volatile DurationSpec.LongMillisecondsBound slow_query_log_timeout = new DurationSpec.LongMillisecondsBound("500ms");
 
+    public volatile DurationSpec.LongMillisecondsBound cms_await_timeout = new DurationSpec.LongMillisecondsBound("120000ms");
+    // TODO rename to indicate CMS related
+    public volatile int default_retry_max_tries = 10;
+    public volatile DurationSpec.IntMillisecondsBound default_retry_backoff = new DurationSpec.IntMillisecondsBound("50ms");
+    /**
+     * How often we should snapshot the cluster metadata.
+     */
+    public volatile int metadata_snapshot_frequency = 100;
+
     public volatile double phi_convict_threshold = 8.0;
 
     public int concurrent_reads = 32;

@@ -4677,4 +4677,30 @@ public class DatabaseDescriptor
     {
         return Objects.requireNonNull(sstableFormatFactories, "Forgot to initialize DatabaseDescriptor?");
     }
+
+    public static int getDefaultRetryMaxTries()
+    {
+        return conf.default_retry_max_tries;
+    }
+
+    public static DurationSpec getDefaultRetryBackoff()
+    {
+        return conf.default_retry_backoff;
+    }
+
+    public static DurationSpec getCmsAwaitTimeout()
+    {
+        return conf.cms_await_timeout;
+    }
+
+    public static int getMetadataSnapshotFrequency()
+    {
+        return conf.metadata_snapshot_frequency;
+    }
+
+    public static void setMetadataSnapshotFrequency(int frequency)
+    {
+        conf.metadata_snapshot_frequency = frequency;
+    }
+
 }
