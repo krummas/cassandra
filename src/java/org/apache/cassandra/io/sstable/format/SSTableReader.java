@@ -344,7 +344,7 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
 
     public static SSTableReader open(SSTable.Owner owner, Descriptor desc, TableMetadataRef metadata)
     {
-        return open(owner, desc, null, metadata);
+        return open(owner, desc,  null, metadata);
     }
 
     public static SSTableReader open(SSTable.Owner owner, Descriptor descriptor, Set<Component> components, TableMetadataRef metadata)
@@ -392,7 +392,6 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
                                      boolean isOffline)
     {
         SSTableReaderLoadingBuilder<?, ?> builder = descriptor.getFormat().getReaderFactory().loadingBuilder(descriptor, metadata, components);
-
         return builder.build(owner, validate, !isOffline);
     }
 
@@ -534,7 +533,7 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
 
     public void setupOnline()
     {
-         owner().ifPresent(o -> setCrcCheckChance(o.getCrcCheckChance()));
+        owner().ifPresent(o -> setCrcCheckChance(o.getCrcCheckChance()));
     }
 
     /**

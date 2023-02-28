@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.schema;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.function.Predicate;
@@ -32,12 +33,20 @@ import org.apache.cassandra.cql3.selection.SimpleSelector;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.tcm.serialization.UDTAwareMetadataSerializer;
+import org.apache.cassandra.tcm.serialization.Version;
 import org.apache.cassandra.serializers.MarshalException;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.github.jamm.Unmetered;
+
+import static org.apache.cassandra.db.TypeSizes.sizeof;
 
 @Unmetered
 public final class ColumnMetadata extends ColumnSpecification implements Selectable, Comparable<ColumnMetadata>
 {
+    public static final Serializer serializer = new Serializer();
     public static final Comparator<Object> asymmetricColumnDataComparator =
         (a, b) -> ((ColumnData) a).column().compareTo((ColumnMetadata) b);
 
@@ -494,5 +503,42 @@ public final class ColumnMetadata extends ColumnSpecification implements Selecta
     public AbstractType<?> getExactTypeIfKnown(String keyspace)
     {
         return type;
+    }
+
+    public static class Serializer implements UDTAwareMetadataSerializer<ColumnMetadata>
+    {
+        public void serialize(ColumnMetadata t, DataOutputPlus out, Version version) throws IOException
+        {
+            out.writeUTF(t.ksName);
+            out.writeUTF(t.cfName);
+            out.writeUTF(t.kind.name());
+            out.writeInt(t.position);
+            out.writeUTF(t.type.asCQL3Type().toString());
+            out.writeUTF(t.name.toString());
+            ByteBufferUtil.writeWithShortLength(t.name.bytes, out);
+        }
+
+        public ColumnMetadata deserialize(DataInputPlus in, Types types, Version version) throws IOException
+        {
+            String ksName = in.readUTF();
+            String tableName = in.readUTF();
+            Kind kind = Kind.valueOf(in.readUTF());
+            int position = in.readInt();
+            AbstractType<?> type = CQLTypeParser.parse(ksName, in.readUTF(), types);
+            String name = in.readUTF();
+            ByteBuffer nameBB = ByteBufferUtil.readWithShortLength(in);
+            return new ColumnMetadata(ksName, tableName, new ColumnIdentifier(nameBB, name), type, position, kind);
+        }
+
+        public long serializedSize(ColumnMetadata t, Version version)
+        {
+            return sizeof(t.ksName) +
+                   sizeof(t.cfName) +
+                   sizeof(t.kind.name()) +
+                   sizeof(t.position) +
+                   sizeof(t.type.asCQL3Type().toString()) +
+                   sizeof(t.name.toString()) +
+                   ByteBufferUtil.serializedSizeWithShortLength(t.name.bytes);
+        }
     }
 }

@@ -525,7 +525,7 @@ public class KeyspaceTest extends CQLTester
     {
         String ksName = "MissingKeyspace";
 
-        Assertions.assertThatThrownBy(() -> Keyspace.open(ksName, Schema.instance, false))
+        Assertions.assertThatThrownBy(() -> Keyspace.open(ksName))
                   .isInstanceOf(AssertionError.class)
                   .hasMessage("Unknown keyspace " + ksName);
     }

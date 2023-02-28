@@ -161,6 +161,7 @@ import org.apache.cassandra.service.snapshot.SnapshotLoader;
 import org.apache.cassandra.service.snapshot.SnapshotManifest;
 import org.apache.cassandra.service.snapshot.TableSnapshot;
 import org.apache.cassandra.streaming.TableStreamManager;
+import org.apache.cassandra.tcm.ClusterMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.DefaultValue;
 import org.apache.cassandra.utils.ExecutorUtils;
@@ -371,22 +372,27 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
     public void reload()
     {
+        reload(metadata());
+    }
+
+    public void reload(TableMetadata tableMetadata)
+    {
         // metadata object has been mutated directly. make all the members jibe with new settings.
 
         // only update these runtime-modifiable settings if they have not been modified.
         if (!minCompactionThreshold.isModified())
             for (ColumnFamilyStore cfs : concatWithIndexes())
-                cfs.minCompactionThreshold = new DefaultValue(metadata().params.compaction.minCompactionThreshold());
+                cfs.minCompactionThreshold = new DefaultValue<>(tableMetadata.params.compaction.minCompactionThreshold());
         if (!maxCompactionThreshold.isModified())
             for (ColumnFamilyStore cfs : concatWithIndexes())
-                cfs.maxCompactionThreshold = new DefaultValue(metadata().params.compaction.maxCompactionThreshold());
+                cfs.maxCompactionThreshold = new DefaultValue<>(tableMetadata.params.compaction.maxCompactionThreshold());
         if (!crcCheckChance.isModified())
             for (ColumnFamilyStore cfs : concatWithIndexes())
-                cfs.crcCheckChance = new DefaultValue(metadata().params.crcCheckChance);
+                cfs.crcCheckChance = new DefaultValue<>(tableMetadata.params.crcCheckChance);
 
-        compactionStrategyManager.maybeReloadParamsFromSchema(metadata().params.compaction);
+        compactionStrategyManager.maybeReloadParamsFromSchema(tableMetadata.params.compaction);
 
-        indexManager.reload();
+        indexManager.reload(tableMetadata);
 
         memtableFactory = metadata().params.memtable.factory();
         switchMemtableOrNotify(FlushReason.SCHEMA_CHANGE, Memtable::metadataUpdated);
@@ -448,7 +454,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         {
             CompressionParams params = CompressionParams.fromMap(opts);
             params.validate();
-            metadata.setLocalOverrides(metadata().unbuild().compression(params).build());
+
+            TableMetadata orig = metadata();
+            metadata.setLocalOverrides(orig.unbuild().compression(params).epoch(orig.epoch).build());
         }
         catch (ConfigurationException e)
         {
@@ -465,27 +473,27 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     public ColumnFamilyStore(Keyspace keyspace,
                              String columnFamilyName,
                              Supplier<? extends SSTableId> sstableIdGenerator,
-                             TableMetadataRef metadata,
+                             TableMetadata initMetadata,
                              Directories directories,
                              boolean loadSSTables,
                              boolean registerBookeeping,
                              boolean offline)
     {
         assert directories != null;
-        assert metadata != null : "null metadata for " + keyspace + ':' + columnFamilyName;
+        assert initMetadata != null : "null metadata for " + keyspace + ':' + columnFamilyName;
 
         this.keyspace = keyspace;
-        this.metadata = metadata;
+        this.metadata = initMetadata.ref;
         this.directories = directories;
         name = columnFamilyName;
-        minCompactionThreshold = new DefaultValue<>(metadata.get().params.compaction.minCompactionThreshold());
-        maxCompactionThreshold = new DefaultValue<>(metadata.get().params.compaction.maxCompactionThreshold());
-        crcCheckChance = new DefaultValue<>(metadata.get().params.crcCheckChance);
-        viewManager = keyspace.viewManager.forTable(metadata.id);
+        minCompactionThreshold = new DefaultValue<>(initMetadata.params.compaction.minCompactionThreshold());
+        maxCompactionThreshold = new DefaultValue<>(initMetadata.params.compaction.maxCompactionThreshold());
+        crcCheckChance = new DefaultValue<>(initMetadata.params.crcCheckChance);
+        viewManager = keyspace.viewManager.forTable(initMetadata);
         this.sstableIdGenerator = sstableIdGenerator;
         sampleReadLatencyMicros = DatabaseDescriptor.getReadRpcTimeout(TimeUnit.MICROSECONDS) / 2;
         additionalWriteLatencyMicros = DatabaseDescriptor.getWriteRpcTimeout(TimeUnit.MICROSECONDS) / 2;
-        memtableFactory = metadata.get().params.memtable.factory();
+        memtableFactory = initMetadata.params.memtable.factory();
 
         logger.info("Initializing {}.{}", keyspace.getName(), name);
 
@@ -509,10 +517,9 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         {
             Directories.SSTableLister sstableFiles = directories.sstableLister(Directories.OnTxnErr.IGNORE).skipTemporary(true);
             sstables = SSTableReader.openAll(this, sstableFiles.list().entrySet(), metadata);
-            data.addInitialSSTablesWithoutUpdatingSize(sstables);
+            data.addInitialSSTablesWithoutUpdatingSize(sstables, this);
         }
 
-        // compaction strategy should be created after the CFS has been prepared
         compactionStrategyManager = new CompactionStrategyManager(this);
 
         if (maxCompactionThreshold.value() <= 0 || minCompactionThreshold.value() <=0)
@@ -523,7 +530,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
         // create the private ColumnFamilyStores for the secondary column indexes
         indexManager = new SecondaryIndexManager(this);
-        for (IndexMetadata info : metadata.get().indexes)
+        for (IndexMetadata info : initMetadata.indexes)
         {
             indexManager.addIndex(info, true);
         }
@@ -538,8 +545,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         if (registerBookeeping)
         {
             // register the mbean
-            mbeanName = getTableMBeanName(keyspace.getName(), name, isIndex());
-            oldMBeanName = getColumnFamilieMBeanName(keyspace.getName(), name, isIndex());
+            mbeanName = getTableMBeanName(keyspace.getName(), name, initMetadata.isIndex());
+            oldMBeanName = getColumnFamilieMBeanName(keyspace.getName(), name, initMetadata.isIndex());
 
             String[] objectNames = {mbeanName, oldMBeanName};
             for (String objectName : objectNames)
@@ -558,7 +565,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         if (SchemaConstants.isSystemKeyspace(keyspace.getName()))
             topPartitions = null;
         else
-            topPartitions = new TopPartitionTracker(metadata());
+            topPartitions = new TopPartitionTracker(initMetadata);
     }
 
     public static String getTableMBeanName(String ks, String name, boolean isIndex)
@@ -729,24 +736,24 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
     }
 
 
-    public static ColumnFamilyStore createColumnFamilyStore(Keyspace keyspace, TableMetadataRef metadata, boolean loadSSTables)
+    public static ColumnFamilyStore createColumnFamilyStore(Keyspace keyspace, TableMetadata metadata, boolean loadSSTables)
     {
         return createColumnFamilyStore(keyspace, metadata.name, metadata, loadSSTables);
     }
 
     public static ColumnFamilyStore createColumnFamilyStore(Keyspace keyspace,
-                                                                         String columnFamily,
-                                                                         TableMetadataRef metadata,
-                                                                         boolean loadSSTables)
+                                                            String columnFamily,
+                                                            TableMetadata metadata,
+                                                            boolean loadSSTables)
     {
-        Directories directories = new Directories(metadata.get());
+        Directories directories = new Directories(metadata);
         return createColumnFamilyStore(keyspace, columnFamily, metadata, directories, loadSSTables, true, false);
     }
 
     /** This is only directly used by offline tools */
     public static synchronized ColumnFamilyStore createColumnFamilyStore(Keyspace keyspace,
                                                                          String columnFamily,
-                                                                         TableMetadataRef metadata,
+                                                                         TableMetadata metadata,
                                                                          Directories directories,
                                                                          boolean loadSSTables,
                                                                          boolean registerBookkeeping,
@@ -1449,6 +1456,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             return ShardBoundaries.NONE;
 
         ShardBoundaries shardBoundaries = cachedShardBoundaries;
+        ClusterMetadata metadata = ClusterMetadata.current();
 
         if (shardBoundaries == null ||
             shardBoundaries.shardCount() != shardCount ||
@@ -1457,11 +1465,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             List<Splitter.WeightedRange> weightedRanges;
             long ringVersion;
             if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName())
-                && getPartitioner() == StorageService.instance.getTokenMetadata().partitioner)
+                && getPartitioner() == metadata.current().partitioner)
             {
                 DiskBoundaryManager.VersionedRangesAtEndpoint versionedLocalRanges = DiskBoundaryManager.getVersionedLocalRanges(this);
                 Set<Range<Token>> localRanges = versionedLocalRanges.rangesAtEndpoint.ranges();
                 ringVersion = versionedLocalRanges.ringVersion;
+
 
                 if (!localRanges.isEmpty())
                 {

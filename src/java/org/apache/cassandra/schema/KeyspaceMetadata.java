@@ -17,39 +17,44 @@
  */
 package org.apache.cassandra.schema;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
-
 import javax.annotation.Nullable;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterables;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.CqlBuilder;
 import org.apache.cassandra.cql3.SchemaElement;
 import org.apache.cassandra.cql3.functions.UDAggregate;
 import org.apache.cassandra.cql3.functions.UDFunction;
 import org.apache.cassandra.db.marshal.UserType;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.schema.UserFunctions.FunctionsDiff;
+import org.apache.cassandra.tcm.ClusterMetadata;
+import org.apache.cassandra.tcm.serialization.MetadataSerializer;
+import org.apache.cassandra.tcm.serialization.Version;
 import org.apache.cassandra.schema.Tables.TablesDiff;
 import org.apache.cassandra.schema.Types.TypesDiff;
 import org.apache.cassandra.schema.Views.ViewsDiff;
-import org.apache.cassandra.service.StorageService;
-
-import static java.lang.String.format;
 
 import static com.google.common.collect.Iterables.any;
+import static java.lang.String.format;
+import static org.apache.cassandra.db.TypeSizes.sizeof;
 
 /**
  * An immutable representation of keyspace metadata (name, params, tables, types, and functions).
  */
 public final class KeyspaceMetadata implements SchemaElement
 {
+    public static final Serializer serializer = new Serializer();
+
     public enum Kind
     {
         REGULAR, VIRTUAL
@@ -57,21 +62,23 @@ public final class KeyspaceMetadata implements SchemaElement
 
     public final String name;
     public final Kind kind;
+    public final AbstractReplicationStrategy replicationStrategy;
     public final KeyspaceParams params;
     public final Tables tables;
     public final Views views;
     public final Types types;
     public final UserFunctions userFunctions;
 
-    private KeyspaceMetadata(String name, Kind kind, KeyspaceParams params, Tables tables, Views views, Types types, UserFunctions functions)
+    private KeyspaceMetadata(String keyspaceName, Kind kind, KeyspaceParams params, Tables tables, Views views, Types types, UserFunctions functions)
     {
-        this.name = name;
+        this.name = keyspaceName;
         this.kind = kind;
         this.params = params;
         this.tables = tables;
         this.views = views;
         this.types = types;
         this.userFunctions = functions;
+        this.replicationStrategy = AbstractReplicationStrategy.createReplicationStrategy(keyspaceName, params.replication);
     }
 
     public static KeyspaceMetadata create(String name, KeyspaceParams params)
@@ -197,6 +204,15 @@ public final class KeyspaceMetadata implements SchemaElement
         return Optional.empty();
     }
 
+    public Optional<TableMetadata> getIndexMetadata(String indexName)
+    {
+        TableMetadata metadata = tables.indexTables().get(indexName);
+        if (metadata != null)
+            return Optional.of(metadata);
+
+        return Optional.empty();
+    }
+
     @Override
     public int hashCode()
     {
@@ -298,7 +314,7 @@ public final class KeyspaceMetadata implements SchemaElement
         return builder.toString();
     }
 
-    public void validate()
+    public void validate(ClusterMetadata metadata)
     {
         if (!SchemaConstants.isValidName(name))
         {
@@ -309,7 +325,6 @@ public final class KeyspaceMetadata implements SchemaElement
         }
 
         params.validate(name, null);
-
         tablesAndViews().forEach(TableMetadata::validate);
 
         Set<String> indexNames = new HashSet<>();
@@ -323,15 +338,6 @@ public final class KeyspaceMetadata implements SchemaElement
                 indexNames.add(index.name);
             }
         }
-    }
-
-    public AbstractReplicationStrategy createReplicationStrategy()
-    {
-        return AbstractReplicationStrategy.createReplicationStrategy(name,
-                                                                     params.replication.klass,
-                                                                     StorageService.instance.getTokenMetadata(),
-                                                                     DatabaseDescriptor.getEndpointSnitch(),
-                                                                     params.replication.options);
     }
 
     static Optional<KeyspaceDiff> diff(KeyspaceMetadata before, KeyspaceMetadata after)
@@ -409,6 +415,40 @@ public final class KeyspaceMetadata implements SchemaElement
                    ", udfs=" + udfs +
                    ", udas=" + udas +
                    '}';
+        }
+    }
+
+    public static class Serializer implements MetadataSerializer<KeyspaceMetadata>
+    {
+        public void serialize(KeyspaceMetadata t, DataOutputPlus out, Version version) throws IOException
+        {
+            out.writeUTF(t.name);
+            Types.serializer.serialize(t.types, out, version);
+            KeyspaceParams.serializer.serialize(t.params, out, version);
+            Tables.serializer.serialize(t.tables, out, version);
+            UserFunctions.serializer.serialize(t.userFunctions, out, version);
+            Views.serializer.serialize(t.views, out, version);
+        }
+
+        public KeyspaceMetadata deserialize(DataInputPlus in, Version version) throws IOException
+        {
+            String name = in.readUTF();
+            Types types = Types.serializer.deserialize(name, in, version);
+            KeyspaceParams params = KeyspaceParams.serializer.deserialize(in, version);
+            Tables tables = Tables.serializer.deserialize(in, types, version);
+            UserFunctions functions = UserFunctions.serializer.deserialize(in, types, version);
+            Views views = Views.serializer.deserialize(in, types, version);
+            return KeyspaceMetadata.create(name, params, tables, views, types, functions);
+        }
+
+        public long serializedSize(KeyspaceMetadata t, Version version)
+        {
+            return sizeof(t.name)
+                   + Types.serializer.serializedSize(t.types, version)
+                   + KeyspaceParams.serializer.serializedSize(t.params, version)
+                   + Tables.serializer.serializedSize(t.tables, version)
+                   + UserFunctions.serializer.serializedSize(t.userFunctions, version)
+                   + Views.serializer.serializedSize(t.views, version);
         }
     }
 }

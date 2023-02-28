@@ -17,17 +17,26 @@
  */
 package org.apache.cassandra.schema;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
+import org.antlr.runtime.RecognitionException;
 import org.apache.cassandra.cql3.*;
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.marshal.UserType;
+import org.apache.cassandra.io.util.DataInputPlus;
+import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.tcm.serialization.UDTAwareMetadataSerializer;
+import org.apache.cassandra.tcm.serialization.Version;
 
 public final class ViewMetadata implements SchemaElement
 {
+    public static final Serializer serializer = new Serializer();
+
     public final TableId baseTableId;
     public final String baseTableName;
 
@@ -225,5 +234,48 @@ public final class ViewMetadata implements SchemaElement
         CqlBuilder builder = new CqlBuilder(2048);
         appendCqlTo(builder, withInternals, ifNotExists);
         return builder.toString();
+    }
+
+    public static class Serializer implements UDTAwareMetadataSerializer<ViewMetadata>
+    {
+        public void serialize(ViewMetadata t, DataOutputPlus out, Version version) throws IOException
+        {
+            TableMetadata.serializer.serialize(t.metadata, out, version);
+            out.writeBoolean(t.includeAllColumns);
+            t.baseTableId.serialize(out);
+            out.writeUTF(t.whereClause.toCQLString());
+            out.writeUTF(t.baseTableName);
+        }
+
+        public ViewMetadata deserialize(DataInputPlus in, Types types, Version version) throws IOException
+        {
+            TableMetadata meta = TableMetadata.serializer.deserialize(in, types, version);
+            boolean includeAllColumns = in.readBoolean();
+            TableId tableId = TableId.deserialize(in);
+            String whereClause = in.readUTF();
+            String baseTableName = in.readUTF();
+
+            WhereClause wc;
+            try
+            {
+                wc = WhereClause.parse(whereClause);
+            }
+            catch (RecognitionException e)
+            {
+                throw new RuntimeException(String.format("Unexpected error while parsing materialized view's where clause for '%s' (got %s)", meta.name, whereClause));
+            }
+
+            return new ViewMetadata(tableId, baseTableName, includeAllColumns, wc, meta);
+        }
+
+        public long serializedSize(ViewMetadata t, Version version)
+        {
+            long size = TableMetadata.serializer.serializedSize(t.metadata, version);
+            size += TypeSizes.sizeof(t.includeAllColumns);
+            size += t.baseTableId.serializedSize();
+            size += TypeSizes.sizeof(t.whereClause.toCQLString());
+            size += TypeSizes.sizeof(t.baseTableName);
+            return size;
+        }
     }
 }

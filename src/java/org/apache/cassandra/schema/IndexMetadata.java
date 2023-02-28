@@ -39,8 +39,11 @@ import org.apache.cassandra.exceptions.UnknownIndexException;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
+import org.apache.cassandra.tcm.serialization.Version;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDSerializer;
+
+import static org.apache.cassandra.db.TypeSizes.sizeof;
 
 /**
  * An immutable representation of secondary index metadata.
@@ -54,6 +57,7 @@ public final class IndexMetadata
 
 
     public static final Serializer serializer = new Serializer();
+    public static final MetadataSerializer metadataSerializer = new MetadataSerializer();
 
     public enum Kind
     {
@@ -298,6 +302,43 @@ public final class IndexMetadata
         public long serializedSize(IndexMetadata metadata, int version)
         {
             return UUIDSerializer.serializer.serializedSize(metadata.id, version);
+        }
+    }
+
+    public static class MetadataSerializer implements org.apache.cassandra.tcm.serialization.MetadataSerializer<IndexMetadata>
+    {
+        public void serialize(IndexMetadata t, DataOutputPlus out, Version version) throws IOException
+        {
+            out.writeUTF(t.name);
+            out.writeUTF(t.kind.name());
+            out.writeInt(t.options.size());
+            for (Map.Entry<String, String> entry : t.options.entrySet())
+            {
+                out.writeUTF(entry.getKey());
+                out.writeUTF(entry.getValue());
+            }
+        }
+
+        public IndexMetadata deserialize(DataInputPlus in, Version version) throws IOException
+        {
+            String name = in.readUTF();
+            Kind kind = Kind.valueOf(in.readUTF());
+            int size = in.readInt();
+
+            Map<String, String> options = Maps.newHashMapWithExpectedSize(size);
+            for (int i = 0; i < size; i++)
+                options.put(in.readUTF(), in.readUTF());
+            return new IndexMetadata(name, options, kind);
+        }
+
+        public long serializedSize(IndexMetadata t, Version version)
+        {
+            int size = sizeof(t.name) + sizeof(t.kind.name()) + sizeof(t.options.size());
+
+            for (Map.Entry<String, String> entry : t.options.entrySet())
+                size = size + sizeof(entry.getKey()) + sizeof(entry.getValue());
+
+            return size;
         }
     }
 }
