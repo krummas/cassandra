@@ -362,6 +362,18 @@ public enum CassandraRelevantProperties
     TOMBSTONE_HISTOGRAM_TTL_ROUND_SECONDS("cassandra.streaminghistogram.roundseconds", "60"),
 
     // transactional cluster metadata relevant properties
+
+    /**
+     * should replica groups in data placements be sorted to ensure the primary replica is first in the list
+     */
+    SORT_REPLICA_GROUPS("cassandra.sorted_replica_groups_enabled", "true"),
+
+    /**
+     * for obtaining acknowlegement from peers to make progress in multi-step operations
+     */
+    PROGRESS_BARRIER_TIMEOUT_MILLIS("cassandra.progress_barrier_timeout_ms", "3600000"),
+    PROGRESS_BARRIER_BACKOFF_MILLIS("cassandra.progress_barrier_backoff_ms", "1000"),
+
     /**
      * size of in-memory index of max epoch -> sealed period
      */

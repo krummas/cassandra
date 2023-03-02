@@ -2145,7 +2145,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     /**
      * All MVs have been created during bootstrap, so mark them as built
      */
-    private void markViewsAsBuilt() {
+    public void markViewsAsBuilt() {
         for (String keyspace : Schema.instance.getUserKeyspaces().names())
         {
             for (ViewMetadata view: Schema.instance.getKeyspaceMetadata(keyspace).views)
@@ -4707,7 +4707,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         }
     }
 
-    private void repairPaxosForTopologyChange(String reason)
+    public void repairPaxosForTopologyChange(String reason)
     {
         if (getSkipPaxosRepairOnTopologyChange() || !Paxos.useV2())
         {
@@ -5273,7 +5273,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         onFinish.run();
     }
 
-    private Future streamHints()
+    public Future streamHints()
     {
         return HintsService.instance.transferHints(this::getPreferredHintsStreamTarget);
     }
@@ -6129,7 +6129,7 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
      * @param rangesToStreamByKeyspace keyspaces and data ranges with endpoints included for each
      * @return async Future for whether stream was success
      */
-    private Future<StreamState> streamRanges(Map<String, EndpointsByReplica> rangesToStreamByKeyspace)
+    public Future<StreamState> streamRanges(Map<String, EndpointsByReplica> rangesToStreamByKeyspace)
     {
         // First, we build a list of ranges to stream to each host, per table
         Map<String, RangesByEndpoint> sessionsToStreamByKeyspace = new HashMap<>();
