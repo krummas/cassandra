@@ -90,14 +90,14 @@ import org.apache.cassandra.db.compaction.CompactionStrategyManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.DataLimits;
+import org.apache.cassandra.db.memtable.Flushing;
+import org.apache.cassandra.db.memtable.Memtable;
+import org.apache.cassandra.db.memtable.ShardBoundaries;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.lifecycle.SSTableSet;
 import org.apache.cassandra.db.lifecycle.Tracker;
 import org.apache.cassandra.db.lifecycle.View;
-import org.apache.cassandra.db.memtable.Flushing;
-import org.apache.cassandra.db.memtable.Memtable;
-import org.apache.cassandra.db.memtable.ShardBoundaries;
 import org.apache.cassandra.db.partitions.CachedPartition;
 import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.db.repair.CassandraTableRepairManager;
@@ -162,6 +162,7 @@ import org.apache.cassandra.service.snapshot.SnapshotManifest;
 import org.apache.cassandra.service.snapshot.TableSnapshot;
 import org.apache.cassandra.streaming.TableStreamManager;
 import org.apache.cassandra.tcm.ClusterMetadata;
+import org.apache.cassandra.tcm.Epoch;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.DefaultValue;
 import org.apache.cassandra.utils.ExecutorUtils;
@@ -520,6 +521,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
             data.addInitialSSTablesWithoutUpdatingSize(sstables, this);
         }
 
+        // compaction strategy should be created after the CFS has been prepared
         compactionStrategyManager = new CompactionStrategyManager(this);
 
         if (maxCompactionThreshold.value() <= 0 || minCompactionThreshold.value() <=0)
@@ -1460,17 +1462,16 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
         if (shardBoundaries == null ||
             shardBoundaries.shardCount() != shardCount ||
-            shardBoundaries.ringVersion != -1 && shardBoundaries.ringVersion != StorageService.instance.getTokenMetadata().getRingVersion())
+            !shardBoundaries.epoch.equals(Epoch.EMPTY) && !shardBoundaries.epoch.equals(metadata.epoch))
         {
             List<Splitter.WeightedRange> weightedRanges;
-            long ringVersion;
+            Epoch epoch;
             if (!SchemaConstants.isLocalSystemKeyspace(keyspace.getName())
-                && getPartitioner() == metadata.current().partitioner)
+                && getPartitioner() == metadata.current().tokenMap.partitioner())
             {
                 DiskBoundaryManager.VersionedRangesAtEndpoint versionedLocalRanges = DiskBoundaryManager.getVersionedLocalRanges(this);
                 Set<Range<Token>> localRanges = versionedLocalRanges.rangesAtEndpoint.ranges();
-                ringVersion = versionedLocalRanges.ringVersion;
-
+                epoch = versionedLocalRanges.epoch;
 
                 if (!localRanges.isEmpty())
                 {
@@ -1494,12 +1495,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
                 // Local tables need to cover the full token range and don't care about ring changes.
                 // We also end up here if the table's partitioner is not the database's, which can happen in tests.
                 weightedRanges = fullWeightedRange();
-                ringVersion = -1;
+                epoch = Epoch.EMPTY;
             }
 
             List<Token> boundaries = getPartitioner().splitter().get().splitOwnedRanges(shardCount, weightedRanges, false);
             shardBoundaries = new ShardBoundaries(boundaries.subList(0, boundaries.size() - 1),
-                                                  ringVersion);
+                                                  epoch);
             cachedShardBoundaries = shardBoundaries;
             logger.debug("Memtable shard boundaries for {}.{}: {}", keyspace.getName(), getTableName(), boundaries);
         }
@@ -3300,7 +3301,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
 
     public DiskBoundaries getDiskBoundaries()
     {
-        return diskBoundaryManager.getDiskBoundaries(this);
+        return diskBoundaryManager.getDiskBoundaries(this, metadata.get());
+    }
+
+    public DiskBoundaries getDiskBoundaries(TableMetadata initialMetadata)
+    {
+        return diskBoundaryManager.getDiskBoundaries(this, initialMetadata);
     }
 
     public void invalidateLocalRanges()
