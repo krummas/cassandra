@@ -19,7 +19,15 @@ package org.apache.cassandra.service;
 
 import java.io.IOException;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
@@ -27,10 +35,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.management.openmbean.CompositeData;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import javax.management.openmbean.CompositeData;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -40,35 +48,20 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-
-import org.apache.cassandra.concurrent.ExecutorPlus;
-import org.apache.cassandra.config.Config;
-import org.apache.cassandra.config.DurationSpec;
-import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.locator.AbstractReplicationStrategy;
-import org.apache.cassandra.locator.EndpointsByRange;
-import org.apache.cassandra.locator.EndpointsForRange;
-import org.apache.cassandra.utils.ExecutorUtils;
-import org.apache.cassandra.repair.state.CoordinatorState;
-import org.apache.cassandra.repair.state.ParticipateState;
-import org.apache.cassandra.repair.state.ValidationState;
-import org.apache.cassandra.utils.Simulate;
-import org.apache.cassandra.locator.EndpointsForToken;
-import org.apache.cassandra.schema.Schema;
-import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.streaming.PreviewKind;
-import org.apache.cassandra.utils.TimeUUID;
-import org.apache.cassandra.utils.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.concurrent.ExecutorPlus;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
+import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.DurationSpec;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.EndpointState;
@@ -78,26 +71,25 @@ import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
 import org.apache.cassandra.gms.IFailureDetectionEventListener;
 import org.apache.cassandra.gms.IFailureDetector;
 import org.apache.cassandra.gms.VersionedValue;
+import org.apache.cassandra.locator.EndpointsByRange;
+import org.apache.cassandra.locator.EndpointsForRange;
 import org.apache.cassandra.locator.InetAddressAndPort;
-import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.metrics.RepairMetrics;
-import org.apache.cassandra.net.RequestCallback;
-import org.apache.cassandra.net.Verb;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.net.RequestCallback;
+import org.apache.cassandra.net.Verb;
 import org.apache.cassandra.repair.CommonRange;
 import org.apache.cassandra.repair.NoSuchRepairSessionException;
-import org.apache.cassandra.service.paxos.PaxosRepair;
-import org.apache.cassandra.service.paxos.cleanup.PaxosCleanup;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.repair.RepairParallelism;
 import org.apache.cassandra.repair.RepairSession;
 import org.apache.cassandra.repair.consistent.CoordinatorSessions;
 import org.apache.cassandra.repair.consistent.LocalSessions;
+import org.apache.cassandra.repair.consistent.RepairedState;
 import org.apache.cassandra.repair.consistent.admin.CleanupSummary;
 import org.apache.cassandra.repair.consistent.admin.PendingStats;
 import org.apache.cassandra.repair.consistent.admin.RepairStats;
-import org.apache.cassandra.repair.consistent.RepairedState;
 import org.apache.cassandra.repair.consistent.admin.SchemaArgsParser;
 import org.apache.cassandra.repair.messages.CleanupMessage;
 import org.apache.cassandra.repair.messages.PrepareMessage;
@@ -105,11 +97,23 @@ import org.apache.cassandra.repair.messages.RepairMessage;
 import org.apache.cassandra.repair.messages.RepairOption;
 import org.apache.cassandra.repair.messages.SyncResponse;
 import org.apache.cassandra.repair.messages.ValidationResponse;
+import org.apache.cassandra.repair.state.CoordinatorState;
+import org.apache.cassandra.repair.state.ParticipateState;
+import org.apache.cassandra.repair.state.ValidationState;
 import org.apache.cassandra.schema.TableId;
+import org.apache.cassandra.schema.TableMetadata;
+import org.apache.cassandra.service.paxos.PaxosRepair;
+import org.apache.cassandra.service.paxos.cleanup.PaxosCleanup;
+import org.apache.cassandra.tcm.ClusterMetadata;
+import org.apache.cassandra.streaming.PreviewKind;
+import org.apache.cassandra.utils.ExecutorUtils;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.MBeanWrapper;
 import org.apache.cassandra.utils.MerkleTrees;
 import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.Simulate;
+import org.apache.cassandra.utils.TimeUUID;
+import org.apache.cassandra.utils.concurrent.CountDownLatch;
 import org.apache.cassandra.utils.concurrent.Future;
 import org.apache.cassandra.utils.concurrent.FutureCombiner;
 import org.apache.cassandra.utils.concurrent.ImmediateFuture;
@@ -120,12 +124,17 @@ import static java.util.Collections.synchronizedSet;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.cassandra.concurrent.ExecutorFactory.Global.executorFactory;
 import static org.apache.cassandra.config.Config.RepairCommandPoolFullStrategy.reject;
-import static org.apache.cassandra.config.DatabaseDescriptor.*;
+import static org.apache.cassandra.config.DatabaseDescriptor.getRepairCommandPoolFullStrategy;
+import static org.apache.cassandra.config.DatabaseDescriptor.getRepairCommandPoolSize;
+import static org.apache.cassandra.config.DatabaseDescriptor.getRepairStateExpires;
+import static org.apache.cassandra.config.DatabaseDescriptor.getRepairStateSize;
+import static org.apache.cassandra.config.DatabaseDescriptor.getRpcTimeout;
+import static org.apache.cassandra.config.DatabaseDescriptor.paxosRepairEnabled;
 import static org.apache.cassandra.net.Message.out;
 import static org.apache.cassandra.net.Verb.PREPARE_MSG;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
-import static org.apache.cassandra.utils.Simulate.With.MONITORS;
 import static org.apache.cassandra.utils.Clock.Global.nanoTime;
+import static org.apache.cassandra.utils.Simulate.With.MONITORS;
 import static org.apache.cassandra.utils.concurrent.CountDownLatch.newCountDownLatch;
 
 /**
@@ -535,10 +544,10 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
 
         EndpointsForRange neighbors = replicaSets.get(rangeSuperSet).withoutSelf();
 
+        ClusterMetadata metadata = ClusterMetadata.current();
         if (dataCenters != null && !dataCenters.isEmpty())
         {
-            TokenMetadata.Topology topology = ss.getTokenMetadata().cloneOnlyTokenMap().getTopology();
-            Multimap<String, InetAddressAndPort> dcEndpointsMap = topology.getDatacenterEndpoints();
+            Multimap<String, InetAddressAndPort> dcEndpointsMap = metadata.directory.allDatacenterEndpoints();
             Iterable<InetAddressAndPort> dcEndpoints = concat(transform(dataCenters, dcEndpointsMap::get));
             return neighbors.select(dcEndpoints, true);
         }
@@ -765,9 +774,9 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     }
 
     /**
-     * We assume when calling this method that a parent session for the provided identifier
-     * exists, and that session is still in progress. When it doesn't, that should mean either
-     * {@link #abort(Predicate, String)} or {@link #failRepair(TimeUUID, String)} have removed it.
+     * We assume when calling this method that a parent session for the provided identifier 
+     * exists, and that session is still in progress. When it doesn't, that should mean either 
+     * {@link #abort(Predicate, String)} or failRepair(UUID, String) have removed it.
      *
      * @param parentSessionId an identifier for an active parent repair session
      * @return the {@link ParentRepairSession} associated with the provided identifier
@@ -1038,18 +1047,27 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             logger.warn("Not running paxos repair for topology change because there are no ranges to repair");
             return ImmediateFuture.success(null);
         }
-        List<TableMetadata> tables = Lists.newArrayList(Schema.instance.getKeyspaceMetadata(ksName).tables);
+        ClusterMetadata metadata = ClusterMetadata.current();
+        List<TableMetadata> tables = Lists.newArrayList(metadata.schema.getKeyspaces().getNullable(ksName).tables);
         List<Future<Void>> futures = new ArrayList<>(ranges.size() * tables.size());
         Keyspace keyspace = Keyspace.open(ksName);
-        AbstractReplicationStrategy replication = keyspace.getReplicationStrategy();
+
         for (Range<Token> range: ranges)
         {
             for (TableMetadata table : tables)
             {
-                Set<InetAddressAndPort> endpoints = replication.getNaturalReplicas(range.right).filter(FailureDetector.isReplicaAlive).endpoints();
+                Set<InetAddressAndPort> endpoints = metadata.placements
+                                                    .get(keyspace.getMetadata().params.replication)
+                                                    .reads
+                                                    .forRange(range)
+                                                    .filter(FailureDetector.isReplicaAlive).endpoints();
                 if (!PaxosRepair.hasSufficientLiveNodesForTopologyChange(keyspace, range, endpoints))
                 {
-                    Set<InetAddressAndPort> downEndpoints = replication.getNaturalReplicas(range.right).filter(e -> !endpoints.contains(e)).endpoints();
+                    Set<InetAddressAndPort> downEndpoints = metadata.placements
+                                                            .get(keyspace.getMetadata().params.replication)
+                                                            .reads
+                                                            .forRange(range)
+                                                            .filter(e -> !endpoints.contains(e.endpoint())).endpoints();
                     downEndpoints.removeAll(endpoints);
 
                     throw new RuntimeException(String.format("Insufficient live nodes to repair paxos for %s in %s for %s.\n" +
@@ -1064,12 +1082,12 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                                                              "Skipping this check can lead to paxos correctness issues",
                                                              range, ksName, reason, downEndpoints));
                 }
-                EndpointsForToken pending = StorageService.instance.getTokenMetadata().pendingEndpointsForToken(range.right, ksName);
-                if (pending.size() > 1 && !Boolean.getBoolean("cassandra.paxos_repair_allow_multiple_pending_unsafe"))
+                // todo: can probably be removed with TrM
+                if (ClusterMetadata.current().hasPendingRangesFor(keyspace.getMetadata(), range.right) && !Boolean.getBoolean("cassandra.paxos_repair_allow_multiple_pending_unsafe"))
                 {
-                    throw new RuntimeException(String.format("Cannot begin paxos auto repair for %s in %s.%s, multiple pending endpoints exist for range (%s). " +
+                    throw new RuntimeException(String.format("Cannot begin paxos auto repair for %s in %s.%s, multiple pending endpoints exist for range (metadata = %s). " +
                                                              "Set -Dcassandra.paxos_repair_allow_multiple_pending_unsafe=true to skip this check",
-                                                             range, table.keyspace, table.name, pending));
+                                                             range, table.keyspace, table.name, ClusterMetadata.current()));
 
                 }
                 Future<Void> future = PaxosCleanup.cleanup(endpoints, table, Collections.singleton(range), false, repairCommandExecutor());
