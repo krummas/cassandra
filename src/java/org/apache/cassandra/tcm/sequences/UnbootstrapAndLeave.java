@@ -159,7 +159,7 @@ public class UnbootstrapAndLeave implements InProgressSequence<UnbootstrapAndLea
                     JVMStabilityInspector.inspectThrowable(t);
                     return true;
                 }
-//                StorageService.instance.finishLeaving();
+                StorageService.instance.finishLeaving();
                 break;
             default:
                 throw new IllegalStateException("Can't proceed with leave from " + next);

@@ -49,7 +49,6 @@ import org.apache.cassandra.tcm.serialization.AsymmetricMetadataSerializer;
 import org.apache.cassandra.tcm.serialization.Version;
 import org.apache.cassandra.tcm.transformations.PrepareJoin;
 import org.apache.cassandra.utils.concurrent.Future;
-import org.apache.cassandra.utils.concurrent.ImmediateFuture;
 import org.apache.cassandra.utils.vint.VIntCoding;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -97,7 +96,8 @@ public class BootstrapAndJoin implements InProgressSequence<BootstrapAndJoin>
     public static boolean bootstrap(final Collection<Token> tokens,
                                     long bootstrapTimeoutMillis,
                                     ClusterMetadata metadata,
-                                    InetAddressAndPort replacingEndpoint){
+                                    InetAddressAndPort replacingEndpoint)
+    {
         SystemKeyspace.updateTokens(tokens); // DON'T use setToken, that makes us part of the ring locally which is incorrect until we are done bootstrapping
 
         if (Boolean.getBoolean("cassandra.reset_bootstrap_progress"))
@@ -106,8 +106,7 @@ public class BootstrapAndJoin implements InProgressSequence<BootstrapAndJoin>
             SystemKeyspace.resetAvailableStreamedRanges();
         }
 
-//        Future<StreamState> bootstrapStream = StorageService.instance.startBootstrap(tokens, metadata, replacingEndpoint);
-        Future<StreamState> bootstrapStream = ImmediateFuture.failure(new UnsupportedOperationException("Not implemented"));
+        Future<StreamState> bootstrapStream = StorageService.instance.startBootstrap(tokens, metadata, replacingEndpoint);
         try
         {
             if (bootstrapTimeoutMillis > 0)
