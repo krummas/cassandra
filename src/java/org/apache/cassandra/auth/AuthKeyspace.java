@@ -37,7 +37,7 @@ public final class AuthKeyspace
     {
     }
 
-    private static final int DEFAULT_RF = CassandraRelevantProperties.SYSTEM_AUTH_DEFAULT_RF.getInt();
+    public static final int DEFAULT_RF = CassandraRelevantProperties.SYSTEM_AUTH_DEFAULT_RF.getInt();
 
     /**
      * Generation is used as a timestamp for automatic table creation on startup.
@@ -57,49 +57,54 @@ public final class AuthKeyspace
 
     public static final long SUPERUSER_SETUP_DELAY = Long.getLong("cassandra.superuser_setup_delay_ms", 10000);
 
+    public static String ROLES_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                     + "role text,"
+                                     + "is_superuser boolean,"
+                                     + "can_login boolean,"
+                                     + "salted_hash text,"
+                                     + "member_of set<text>,"
+                                     + "PRIMARY KEY(role))";
     private static final TableMetadata Roles =
         parse(ROLES,
               "role definitions",
-              "CREATE TABLE %s ("
-              + "role text,"
-              + "is_superuser boolean,"
-              + "can_login boolean,"
-              + "salted_hash text,"
-              + "member_of set<text>,"
-              + "PRIMARY KEY(role))");
+              ROLES_CQL);
 
+    public static String ROLE_MEMBERS_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                            + "role text,"
+                                            + "member text,"
+                                            + "PRIMARY KEY(role, member))";
     private static final TableMetadata RoleMembers =
         parse(ROLE_MEMBERS,
               "role memberships lookup table",
-              "CREATE TABLE %s ("
-              + "role text,"
-              + "member text,"
-              + "PRIMARY KEY(role, member))");
+              ROLE_MEMBERS_CQL);
 
+    public static String ROLE_PERMISSIONS_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                                + "role text,"
+                                                + "resource text,"
+                                                + "permissions set<text>,"
+                                                + "PRIMARY KEY(role, resource))";
     private static final TableMetadata RolePermissions =
         parse(ROLE_PERMISSIONS,
               "permissions granted to db roles",
-              "CREATE TABLE %s ("
-              + "role text,"
-              + "resource text,"
-              + "permissions set<text>,"
-              + "PRIMARY KEY(role, resource))");
+              ROLE_PERMISSIONS_CQL);
 
+    public static String RESOURCE_ROLE_INDEX_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                               + "resource text,"
+                                               + "role text,"
+                                               + "PRIMARY KEY(resource, role))";
     private static final TableMetadata ResourceRoleIndex =
         parse(RESOURCE_ROLE_INDEX,
               "index of db roles with permissions granted on a resource",
-              "CREATE TABLE %s ("
-              + "resource text,"
-              + "role text,"
-              + "PRIMARY KEY(resource, role))");
+              RESOURCE_ROLE_INDEX_CQL);
 
+    public static String NETWORK_PERMISSIONS_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                                   + "role text, "
+                                                   + "dcs frozen<set<text>>, "
+                                                   + "PRIMARY KEY(role))";
     private static final TableMetadata NetworkPermissions =
         parse(NETWORK_PERMISSIONS,
               "user network permissions",
-              "CREATE TABLE %s ("
-              + "role text, "
-              + "dcs frozen<set<text>>, "
-              + "PRIMARY KEY(role))");
+              NETWORK_PERMISSIONS_CQL);
 
     private static TableMetadata parse(String name, String description, String cql)
     {

@@ -48,7 +48,6 @@ import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.repair.CommonRange;
 import org.apache.cassandra.repair.messages.RepairOption;
@@ -67,7 +66,7 @@ public final class SystemDistributedKeyspace
 
     public static final String NAME = "system_distributed";
 
-    private static final int DEFAULT_RF = CassandraRelevantProperties.SYSTEM_DISTRIBUTED_DEFAULT_RF.getInt();
+    public static final int DEFAULT_RF = CassandraRelevantProperties.SYSTEM_DISTRIBUTED_DEFAULT_RF.getInt();
     private static final Logger logger = LoggerFactory.getLogger(SystemDistributedKeyspace.class);
 
     /**
@@ -82,6 +81,8 @@ public final class SystemDistributedKeyspace
      * gen 4: compression chunk length reduced to 16KiB, memtable_flush_period_in_ms now unset on all tables in 4.0
      * gen 5: add ttl and TWCS to repair_history tables
      * gen 6: add denylist table
+     *
+     * // TODO: TCM - how do we evolve these tables?
      */
     public static final long GENERATION = 6;
 
@@ -93,65 +94,65 @@ public final class SystemDistributedKeyspace
 
     public static final String PARTITION_DENYLIST_TABLE = "partition_denylist";
 
+    public static final String REPAIR_HISTORY_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                                     + "keyspace_name text,"
+                                                     + "columnfamily_name text,"
+                                                     + "id timeuuid,"
+                                                     + "parent_id timeuuid,"
+                                                     + "range_begin text,"
+                                                     + "range_end text,"
+                                                     + "coordinator inet,"
+                                                     + "coordinator_port int,"
+                                                     + "participants set<inet>,"
+                                                     + "participants_v2 set<text>,"
+                                                     + "exception_message text,"
+                                                     + "exception_stacktrace text,"
+                                                     + "status text,"
+                                                     + "started_at timestamp,"
+                                                     + "finished_at timestamp,"
+                                                     + "PRIMARY KEY ((keyspace_name, columnfamily_name), id))";
+
     private static final TableMetadata RepairHistory =
-        parse(REPAIR_HISTORY,
-                "Repair history",
-                "CREATE TABLE %s ("
-                     + "keyspace_name text,"
-                     + "columnfamily_name text,"
-                     + "id timeuuid,"
-                     + "parent_id timeuuid,"
-                     + "range_begin text,"
-                     + "range_end text,"
-                     + "coordinator inet,"
-                     + "coordinator_port int,"
-                     + "participants set<inet>,"
-                     + "participants_v2 set<text>,"
-                     + "exception_message text,"
-                     + "exception_stacktrace text,"
-                     + "status text,"
-                     + "started_at timestamp,"
-                     + "finished_at timestamp,"
-                     + "PRIMARY KEY ((keyspace_name, columnfamily_name), id))")
+        parse(REPAIR_HISTORY, "Repair history", REPAIR_HISTORY_CQL)
         .defaultTimeToLive((int) TimeUnit.DAYS.toSeconds(30))
         .compaction(CompactionParams.twcs(ImmutableMap.of("compaction_window_unit","DAYS",
                                                           "compaction_window_size","1")))
         .build();
 
+    public static final String PARENT_REPAIR_HISTORY_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                                            + "parent_id timeuuid,"
+                                                            + "keyspace_name text,"
+                                                            + "columnfamily_names set<text>,"
+                                                            + "started_at timestamp,"
+                                                            + "finished_at timestamp,"
+                                                            + "exception_message text,"
+                                                            + "exception_stacktrace text,"
+                                                            + "requested_ranges set<text>,"
+                                                            + "successful_ranges set<text>,"
+                                                            + "options map<text, text>,"
+                                                            + "PRIMARY KEY (parent_id))";
     private static final TableMetadata ParentRepairHistory =
-        parse(PARENT_REPAIR_HISTORY,
-                "Repair history",
-                "CREATE TABLE %s ("
-                     + "parent_id timeuuid,"
-                     + "keyspace_name text,"
-                     + "columnfamily_names set<text>,"
-                     + "started_at timestamp,"
-                     + "finished_at timestamp,"
-                     + "exception_message text,"
-                     + "exception_stacktrace text,"
-                     + "requested_ranges set<text>,"
-                     + "successful_ranges set<text>,"
-                     + "options map<text, text>,"
-                     + "PRIMARY KEY (parent_id))")
+        parse(PARENT_REPAIR_HISTORY, "Repair history", PARENT_REPAIR_HISTORY_CQL)
         .defaultTimeToLive((int) TimeUnit.DAYS.toSeconds(30))
         .compaction(CompactionParams.twcs(ImmutableMap.of("compaction_window_unit","DAYS",
                                                           "compaction_window_size","1")))
         .build();
 
+    public static final String VIEW_BUILD_STATUS_CQL = "CREATE TABLE IF NOT EXISTS %s ("
+                                                       + "keyspace_name text,"
+                                                       + "view_name text,"
+                                                       + "host_id uuid,"
+                                                       + "status text,"
+                                                       + "PRIMARY KEY ((keyspace_name, view_name), host_id))";
     private static final TableMetadata ViewBuildStatus =
         parse(VIEW_BUILD_STATUS,
             "Materialized View build status",
-            "CREATE TABLE %s ("
-                     + "keyspace_name text,"
-                     + "view_name text,"
-                     + "host_id uuid,"
-                     + "status text,"
-                     + "PRIMARY KEY ((keyspace_name, view_name), host_id))").build();
+              VIEW_BUILD_STATUS_CQL).build();
 
     public static final TableMetadata PartitionDenylistTable =
     parse(PARTITION_DENYLIST_TABLE,
           "Partition keys which have been denied access",
-          "CREATE TABLE %s ("
+          "CREATE TABLE IF NOT EXISTS %s ("
           + "ks_name text,"
           + "table_name text,"
           + "key blob,"
@@ -167,7 +168,9 @@ public final class SystemDistributedKeyspace
 
     public static KeyspaceMetadata metadata()
     {
-        return KeyspaceMetadata.create(SchemaConstants.DISTRIBUTED_KEYSPACE_NAME, KeyspaceParams.simple(Math.max(DEFAULT_RF, DatabaseDescriptor.getDefaultKeyspaceRF())), Tables.of(RepairHistory, ParentRepairHistory, ViewBuildStatus, PartitionDenylistTable));
+        return KeyspaceMetadata.create(SchemaConstants.DISTRIBUTED_KEYSPACE_NAME,
+                                       KeyspaceParams.simple(Math.max(DEFAULT_RF, DatabaseDescriptor.getDefaultKeyspaceRF())),
+                                       Tables.of(RepairHistory, ParentRepairHistory, ViewBuildStatus, PartitionDenylistTable));
     }
 
     public static void startParentRepair(TimeUUID parent_id, String keyspaceName, String[] cfnames, RepairOption options)
@@ -246,18 +249,19 @@ public final class SystemDistributedKeyspace
         {
             for (Range<Token> range : commonRange.ranges)
             {
-                String fmtQry = format(query, SchemaConstants.DISTRIBUTED_KEYSPACE_NAME, REPAIR_HISTORY,
-                                       keyspaceName,
-                                       cfname,
-                                       id.toString(),
-                                       parent_id.toString(),
-                                       range.left.toString(),
-                                       range.right.toString(),
-                                       coordinator.getHostAddress(false),
-                                       coordinator.getPort(),
-                                       Joiner.on("', '").join(participants),
-                                       Joiner.on("', '").join(participants_v2),
-                                       RepairState.STARTED.toString());
+                String fmtQry;
+                fmtQry = format(query, SchemaConstants.DISTRIBUTED_KEYSPACE_NAME, REPAIR_HISTORY,
+                                keyspaceName,
+                                cfname,
+                                id.toString(),
+                                parent_id.toString(),
+                                range.left.toString(),
+                                range.right.toString(),
+                                coordinator.getHostAddress(false),
+                                coordinator.getPort(),
+                                Joiner.on("', '").join(participants),
+                                Joiner.on("', '").join(participants_v2),
+                                RepairState.STARTED.toString());
                 processSilent(fmtQry);
             }
         }
