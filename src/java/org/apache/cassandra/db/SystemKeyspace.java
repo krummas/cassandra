@@ -97,7 +97,6 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.Tables;
 import org.apache.cassandra.schema.Types;
 import org.apache.cassandra.schema.Views;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.paxos.Ballot;
 import org.apache.cassandra.service.paxos.Commit;
 import org.apache.cassandra.service.paxos.Commit.Accepted;
@@ -108,8 +107,10 @@ import org.apache.cassandra.service.paxos.PaxosState;
 import org.apache.cassandra.service.paxos.uncommitted.PaxosRows;
 import org.apache.cassandra.service.paxos.uncommitted.PaxosUncommittedIndex;
 import org.apache.cassandra.streaming.StreamOperation;
+import org.apache.cassandra.tcm.ClusterMetadata;
 import org.apache.cassandra.tcm.Epoch;
 import org.apache.cassandra.tcm.Sealed;
+import org.apache.cassandra.tcm.membership.NodeState;
 import org.apache.cassandra.transport.ProtocolVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CassandraVersion;
@@ -598,7 +599,27 @@ public final class SystemKeyspace
         NEEDS_BOOTSTRAP,
         COMPLETED,
         IN_PROGRESS,
-        DECOMMISSIONED
+        DECOMMISSIONED;
+
+        public static BootstrapState fromNodeState(NodeState nodeState)
+        {
+            if (nodeState == null) // todo, handle this properly
+                return DECOMMISSIONED;
+            switch (nodeState)
+            {
+                case REGISTERED:
+                    return NEEDS_BOOTSTRAP;
+                case BOOTSTRAPPING:
+                    return IN_PROGRESS;
+                case JOINED:
+                case LEAVING:
+                case MOVING:
+                    return COMPLETED;
+                case LEFT:
+                default:
+                    return DECOMMISSIONED;
+            }
+        }
     }
 
     public static void persistLocalMetadata()
@@ -912,11 +933,11 @@ public final class SystemKeyspace
         executeInternal(format(req, LOCAL, LOCAL), version);
     }
 
-    private static Set<String> tokensAsSet(Collection<Token> tokens)
+    public static Set<String> tokensAsSet(Collection<Token> tokens)
     {
         if (tokens.isEmpty())
             return Collections.emptySet();
-        Token.TokenFactory factory = StorageService.instance.getTokenFactory();
+        Token.TokenFactory factory = ClusterMetadata.current().partitioner.getTokenFactory();
         Set<String> s = new HashSet<>(tokens.size());
         for (Token tk : tokens)
             s.add(factory.toString(tk));
@@ -925,7 +946,7 @@ public final class SystemKeyspace
 
     private static Collection<Token> deserializeTokens(Collection<String> tokensStrings)
     {
-        Token.TokenFactory factory = StorageService.instance.getTokenFactory();
+        Token.TokenFactory factory = ClusterMetadata.current().partitioner.getTokenFactory();
         List<Token> tokens = new ArrayList<>(tokensStrings.size());
         for (String tk : tokensStrings)
             tokens.add(factory.fromString(tk));
@@ -1261,6 +1282,7 @@ public final class SystemKeyspace
      * Read the host ID from the system keyspace, creating (and storing) one if
      * none exists.
      */
+    // TODO: this method should not exist. Only CMS can give out host ids.
     public static synchronized UUID getOrInitializeLocalHostId()
     {
         UUID hostId = getLocalHostId();
