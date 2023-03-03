@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.concurrent;
 
+import java.util.Arrays;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -33,6 +34,9 @@ import org.apache.cassandra.utils.JVMStabilityInspector;
 
 public class NamedThreadFactory implements ThreadFactory
 {
+    public static final String PRESERVE_THREAD_CREATION_STACKTRACE_PROPERTY_NAME = "cassandra.test.preserve_thread_creation_stacktrace";
+    public static final Boolean PRESERVE_THREAD_CREATION_STACKTRACE = Boolean.getBoolean(PRESERVE_THREAD_CREATION_STACKTRACE_PROPERTY_NAME);
+
     private static final AtomicInteger anonymousCounter = new AtomicInteger();
     private static volatile String globalPrefix;
 
@@ -159,11 +163,43 @@ public class NamedThreadFactory implements ThreadFactory
     public static Thread createThread(ThreadGroup threadGroup, Runnable runnable, String name, boolean daemon)
     {
         String prefix = globalPrefix;
-        Thread thread = new FastThreadLocalThread(threadGroup, runnable, prefix != null ? prefix + name : name);
+        Thread thread;
+        String threadName = prefix != null ? prefix + name : name;
+        if (PRESERVE_THREAD_CREATION_STACKTRACE)
+            thread = new InspectableFastThreadLocalThread(threadGroup, runnable, threadName);
+        else
+            thread = new FastThreadLocalThread(threadGroup, runnable, threadName);
         thread.setDaemon(daemon);
         return thread;
     }
 
+    public static class InspectableFastThreadLocalThread extends FastThreadLocalThread
+    {
+        public StackTraceElement[] creationTrace;
+
+        private void setStack()
+        {
+            creationTrace = Thread.currentThread().getStackTrace();
+            creationTrace = Arrays.copyOfRange(creationTrace, 2, creationTrace.length);
+        }
+
+        public InspectableFastThreadLocalThread() { super(); setStack(); }
+
+        public InspectableFastThreadLocalThread(Runnable target) { super(target); setStack(); }
+
+        public InspectableFastThreadLocalThread(ThreadGroup group, Runnable target) { super(group, target); setStack(); }
+
+        public InspectableFastThreadLocalThread(String name) { super(name); setStack(); }
+
+        public InspectableFastThreadLocalThread(ThreadGroup group, String name) { super(group, name); setStack(); }
+
+        public InspectableFastThreadLocalThread(Runnable target, String name) { super(target, name); setStack(); }
+
+        public InspectableFastThreadLocalThread(ThreadGroup group, Runnable target, String name) { super(group, target, name); setStack(); }
+
+        public InspectableFastThreadLocalThread(ThreadGroup group, Runnable target, String name, long stackSize) { super(group, target, name, stackSize); setStack(); }
+
+    }
     public static  <T extends Thread> T setupThread(T thread, int priority, ClassLoader contextClassLoader, Thread.UncaughtExceptionHandler uncaughtExceptionHandler)
     {
         thread.setPriority(priority);
