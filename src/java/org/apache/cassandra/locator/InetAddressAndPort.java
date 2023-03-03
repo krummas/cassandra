@@ -37,8 +37,8 @@ import com.google.common.net.HostAndPort;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
-import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.tcm.serialization.Version;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.FastByteOperations;
@@ -221,6 +221,17 @@ public final class InetAddressAndPort extends InetSocketAddress implements Compa
         return getByNameOverrideDefaults(name, null);
     }
 
+    public static InetAddressAndPort getByNameUnchecked(String name)
+    {
+        try
+        {
+            return getByNameOverrideDefaults(name, null);
+        }
+        catch (UnknownHostException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
 
     public static List<InetAddressAndPort> getAllByName(String name) throws UnknownHostException
     {
@@ -338,7 +349,6 @@ public final class InetAddressAndPort extends InetSocketAddress implements Compa
             return Serializer.inetAddressAndPortSerializer.serializedSize(t, SERDE_VERSION);
         }
     }
-
     /**
      * As of version 4.0 the endpoint description includes a port number as an unsigned short
      * This serializer matches the 3.0 CompactEndpointSerializationHelper, encoding the number of address bytes
