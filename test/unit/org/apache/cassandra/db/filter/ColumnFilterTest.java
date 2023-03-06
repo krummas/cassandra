@@ -30,6 +30,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.ColumnIdentifier;
@@ -39,7 +40,6 @@ import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.SetType;
 import org.apache.cassandra.db.rows.CellPath;
 import org.apache.cassandra.dht.Murmur3Partitioner;
-import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.io.util.DataInputBuffer;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
@@ -50,6 +50,7 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Throwables;
 
+import static org.apache.cassandra.config.CassandraRelevantProperties.IS_DISABLED_MBEAN_REGISTRATION;
 import static org.junit.Assert.assertEquals;
 
 @RunWith(Parameterized.class)
@@ -86,25 +87,28 @@ public class ColumnFilterTest
     @Parameterized.Parameters(name = "{index}: clusterMinVersion={0}")
     public static Collection<Object[]> data()
     {
-        return Arrays.asList(new Object[]{ "3.0" }, new Object[]{ "3.11" }, new Object[]{ "4.0-rc1" }, new Object[]{ "4.0" });
+        // [tcm] we will require upgrading from 4.1
+        return Arrays.asList(new Object[]{ "4.1" }, new Object[]{ "4.0" });
     }
 
     @BeforeClass
     public static void beforeClass()
     {
+        IS_DISABLED_MBEAN_REGISTRATION.setBoolean(true);
         // Gossiper touches StorageService which touches StreamManager which requires configs be setup
         DatabaseDescriptor.daemonInitialization();
+        SchemaLoader.prepareServer();
         DatabaseDescriptor.setSeedProvider(Arrays::asList);
         DatabaseDescriptor.setEndpointSnitch(new SimpleSnitch());
         DatabaseDescriptor.setDefaultFailureDetector();
         DatabaseDescriptor.setPartitionerUnsafe(new Murmur3Partitioner());
-        Gossiper.instance.start(0);
     }
 
     @Before
     public void before()
     {
         Util.setUpgradeFromVersion(clusterMinVersion);
+        // todo; nothing in this test is actually version dependent anymore
     }
 
     // Select all
@@ -349,7 +353,7 @@ public class ColumnFilterTest
                 assertCellFetchedQueried(true, true, filter, v2, path0, path1, path2, path3, path4);
                 assertCellFetchedQueried(true, true, filter, s2, path0, path1, path2, path3, path4);
             }
-            else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && "4.0".equals(clusterMinVersion)))
+            else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && clusterMinVersion.startsWith("4")))
             {
                 assertEquals("*/[v1]", filter.toString());
                 assertEquals("v1", filter.toCQLString());
@@ -391,13 +395,13 @@ public class ColumnFilterTest
             assertFetchedQueried(true, true, filter, s1);
             if ("3.0".equals(clusterMinVersion))
             {
-                assertEquals("*/*", filter.toString());
+                assertEquals(filter.toString(), "*/*", filter.toString());
                 assertEquals("*", filter.toCQLString());
                 assertFetchedQueried(true, true, filter, v1, v2, s2);
                 assertCellFetchedQueried(true, true, filter, v2, path0, path1, path2, path3, path4);
                 assertCellFetchedQueried(true, true, filter, s2, path0, path1, path2, path3, path4);
             }
-            else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && "4.0".equals(clusterMinVersion)))
+            else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && clusterMinVersion.startsWith("4")))
             {
                 assertEquals("*/[s1]", filter.toString());
                 assertEquals("s1", filter.toCQLString());
@@ -447,7 +451,7 @@ public class ColumnFilterTest
             assertCellFetchedQueried(true, true, filter, v2, path0, path1, path2, path3, path4);
             assertCellFetchedQueried(true, true, filter, s2, path0, path1, path2, path3, path4);
         }
-        else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && "4.0".equals(clusterMinVersion)))
+        else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && clusterMinVersion.startsWith("4")))
         {
             assertEquals("*/[v2[1]]", filter.toString());
             assertEquals("v2[1]", filter.toCQLString());
@@ -495,7 +499,7 @@ public class ColumnFilterTest
             assertCellFetchedQueried(true, true, filter, v2, path0, path1, path2, path3, path4);
             assertCellFetchedQueried(true, true, filter, s2, path1, path0, path2, path3, path4);
         }
-        else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && "4.0".equals(clusterMinVersion)))
+        else if ("3.11".equals(clusterMinVersion) || (returnStaticContentOnPartitionWithNoRows && clusterMinVersion.startsWith("4")))
         {
             assertEquals("*/[s2[1]]", filter.toString());
             assertEquals("s2[1]", filter.toCQLString());

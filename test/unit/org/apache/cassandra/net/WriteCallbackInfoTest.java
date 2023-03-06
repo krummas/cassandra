@@ -18,14 +18,12 @@
 */
 package org.apache.cassandra.net;
 
-import java.util.UUID;
-
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import org.junit.Assert;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ConsistencyLevel;
 import org.apache.cassandra.db.Mutation;
@@ -34,8 +32,13 @@ import org.apache.cassandra.db.partitions.PartitionUpdate;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.schema.MockSchema;
 import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.paxos.Commit;
+import org.apache.cassandra.tcm.ClusterMetadata;
+import org.apache.cassandra.tcm.ClusterMetadataService;
+import org.apache.cassandra.tcm.StubClusterMetadataService;
+import org.apache.cassandra.tcm.membership.Location;
+import org.apache.cassandra.tcm.membership.NodeAddresses;
+import org.apache.cassandra.tcm.membership.NodeVersion;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 import static org.apache.cassandra.locator.ReplicaUtils.full;
@@ -56,13 +59,19 @@ public class WriteCallbackInfoTest
     public void setup() throws Exception
     {
         testEp = InetAddressAndPort.getByName("192.168.1.1");
-        StorageService.instance.getTokenMetadata().updateHostId(UUID.randomUUID(), testEp);
+        ClusterMetadataService.setInstance(StubClusterMetadataService.forTesting());
+        ClusterMetadata metadata = ClusterMetadata.current().transformer()
+                                                  .register(new NodeAddresses(testEp, testEp, testEp),
+                                                            new Location("dc1", "rack1"),
+                                                            NodeVersion.CURRENT)
+                                                  .build().metadata;
+        ((StubClusterMetadataService)ClusterMetadataService.instance()).setMetadata(metadata);
     }
 
     @After
     public void teardown()
     {
-        StorageService.instance.getTokenMetadata().removeEndpoint(testEp);
+        ClusterMetadataService.unsetInstance();
     }
 
     @Test

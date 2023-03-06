@@ -54,6 +54,7 @@ public class DefaultFSErrorHandlerTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
+        System.setProperty("cassandra.join_ring", "false"); // required to start gossiper without setting tokens
         SchemaLoader.prepareServer();
         CassandraDaemon daemon = new CassandraDaemon();
         daemon.completeSetup(); //startup must be completed, otherwise FS error will kill JVM regardless of failure policy

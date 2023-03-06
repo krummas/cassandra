@@ -103,7 +103,7 @@ public class NativeProtocolTest extends TestBaseImpl
         {
             IInstanceConfig config = cluster.newInstanceConfig();
             IInvokableInstance gossippingOnlyMember = cluster.bootstrap(config);
-            withProperty("cassandra.join_ring", Boolean.toString(false), () -> gossippingOnlyMember.startup(cluster));
+            withProperty("cassandra.join_ring", false, () -> gossippingOnlyMember.startup(cluster));
 
             assertTrue(gossippingOnlyMember.callOnInstance((IIsolatedExecutor.SerializableCallable<Boolean>)
                                                            () -> StorageService.instance.isNativeTransportRunning()));

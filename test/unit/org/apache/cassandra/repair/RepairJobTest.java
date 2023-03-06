@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
+
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.assertj.core.api.Assertions;
 import org.junit.After;
 import org.junit.Before;
@@ -167,6 +169,9 @@ public class RepairJobTest
     public static void setupClass() throws UnknownHostException
     {
         SchemaLoader.prepareServer();
+        // todo; tcm - we default to paxos v2, which implies running paxos repairs, in trunk we default to v1 which doesn't
+        //       this test doesn't run them, so disable here for now
+        DatabaseDescriptor.setPaxosRepairEnabled(false);
         SchemaLoader.createKeyspace(KEYSPACE,
                                     KeyspaceParams.simple(1),
                                     SchemaLoader.standardCFMD(KEYSPACE, CF));

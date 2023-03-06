@@ -29,13 +29,12 @@ import org.apache.cassandra.distributed.shared.NetworkTopology;
 import org.apache.cassandra.distributed.test.TestBaseImpl;
 
 import static org.junit.Assert.assertEquals;
-import static org.apache.cassandra.distributed.action.GossipHelper.statusToBootstrap;
-import static org.apache.cassandra.distributed.action.GossipHelper.statusToDecommission;
 import static org.apache.cassandra.distributed.action.GossipHelper.withProperty;
 import static org.apache.cassandra.distributed.test.ring.BootstrapTest.populate;
 import static org.apache.cassandra.distributed.api.Feature.GOSSIP;
 import static org.apache.cassandra.distributed.api.Feature.NETWORK;
 import static org.apache.cassandra.distributed.api.TokenSupplier.evenlyDistributedTokens;
+import static org.junit.Assert.fail;
 
 public class CleanupFailureTest extends TestBaseImpl
 {
@@ -52,7 +51,8 @@ public class CleanupFailureTest extends TestBaseImpl
             IInvokableInstance nodeToRemainInCluster = cluster.get(2);
 
             // Start decomission on nodeToDecommission
-            cluster.forEach(statusToDecommission(nodeToDecommission));
+//            cluster.forEach(statusToDecommission(nodeToDecommission));
+            fail("[tcm] FIX");
 
             // Add data to cluster while node is decomissioning
             int NUM_ROWS = 100;
@@ -90,8 +90,8 @@ public class CleanupFailureTest extends TestBaseImpl
                          () -> bootstrappingNode.startup(cluster));
 
             // Start decomission on bootstrappingNode
-            cluster.forEach(statusToBootstrap(bootstrappingNode));
-
+//            cluster.forEach(statusToBootstrap(bootstrappingNode));
+            fail("[tcm] FIX");
             // Add data to cluster while node is bootstrapping
             int NUM_ROWS = 100;
             populate(cluster, 0, NUM_ROWS, 1, 2, ConsistencyLevel.ONE);

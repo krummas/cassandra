@@ -34,6 +34,7 @@ import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.concurrent.AsyncPromise;
 import org.apache.cassandra.utils.concurrent.CountDownLatch;
 import org.slf4j.Logger;
@@ -61,6 +62,7 @@ import org.apache.cassandra.utils.concurrent.UncheckedInterruptedException;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static org.apache.cassandra.net.InternodeConnectionUtils.isSSLError;
 import static org.apache.cassandra.net.MessagingService.current_version;
 import static org.apache.cassandra.net.OutboundConnectionInitiator.*;
@@ -474,7 +476,13 @@ public class OutboundConnection
      */
     private boolean onExpired(Message<?> message)
     {
-        noSpamLogger.warn("{} dropping message of type {} whose timeout expired before reaching the network", id(), message.verb());
+        if (logger.isTraceEnabled())
+            logger.trace("{} dropping message of type {} with payload {} whose timeout ({}ms) expired before reaching the network. {}ms elapsed after expiration. {}ms since creation.",
+                         id(), message.verb(), message.payload, DatabaseDescriptor.getRpcTimeout(MILLISECONDS),
+                         NANOSECONDS.toMillis(Clock.Global.nanoTime() - message.expiresAtNanos()),
+                         message.elapsedSinceCreated(MILLISECONDS));
+        else
+            noSpamLogger.warn("{} dropping message of type {} whose timeout expired before reaching the network", id(), message.verb());
         releaseCapacity(1, canonicalSize(message));
         expiredCount += 1;
         expiredBytes += canonicalSize(message);
@@ -1127,6 +1135,7 @@ public class OutboundConnection
 
                         FrameEncoder.PayloadAllocator payloadAllocator = success.allocator;
                         Channel channel = success.channel;
+                        messagingVersion = success.messagingVersion;
                         Established established = new Established(messagingVersion, channel, payloadAllocator, settings);
                         state = established;
                         channel.pipeline().addLast("handleExceptionalStates", new ChannelInboundHandlerAdapter() {

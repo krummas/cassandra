@@ -27,6 +27,8 @@ import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.service.StorageService;
 
+import static org.apache.cassandra.ServerTestUtils.initCMS;
+
 public class UserTypesTest extends CQLTester
 {
     @BeforeClass
@@ -36,6 +38,7 @@ public class UserTypesTest extends CQLTester
         StorageService.instance.setPartitionerUnsafe(ByteOrderedPartitioner.instance);
 
         prepareServer();
+        initCMS();
     }
 
     @Test

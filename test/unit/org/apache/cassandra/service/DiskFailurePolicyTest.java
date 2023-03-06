@@ -59,6 +59,7 @@ public class DiskFailurePolicyTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
+        System.setProperty("cassandra.join_ring", "false"); // required to start gossiper without setting tokens
         SchemaLoader.prepareServer();
         StorageService.instance.initServer();
         FileUtils.setFSErrorHandler(new DefaultFSErrorHandler());

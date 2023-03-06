@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.Util;
@@ -38,11 +39,13 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.locator.InetAddressAndPort;
-import org.apache.cassandra.locator.TokenMetadata;
 import org.apache.cassandra.schema.MockSchema;
-import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.tcm.ClusterMetadata;
+import org.apache.cassandra.tcm.Epoch;
+import org.apache.cassandra.tcm.membership.NodeAddresses;
+import org.apache.cassandra.tcm.transformations.Register;
+import org.apache.cassandra.tcm.transformations.UnsafeJoin;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
@@ -57,12 +60,16 @@ public class DiskBoundaryManagerTest extends CQLTester
     private List<Directories.DataDirectory> datadirs;
     private List<File> tableDirs;
 
+    @BeforeClass
+    public static void beforeClass()
+    {
+        UnsafeJoin.unsafeJoin(Register.maybeRegister(), BootStrapper.getRandomTokens(ClusterMetadata.current(), 10));
+    }
+
     @Before
     public void setup()
     {
         DisallowedDirectories.clearUnwritableUnsafe();
-        TokenMetadata metadata = StorageService.instance.getTokenMetadata();
-        metadata.updateNormalTokens(BootStrapper.getRandomTokens(metadata, 10), FBUtilities.getBroadcastAddressAndPort());
         createTable("create table %s (id int primary key, x text)");
         datadirs = Lists.newArrayList(new Directories.DataDirectory(new File("/tmp/1")),
                                       new Directories.DataDirectory(new File("/tmp/2")),
@@ -98,8 +105,11 @@ public class DiskBoundaryManagerTest extends CQLTester
     @Test
     public void updateTokensTest() throws UnknownHostException
     {
+        //do not use mock to since it will not be invalidated after alter keyspace
+        DiskBoundaryManager dbm = getCurrentColumnFamilyStore().diskBoundaryManager;
         DiskBoundaries dbv1 = dbm.getDiskBoundaries(mock);
-        StorageService.instance.getTokenMetadata().updateNormalTokens(BootStrapper.getRandomTokens(StorageService.instance.getTokenMetadata(), 10), InetAddressAndPort.getByName("127.0.0.10"));
+        InetAddressAndPort ep = InetAddressAndPort.getByName("127.0.0.10");
+        UnsafeJoin.unsafeJoin(Register.register(new NodeAddresses(ep, ep, ep)), BootStrapper.getRandomTokens(ClusterMetadata.current(), 10));
         DiskBoundaries dbv2 = dbm.getDiskBoundaries(mock);
         assertFalse(dbv1.equals(dbv2));
     }
@@ -127,7 +137,7 @@ public class DiskBoundaryManagerTest extends CQLTester
         pps.add(pp(200));
         pps.add(pp(Long.MAX_VALUE)); // last position is always the max token
 
-        DiskBoundaries diskBoundaries = new DiskBoundaries(mock, dirs.getWriteableLocations(), pps, 0, 0);
+        DiskBoundaries diskBoundaries = new DiskBoundaries(mock, dirs.getWriteableLocations(), pps, Epoch.EMPTY, 0);
 
         Assert.assertEquals(Lists.newArrayList(datadirs.get(0)),                  diskBoundaries.getDisksInBounds(dk(10),  dk(50)));
         Assert.assertEquals(Lists.newArrayList(datadirs.get(2)),                  diskBoundaries.getDisksInBounds(dk(250), dk(500)));

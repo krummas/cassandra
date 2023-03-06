@@ -30,16 +30,14 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import com.vdurmont.semver4j.Semver;
-import com.vdurmont.semver4j.Semver.SemverType;
-
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.BeforeClass;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.vdurmont.semver4j.Semver;
+import com.vdurmont.semver4j.Semver.SemverType;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.distributed.UpgradeableCluster;
@@ -69,6 +67,8 @@ public class UpgradeTestBase extends DistributedTestBase
     public static void beforeClass() throws Throwable
     {
         ICluster.setup();
+        System.setProperty("cassandra.startup.skip_gc_inspector", "true");
+        System.setProperty("sigar.nativeLogging", "false");
     }
 
 
@@ -91,6 +91,7 @@ public class UpgradeTestBase extends DistributedTestBase
     public static final Semver v3X = new Semver("3.11.0", SemverType.LOOSE);
     public static final Semver v40 = new Semver("4.0-alpha1", SemverType.LOOSE);
     public static final Semver v41 = new Semver("4.1-alpha1", SemverType.LOOSE);
+    public static final Semver v42 = new Semver("4.2-alpha1", SemverType.LOOSE);
     public static final Semver v50 = new Semver("5.0-alpha1", SemverType.LOOSE);
 
     protected static final SimpleGraph<Semver> SUPPORTED_UPGRADE_PATHS = new SimpleGraph.Builder<Semver>()
@@ -159,6 +160,18 @@ public class UpgradeTestBase extends DistributedTestBase
         private final Set<Integer> nodesToUpgrade = new LinkedHashSet<>();
         private Consumer<IInstanceConfig> configConsumer;
         private Consumer<UpgradeableCluster.Builder> builderConsumer;
+        private UpgradeListener upgradeListener = new UpgradeListener()
+        {
+            @Override
+            public void shutdown(int i)
+            {
+            }
+
+            @Override
+            public void startup(int i)
+            {
+            }
+        };
 
         public TestCase()
         {
@@ -293,6 +306,12 @@ public class UpgradeTestBase extends DistributedTestBase
             return this;
         }
 
+        public TestCase withUpgradeListener(UpgradeListener listener)
+        {
+            this.upgradeListener = listener;
+            return this;
+        }
+
         public void run() throws Throwable
         {
             if (setup == null)
@@ -329,11 +348,13 @@ public class UpgradeTestBase extends DistributedTestBase
 
                             for (int n : nodesToUpgrade)
                             {
+                                upgradeListener.shutdown(n);
                                 cluster.get(n).shutdown().get();
                                 triggerGC();
                                 cluster.get(n).setVersion(nextVersion);
                                 runBeforeNodeRestart.run(cluster, n);
                                 cluster.get(n).startup();
+                                upgradeListener.startup(n);
                                 runAfterNodeUpgrade.run(cluster, n);
                             }
 
@@ -411,5 +432,11 @@ public class UpgradeTestBase extends DistributedTestBase
     protected static int nextNode(int current, int numNodes)
     {
         return current == numNodes ? 1 : current + 1;
+    }
+
+    public interface UpgradeListener
+    {
+        void shutdown(int i);
+        void startup(int i);
     }
 }

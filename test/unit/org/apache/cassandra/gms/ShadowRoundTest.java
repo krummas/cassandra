@@ -36,7 +36,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.Keyspace;
-import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.IEndpointSnitch;
@@ -172,14 +171,6 @@ public class ShadowRoundTest
 
 
         System.setProperty(Config.PROPERTY_PREFIX + "auto_bootstrap", "false");
-        try
-        {
-            StorageService.instance.checkForEndpointCollision(SystemKeyspace.getOrInitializeLocalHostId(), SystemKeyspace.loadHostIds().keySet());
-        }
-        catch (Exception e)
-        {
-            assertEquals("Unable to gossip with any peers", e.getMessage());
-        }
         System.clearProperty(Config.PROPERTY_PREFIX + "auto_bootstrap");
     }
 
@@ -210,7 +201,6 @@ public class ShadowRoundTest
 
 
         System.setProperty(Config.PROPERTY_PREFIX + "auto_bootstrap", "false");
-        StorageService.instance.checkForEndpointCollision(SystemKeyspace.getOrInitializeLocalHostId(), SystemKeyspace.loadHostIds().keySet());
         System.clearProperty(Config.PROPERTY_PREFIX + "auto_bootstrap");
     }
 
