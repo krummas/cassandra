@@ -259,5 +259,8 @@
             <file file="${local.repository}/org/apache/cassandra/deps/sigar-bin/libsigar-x86-linux.so"/>
             <file file="${local.repository}/org/apache/cassandra/deps/sigar-bin/libsigar-x86-solaris.so"/>
         </copy>
+        <copy todir="${test.lib}/jars" quiet="false">
+            <file file="${build.lib}/harry-0.0.2-internal-20221121.14211-2.jar"/>
+        </copy>
     </target>
 </project>
