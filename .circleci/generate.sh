@@ -18,7 +18,7 @@
 #
 
 BASEDIR=`dirname $0`
-BASE_BRANCH=trunk
+BASE_BRANCH=cep-21-tcm
 set -e
 
 die ()
