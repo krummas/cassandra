@@ -222,6 +222,26 @@ public class ViewTest extends ViewAbstractTest
     }
 
     @Test
+    public void testDrop() throws Throwable
+    {
+        createTable("CREATE TABLE %s (" +
+                    "k int, " +
+                    "c int, " +
+                    "intval int, " +
+                    "PRIMARY KEY (k, c))");
+
+        for (int i = 0; i < 1024; i++)
+            execute("INSERT INTO %s (k, c, intval) VALUES (?, ?, ?)", 0, i, 0);
+
+        String n = createView("CREATE MATERIALIZED VIEW %s AS SELECT * FROM %s WHERE k IS NOT NULL AND c IS NOT NULL AND intval IS NOT NULL PRIMARY KEY (intval, c, k)");
+
+        assertRows(execute("SELECT count(*) from %s WHERE k = ?", 0), row(1024L));
+        assertRows(executeView("SELECT count(*) from %s WHERE intval = ?", 0), row(1024L));
+
+        dropView(n);
+    }
+
+    @Test
     public void testCollections() throws Throwable
     {
         createTable("CREATE TABLE %s (" +
@@ -420,7 +440,7 @@ public class ViewTest extends ViewAbstractTest
         assertRowsNet(executeViewNet("SELECT * FROM %s"), row(1, 0));
     }
 
-    private void testViewBuilderResume(int concurrentViewBuilders) throws Throwable
+    private void testViewBuilderResumeHelper(int concurrentViewBuilders) throws Throwable
     {
         createTable("CREATE TABLE %s (" +
                     "k int, " +
@@ -477,7 +497,7 @@ public class ViewTest extends ViewAbstractTest
     {
         for (int i = 1; i <= 8; i *= 2)
         {
-            testViewBuilderResume(i);
+            testViewBuilderResumeHelper(i);
         }
     }
 

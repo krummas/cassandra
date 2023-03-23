@@ -241,7 +241,7 @@ public final class Views implements Iterable<ViewMetadata>
             super(created, dropped, altered);
         }
 
-        private static ViewsDiff diff(Views before, Views after)
+        public static ViewsDiff diff(Views before, Views after)
         {
             if (before == after)
                 return NONE;
