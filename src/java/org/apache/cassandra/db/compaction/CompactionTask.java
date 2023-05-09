@@ -123,7 +123,10 @@ public class CompactionTask extends AbstractCompactionTask
             final Set<SSTableReader> fullyExpiredSSTables = controller.getFullyExpiredSSTables();
 
             // select SSTables to compact based on available disk space.
-            buildCompactionCandidatesForAvailableDiskSpace(fullyExpiredSSTables);
+            if (!buildCompactionCandidatesForAvailableDiskSpace(fullyExpiredSSTables))
+            {
+                controller.refreshOverlaps();
+            }
 
             // sanity check: all sstables must belong to the same cfs
             assert !Iterables.any(transaction.originals(), new Predicate<SSTableReader>()
@@ -345,13 +348,15 @@ public class CompactionTask extends AbstractCompactionTask
      * Checks if we have enough disk space to execute the compaction.  Drops the largest sstable out of the Task until
      * there's enough space (in theory) to handle the compaction.  Does not take into account space that will be taken by
      * other compactions.
+     *
+     * @return true if there is enough disk space to execute the complete compaction, false if some sstables are excluded.
      */
-    protected void buildCompactionCandidatesForAvailableDiskSpace(final Set<SSTableReader> fullyExpiredSSTables)
+    protected boolean buildCompactionCandidatesForAvailableDiskSpace(final Set<SSTableReader> fullyExpiredSSTables)
     {
         if(!cfs.isCompactionDiskSpaceCheckEnabled() && compactionType == OperationType.COMPACTION)
         {
             logger.info("Compaction space check is disabled");
-            return; // try to compact all SSTables
+            return true; // try to compact all SSTables
         }
 
         final Set<SSTableReader> nonExpiredSSTables = Sets.difference(transaction.originals(), fullyExpiredSSTables);
@@ -395,8 +400,9 @@ public class CompactionTask extends AbstractCompactionTask
         {
             CompactionManager.instance.incrementCompactionsReduced();
             CompactionManager.instance.incrementSstablesDropppedFromCompactions(sstablesRemoved);
+            return false;
         }
-
+        return true;
     }
 
     protected int getLevel()
