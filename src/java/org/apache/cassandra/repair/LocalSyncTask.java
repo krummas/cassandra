@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -64,13 +65,13 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
     private final AtomicBoolean active = new AtomicBoolean(true);
     private final Promise<StreamPlan> planPromise = new AsyncPromise<>();
 
-    public LocalSyncTask(RepairJobDesc desc, InetAddressAndPort local, InetAddressAndPort remote,
+    public LocalSyncTask(SharedContext ctx, RepairJobDesc desc, InetAddressAndPort local, InetAddressAndPort remote,
                          List<Range<Token>> diff, TimeUUID pendingRepair,
                          boolean requestRanges, boolean transferRanges, PreviewKind previewKind)
     {
-        super(desc, local, remote, diff, previewKind);
+        super(ctx, desc, local, remote, diff, previewKind);
         Preconditions.checkArgument(requestRanges || transferRanges, "Nothing to do in a sync job");
-        Preconditions.checkArgument(local.equals(FBUtilities.getBroadcastAddressAndPort()));
+        Preconditions.checkArgument(local.equals(ctx.broadcastAddressAndPort()));
 
         this.pendingRepair = pendingRepair;
         this.requestRanges = requestRanges;
@@ -119,7 +120,7 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
             Tracing.traceRepair(message);
 
             StreamPlan plan = createStreamPlan();
-            plan.execute();
+            ctx.streamExecutor().execute(plan);
             planPromise.setSuccess(plan);
         }
     }
@@ -130,6 +131,7 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
         return true;
     }
 
+    @Override
     public void handleStreamEvent(StreamEvent event)
     {
         if (state == null)
@@ -193,8 +195,9 @@ public class LocalSyncTask extends SyncTask implements StreamEventHandler
     }
 
     @Override
-    public void abort()
+    public void abort(Throwable reason)
     {
+        super.abort(reason);
         planPromise.addCallback((plan, cause) ->
         {
             assert plan != null : "StreamPlan future should never be completed exceptionally";

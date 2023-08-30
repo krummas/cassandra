@@ -22,17 +22,18 @@ import java.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
-import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.repair.state.ParticipateState;
 import org.apache.cassandra.repair.state.ValidationState;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.streaming.PreviewKind;
+import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.TimeUUID;
 
 import static org.apache.cassandra.net.Verb.VALIDATION_RSP;
@@ -44,18 +45,38 @@ import static org.apache.cassandra.net.Verb.VALIDATION_RSP;
  */
 public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
 {
-    public static RepairMessageVerbHandler instance = new RepairMessageVerbHandler();
+    private static class Holder
+    {
+        private static final RepairMessageVerbHandler instance = new RepairMessageVerbHandler();
+    }
+
+    public static RepairMessageVerbHandler instance()
+    {
+        return Holder.instance;
+    }
+
+    private final SharedContext ctx;
+
+    private RepairMessageVerbHandler()
+    {
+        this(SharedContext.Global.instance);
+    }
+
+    public RepairMessageVerbHandler(SharedContext ctx)
+    {
+        this.ctx = ctx;
+    }
 
     private static final Logger logger = LoggerFactory.getLogger(RepairMessageVerbHandler.class);
 
     private boolean isIncremental(TimeUUID sessionID)
     {
-        return ActiveRepairService.instance.consistent.local.isSessionInProgress(sessionID);
+        return ctx.repair().consistent.local.isSessionInProgress(sessionID);
     }
 
     private PreviewKind previewKind(TimeUUID sessionID) throws NoSuchRepairSessionException
     {
-        ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(sessionID);
+        ActiveRepairService.ParentRepairSession prs = ctx.repair().getParentRepairSession(sessionID);
         return prs != null ? prs.previewKind : PreviewKind.NONE;
     }
 
@@ -72,12 +93,12 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     PrepareMessage prepareMessage = (PrepareMessage) message.payload;
                     logger.debug("Preparing, {}", prepareMessage);
                     ParticipateState state = new ParticipateState(message.from(), prepareMessage);
-                    if (!ActiveRepairService.instance.register(state))
+                    if (!ctx.repair().register(state))
                     {
-                        logger.debug("Duplicate prepare message found for {}", state.id);
+                        sendAck(message);
                         return;
                     }
-                    if (!ActiveRepairService.verifyCompactionsPendingThreshold(prepareMessage.parentRepairSession, prepareMessage.previewKind))
+                    if (!ctx.repair().verifyCompactionsPendingThreshold(prepareMessage.parentRepairSession, prepareMessage.previewKind))
                     {
                         // error is logged in verifyCompactionsPendingThreshold
                         state.phase.fail("Too many pending compactions");
@@ -99,22 +120,22 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         }
                         columnFamilyStores.add(columnFamilyStore);
                     }
-                    ActiveRepairService.instance.registerParentRepairSession(prepareMessage.parentRepairSession,
-                                                                             message.from(),
-                                                                             columnFamilyStores,
-                                                                             prepareMessage.ranges,
-                                                                             prepareMessage.isIncremental,
-                                                                             prepareMessage.repairedAt,
-                                                                             prepareMessage.isGlobal,
-                                                                             prepareMessage.previewKind);
-                    MessagingService.instance().send(message.emptyResponse(), message.from());
+                    ctx.repair().registerParentRepairSession(prepareMessage.parentRepairSession,
+                                                                    message.from(),
+                                                                    columnFamilyStores,
+                                                                    prepareMessage.ranges,
+                                                                    prepareMessage.isIncremental,
+                                                                    prepareMessage.repairedAt,
+                                                                    prepareMessage.isGlobal,
+                                                                    prepareMessage.previewKind);
+                    sendAck(message);
                 }
                     break;
 
                 case SNAPSHOT_MSG:
                 {
                     logger.debug("Snapshotting {}", desc);
-                    ParticipateState state = ActiveRepairService.instance.participate(desc.parentSessionId);
+                    ParticipateState state = ctx.repair().participate(desc.parentSessionId);
                     if (state == null)
                     {
                         logErrorAndSendFailureResponse("Unknown repair " + desc.parentSessionId, message);
@@ -130,30 +151,30 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         return;
                     }
 
-                    ActiveRepairService.ParentRepairSession prs = ActiveRepairService.instance.getParentRepairSession(desc.parentSessionId);
-                    prs.setHasSnapshots();
-                    TableRepairManager repairManager = cfs.getRepairManager();
-                    if (prs.isGlobal)
+                    ActiveRepairService.ParentRepairSession prs = ctx.repair().getParentRepairSession(desc.parentSessionId);
+                    if (prs.setHasSnapshots())
                     {
-                        repairManager.snapshot(desc.parentSessionId.toString(), prs.getRanges(), false);
+                        TableRepairManager repairManager = cfs.getRepairManager();
+                        if (prs.isGlobal)
+                        {
+                            repairManager.snapshot(desc.parentSessionId.toString(), prs.getRanges(), false);
+                        }
+                        else
+                        {
+                            repairManager.snapshot(desc.parentSessionId.toString(), desc.ranges, true);
+                        }
+                        logger.debug("Enqueuing response to snapshot request {} to {}", desc.sessionId, message.from());
                     }
-                    else
-                    {
-                        repairManager.snapshot(desc.parentSessionId.toString(), desc.ranges, true);
-                    }
-                    logger.debug("Enqueuing response to snapshot request {} to {}", desc.sessionId, message.from());
-                    MessagingService.instance().send(message.emptyResponse(), message.from());
+                    sendAck(message);
                 }
                     break;
 
                 case VALIDATION_REQ:
                 {
-                    // notify initiator that the message has been received, allowing this method to take as long as it needs to
-                    MessagingService.instance().send(message.emptyResponse(), message.from());
                     ValidationRequest validationRequest = (ValidationRequest) message.payload;
                     logger.debug("Validating {}", validationRequest);
 
-                    ParticipateState participate = ActiveRepairService.instance.participate(desc.parentSessionId);
+                    ParticipateState participate = ctx.repair().participate(desc.parentSessionId);
                     if (participate == null)
                     {
                         logErrorAndSendFailureResponse("Unknown repair " + desc.parentSessionId, message);
@@ -163,6 +184,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ValidationState vState = new ValidationState(desc, message.from());
                     if (!participate.register(vState))
                     {
+                        sendAck(message);
                         logger.debug("Duplicate validation message found for parent={}, validation={}", participate.id, vState.id);
                         return;
                     }
@@ -172,14 +194,23 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         ColumnFamilyStore store = ColumnFamilyStore.getIfExists(desc.keyspace, desc.columnFamily);
                         if (store == null)
                         {
-                            logger.error("Table {}.{} was dropped during validation phase of repair {}",
-                                         desc.keyspace, desc.columnFamily, desc.parentSessionId);
-                            vState.phase.fail(String.format("Table %s.%s was dropped", desc.keyspace, desc.columnFamily));
-                            MessagingService.instance().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
+                            String msg = String.format("Table %s.% was dropped during validation phase of repair %s", desc.keyspace, desc.columnFamily, desc.parentSessionId);
+                            vState.phase.fail(msg);
+                            logErrorAndSendFailureResponse(msg, message);
+                            ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
                             return;
                         }
 
-                        ActiveRepairService.instance.consistent.local.maybeSetRepairing(desc.parentSessionId);
+                        try
+                        {
+                            ctx.repair().consistent.local.maybeSetRepairing(desc.parentSessionId);
+                        }
+                        catch (Throwable t)
+                        {
+                            JVMStabilityInspector.inspectThrowable(t);
+                            logErrorAndSendFailureResponse(t.toString(), message);
+                            ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
+                        }
                         PreviewKind previewKind;
                         try
                         {
@@ -189,13 +220,15 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         {
                             logger.warn("Parent repair session {} has been removed, failing repair", desc.parentSessionId);
                             vState.phase.fail(e);
-                            MessagingService.instance().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
+                            sendFailureResponse(message);
+                            ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
                             return;
                         }
+                        sendAck(message);
 
-                        Validator validator = new Validator(vState, validationRequest.nowInSec,
+                        Validator validator = new Validator(ctx, vState, validationRequest.nowInSec,
                                                             isIncremental(desc.parentSessionId), previewKind);
-                        ValidationManager.instance.submitValidation(store, validator);
+                        ctx.validationManager().submitValidation(store, validator);
                     }
                     catch (Throwable t)
                     {
@@ -207,12 +240,23 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
 
                 case SYNC_REQ:
                 {
-                    // notify initiator that the message has been received, allowing this method to take as long as it needs to
-                    MessagingService.instance().send(message.emptyResponse(), message.from());
                     // forwarded sync request
                     SyncRequest request = (SyncRequest) message.payload;
                     logger.debug("Syncing {}", request);
-                    StreamingRepairTask task = new StreamingRepairTask(desc,
+
+                    ParticipateState participate = ctx.repair().participate(desc.parentSessionId);
+                    if (participate == null)
+                    {
+                        logErrorAndSendFailureResponse("Unknown repair " + desc.parentSessionId, message);
+                        return;
+                    }
+                    sendAck(message);
+                    if (!participate.registerStreaming(request.deterministicId()))
+                    {
+                        logger.debug("Duplicate sync message found for parent={}, validation={}", participate.id, desc.determanisticId());
+                        return;
+                    }
+                    StreamingRepairTask task = new StreamingRepairTask(ctx, desc,
                                                                        request.initiator,
                                                                        request.src,
                                                                        request.dst,
@@ -228,50 +272,50 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                 {
                     logger.debug("cleaning up repair");
                     CleanupMessage cleanup = (CleanupMessage) message.payload;
-                    ParticipateState state = ActiveRepairService.instance.participate(cleanup.parentRepairSession);
+                    ParticipateState state = ctx.repair().participate(cleanup.parentRepairSession);
                     if (state != null)
                         state.phase.success("Cleanup message recieved");
-                    ActiveRepairService.instance.removeParentRepairSession(cleanup.parentRepairSession);
-                    MessagingService.instance().send(message.emptyResponse(), message.from());
+                    ctx.repair().removeParentRepairSession(cleanup.parentRepairSession);
+                    sendAck(message);
                 }
                     break;
 
                 case PREPARE_CONSISTENT_REQ:
-                    ActiveRepairService.instance.consistent.local.handlePrepareMessage(message.from(), (PrepareConsistentRequest) message.payload);
+                    ctx.repair().consistent.local.handlePrepareMessage(message.from(), (PrepareConsistentRequest) message.payload);
                     break;
 
                 case PREPARE_CONSISTENT_RSP:
-                    ActiveRepairService.instance.consistent.coordinated.handlePrepareResponse((PrepareConsistentResponse) message.payload);
+                    ctx.repair().consistent.coordinated.handlePrepareResponse((PrepareConsistentResponse) message.payload);
                     break;
 
                 case FINALIZE_PROPOSE_MSG:
-                    ActiveRepairService.instance.consistent.local.handleFinalizeProposeMessage(message.from(), (FinalizePropose) message.payload);
+                    ctx.repair().consistent.local.handleFinalizeProposeMessage(message.from(), (FinalizePropose) message.payload);
                     break;
 
                 case FINALIZE_PROMISE_MSG:
-                    ActiveRepairService.instance.consistent.coordinated.handleFinalizePromiseMessage((FinalizePromise) message.payload);
+                    ctx.repair().consistent.coordinated.handleFinalizePromiseMessage((FinalizePromise) message.payload);
                     break;
 
                 case FINALIZE_COMMIT_MSG:
-                    ActiveRepairService.instance.consistent.local.handleFinalizeCommitMessage(message.from(), (FinalizeCommit) message.payload);
+                    ctx.repair().consistent.local.handleFinalizeCommitMessage(message.from(), (FinalizeCommit) message.payload);
                     break;
 
                 case FAILED_SESSION_MSG:
                     FailSession failure = (FailSession) message.payload;
-                    ActiveRepairService.instance.consistent.coordinated.handleFailSessionMessage(failure);
-                    ActiveRepairService.instance.consistent.local.handleFailSessionMessage(message.from(), failure);
+                    ctx.repair().consistent.coordinated.handleFailSessionMessage(failure);
+                    ctx.repair().consistent.local.handleFailSessionMessage(message.from(), failure);
                     break;
 
                 case STATUS_REQ:
-                    ActiveRepairService.instance.consistent.local.handleStatusRequest(message.from(), (StatusRequest) message.payload);
+                    ctx.repair().consistent.local.handleStatusRequest(message.from(), (StatusRequest) message.payload);
                     break;
 
                 case STATUS_RSP:
-                    ActiveRepairService.instance.consistent.local.handleStatusResponse(message.from(), (StatusResponse) message.payload);
+                    ctx.repair().consistent.local.handleStatusResponse(message.from(), (StatusResponse) message.payload);
                     break;
 
                 default:
-                    ActiveRepairService.instance.handleMessage(message);
+                    ctx.repair().handleMessage(message);
                     break;
             }
         }
@@ -280,10 +324,10 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
             logger.error("Got error, removing parent repair session");
             if (desc != null && desc.parentSessionId != null)
             {
-                ParticipateState parcipate = ActiveRepairService.instance.participate(desc.parentSessionId);
+                ParticipateState parcipate = ctx.repair().participate(desc.parentSessionId);
                 if (parcipate != null)
                     parcipate.phase.fail(e);
-                ActiveRepairService.instance.removeParentRepairSession(desc.parentSessionId);
+                ctx.repair().removeParentRepairSession(desc.parentSessionId);
             }
             throw new RuntimeException(e);
         }
@@ -298,6 +342,11 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
     private void sendFailureResponse(Message<?> respondTo)
     {
         Message<?> reply = respondTo.failureResponse(RequestFailureReason.UNKNOWN);
-        MessagingService.instance().send(reply, respondTo.from());
+        ctx.messaging().send(reply, respondTo.from());
+    }
+
+    private void sendAck(Message<RepairMessage> message)
+    {
+        ctx.messaging().send(message.emptyResponse(), message.from());
     }
 }

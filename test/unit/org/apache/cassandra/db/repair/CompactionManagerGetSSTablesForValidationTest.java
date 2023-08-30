@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.cql3.statements.schema.CreateTableStatement;
 import org.apache.cassandra.repair.state.ValidationState;
 import org.apache.cassandra.schema.TableMetadata;
@@ -105,14 +106,14 @@ public class CompactionManagerGetSSTablesForValidationTest
     {
         sessionID = nextTimeUUID();
         Range<Token> range = new Range<>(MT, MT);
-        ActiveRepairService.instance.registerParentRepairSession(sessionID,
-                                                                 coordinator,
-                                                                 Lists.newArrayList(cfs),
-                                                                 Sets.newHashSet(range),
-                                                                 incremental,
-                                                                 incremental ? System.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 true,
-                                                                 PreviewKind.NONE);
+        ActiveRepairService.instance().registerParentRepairSession(sessionID,
+                                                                   coordinator,
+                                                                   Lists.newArrayList(cfs),
+                                                                   Sets.newHashSet(range),
+                                                                   incremental,
+                                                                   incremental ? System.currentTimeMillis() : ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                   true,
+                                                                   PreviewKind.NONE);
         desc = new RepairJobDesc(sessionID, nextTimeUUID(), ks, tbl, singleton(range));
     }
 
@@ -142,7 +143,7 @@ public class CompactionManagerGetSSTablesForValidationTest
 
         // get sstables for repair
         Validator validator = new Validator(new ValidationState(desc, coordinator), FBUtilities.nowInSeconds(), true, PreviewKind.NONE);
-        Set<SSTableReader> sstables = Sets.newHashSet(getSSTablesToValidate(cfs, validator.desc.ranges, validator.desc.parentSessionId, validator.isIncremental));
+        Set<SSTableReader> sstables = Sets.newHashSet(getSSTablesToValidate(cfs, SharedContext.Global.instance, validator.desc.ranges, validator.desc.parentSessionId, validator.isIncremental));
         Assert.assertNotNull(sstables);
         Assert.assertEquals(1, sstables.size());
         Assert.assertTrue(sstables.contains(pendingRepair));
@@ -157,7 +158,7 @@ public class CompactionManagerGetSSTablesForValidationTest
 
         // get sstables for repair
         Validator validator = new Validator(new ValidationState(desc, coordinator), FBUtilities.nowInSeconds(), false, PreviewKind.NONE);
-        Set<SSTableReader> sstables = Sets.newHashSet(getSSTablesToValidate(cfs, validator.desc.ranges, validator.desc.parentSessionId, validator.isIncremental));
+        Set<SSTableReader> sstables = Sets.newHashSet(getSSTablesToValidate(cfs, SharedContext.Global.instance, validator.desc.ranges, validator.desc.parentSessionId, validator.isIncremental));
         Assert.assertNotNull(sstables);
         Assert.assertEquals(2, sstables.size());
         Assert.assertTrue(sstables.contains(pendingRepair));
@@ -173,7 +174,7 @@ public class CompactionManagerGetSSTablesForValidationTest
 
         // get sstables for repair
         Validator validator = new Validator(new ValidationState(desc, coordinator), FBUtilities.nowInSeconds(), false, PreviewKind.NONE);
-        Set<SSTableReader> sstables = Sets.newHashSet(getSSTablesToValidate(cfs, validator.desc.ranges, validator.desc.parentSessionId, validator.isIncremental));
+        Set<SSTableReader> sstables = Sets.newHashSet(getSSTablesToValidate(cfs, SharedContext.Global.instance, validator.desc.ranges, validator.desc.parentSessionId, validator.isIncremental));
         Assert.assertNotNull(sstables);
         Assert.assertEquals(3, sstables.size());
         Assert.assertTrue(sstables.contains(pendingRepair));

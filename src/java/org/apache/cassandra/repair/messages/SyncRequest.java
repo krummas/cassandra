@@ -18,10 +18,14 @@
 package org.apache.cassandra.repair.messages;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+
+import org.apache.commons.lang3.ArrayUtils;
 
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.AbstractBounds;
@@ -34,8 +38,11 @@ import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.repair.RepairJobDesc;
 import org.apache.cassandra.streaming.PreviewKind;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 import static org.apache.cassandra.locator.InetAddressAndPort.Serializer.inetAddressAndPortSerializer;
+import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
+import static org.apache.cassandra.utils.ByteBufferUtil.getArray;
 
 /**
  * Body part of SYNC_REQUEST repair message.
@@ -67,6 +74,22 @@ public class SyncRequest extends RepairMessage
         this.ranges = ranges;
         this.previewKind = previewKind;
         this.asymmetric = asymmetric;
+    }
+
+    public UUID deterministicId()
+    {
+        byte[] bytes = getArray(bytes(desc.parentSessionId));
+        bytes = ArrayUtils.addAll(bytes, getArray(bytes(desc.sessionId)));
+        bytes = ArrayUtils.addAll(bytes, desc.keyspace.getBytes(StandardCharsets.UTF_8));
+        bytes = ArrayUtils.addAll(bytes, desc.columnFamily.getBytes(StandardCharsets.UTF_8));
+        bytes = ArrayUtils.addAll(bytes, desc.ranges.toString().getBytes(StandardCharsets.UTF_8));
+        bytes = ArrayUtils.addAll(bytes, initiator.addressBytes);
+        bytes = ArrayUtils.addAll(bytes, ByteBufferUtil.bytes(initiator.getPort()).array());
+        bytes = ArrayUtils.addAll(bytes, src.addressBytes);
+        bytes = ArrayUtils.addAll(bytes, ByteBufferUtil.bytes(src.getPort()).array());
+        bytes = ArrayUtils.addAll(bytes, dst.addressBytes);
+        bytes = ArrayUtils.addAll(bytes, ByteBufferUtil.bytes(dst.getPort()).array());
+        return UUID.nameUUIDFromBytes(bytes);
     }
 
     @Override

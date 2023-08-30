@@ -893,7 +893,7 @@ public class CompactionManager implements CompactionManagerMBean
             ActiveRepairService.ParentRepairSession prs;
             try
             {
-                prs = ActiveRepairService.instance.getParentRepairSession(sessionID);
+                prs = ActiveRepairService.instance().getParentRepairSession(sessionID);
             }
             catch (NoSuchRepairSessionException e)
             {

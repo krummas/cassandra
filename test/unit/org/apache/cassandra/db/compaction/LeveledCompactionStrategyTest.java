@@ -208,14 +208,14 @@ public class LeveledCompactionStrategyTest
         Range<Token> range = new Range<>(Util.token(""), Util.token(""));
         long gcBefore = keyspace.getColumnFamilyStore(CF_STANDARDDLEVELED).gcBefore(FBUtilities.nowInSeconds());
         TimeUUID parentRepSession = nextTimeUUID();
-        ActiveRepairService.instance.registerParentRepairSession(parentRepSession,
-                                                                 FBUtilities.getBroadcastAddressAndPort(),
-                                                                 Arrays.asList(cfs),
-                                                                 Arrays.asList(range),
-                                                                 false,
-                                                                 ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 true,
-                                                                 PreviewKind.NONE);
+        ActiveRepairService.instance().registerParentRepairSession(parentRepSession,
+                                                                   FBUtilities.getBroadcastAddressAndPort(),
+                                                                   Arrays.asList(cfs),
+                                                                   Arrays.asList(range),
+                                                                   false,
+                                                                   ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                   true,
+                                                                   PreviewKind.NONE);
         RepairJobDesc desc = new RepairJobDesc(parentRepSession, nextTimeUUID(), KEYSPACE1, CF_STANDARDDLEVELED, Arrays.asList(range));
         Validator validator = new Validator(new ValidationState(desc, FBUtilities.getBroadcastAddressAndPort()), gcBefore, PreviewKind.NONE);
 

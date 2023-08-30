@@ -19,9 +19,11 @@ package org.apache.cassandra.repair.state;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -42,6 +44,8 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
     public final PreviewKind previewKind;
 
     private final ConcurrentMap<UUID, ValidationState> validations = new ConcurrentHashMap<>();
+    // TODO (nice to have): streaming state
+    private final Set<UUID> streams = new ConcurrentSkipListSet<>();
 
     public final Phase phase = new Phase();
 
@@ -63,6 +67,11 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
         return current == null;
     }
 
+    public boolean registerStreaming(UUID id)
+    {
+        return streams.add(id);
+    }
+
     public Collection<ValidationState> validations()
     {
         return validations.values();
@@ -71,6 +80,18 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
     public Collection<UUID> validationIds()
     {
         return validations.keySet();
+    }
+
+    @Override
+    public String toString()
+    {
+        Result result = getResult();
+        return "ParticipateState{" +
+               "initiator=" + initiator +
+               ", status=" + (result == null ? "pending" : result.kind.name()) +
+               ", validations=" + validations.keySet() +
+               ", streams=" + streams +
+               '}';
     }
 
     public class Phase extends BasePhase

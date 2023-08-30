@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.db.compaction.CompactionsTest;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.junit.After;
@@ -202,12 +203,12 @@ public class ValidatorTest
 
         InetAddressAndPort host = InetAddressAndPort.getByName("127.0.0.2");
 
-        ActiveRepairService.instance.registerParentRepairSession(repairSessionId, host,
-                                                                 Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 false, PreviewKind.NONE);
+        ActiveRepairService.instance().registerParentRepairSession(repairSessionId, host,
+                                                                   Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                   false, PreviewKind.NONE);
 
         final CompletableFuture<Message> outgoingMessageSink = registerOutgoingMessageSink();
-        Validator validator = new Validator(new ValidationState(desc, host), 0, true, false, PreviewKind.NONE);
+        Validator validator = new Validator(SharedContext.Global.instance, new ValidationState(desc, host), 0, true, false, PreviewKind.NONE);
         ValidationManager.instance.submitValidation(cfs, validator);
 
         Message message = outgoingMessageSink.get(TEST_TIMEOUT, TimeUnit.SECONDS);
@@ -259,12 +260,12 @@ public class ValidatorTest
 
         InetAddressAndPort host = InetAddressAndPort.getByName("127.0.0.2");
 
-        ActiveRepairService.instance.registerParentRepairSession(repairSessionId, host,
-                                                                 Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 false, PreviewKind.NONE);
+        ActiveRepairService.instance().registerParentRepairSession(repairSessionId, host,
+                                                                   Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                   false, PreviewKind.NONE);
 
         final CompletableFuture<Message> outgoingMessageSink = registerOutgoingMessageSink();
-        Validator validator = new Validator(new ValidationState(desc, host), 0, true, false, PreviewKind.NONE);
+        Validator validator = new Validator(SharedContext.Global.instance, new ValidationState(desc, host), 0, true, false, PreviewKind.NONE);
         ValidationManager.instance.submitValidation(cfs, validator);
 
         Message message = outgoingMessageSink.get(TEST_TIMEOUT, TimeUnit.SECONDS);
@@ -321,12 +322,12 @@ public class ValidatorTest
 
         InetAddressAndPort host = InetAddressAndPort.getByName("127.0.0.2");
 
-        ActiveRepairService.instance.registerParentRepairSession(repairSessionId, host,
-                                                                 Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
-                                                                 false, PreviewKind.NONE);
+        ActiveRepairService.instance().registerParentRepairSession(repairSessionId, host,
+                                                                   Collections.singletonList(cfs), desc.ranges, false, ActiveRepairService.UNREPAIRED_SSTABLE,
+                                                                   false, PreviewKind.NONE);
 
         final CompletableFuture<Message> outgoingMessageSink = registerOutgoingMessageSink();
-        Validator validator = new Validator(new ValidationState(desc, host), 0, true, false, PreviewKind.NONE);
+        Validator validator = new Validator(SharedContext.Global.instance, new ValidationState(desc, host), 0, true, false, PreviewKind.NONE);
         ValidationManager.instance.submitValidation(cfs, validator);
 
         Message message = outgoingMessageSink.get(TEST_TIMEOUT, TimeUnit.SECONDS);

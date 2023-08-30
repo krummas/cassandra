@@ -115,7 +115,7 @@ public class LocalRepairTables
         public DataSet data()
         {
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ActiveRepairService.instance.coordinators().forEach(s -> updateDataset(result, s));
+            ActiveRepairService.instance().coordinators().forEach(s -> updateDataset(result, s));
             return result;
         }
 
@@ -123,7 +123,7 @@ public class LocalRepairTables
         {
             TimeUUID id = TimeUUIDType.instance.compose(partitionKey.getKey());
             SimpleDataSet result = new SimpleDataSet(metadata());
-            CoordinatorState state = ActiveRepairService.instance.coordinator(id);
+            CoordinatorState state = ActiveRepairService.instance().coordinator(id);
             if (state != null)
                 updateDataset(result, state);
             return result;
@@ -212,7 +212,7 @@ public class LocalRepairTables
         public DataSet data()
         {
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ActiveRepairService.instance.coordinators().stream()
+            ActiveRepairService.instance().coordinators().stream()
                                                 .flatMap(s -> s.getSessions().stream())
                                                 .forEach(s -> updateDataset(result, s));
             return result;
@@ -251,7 +251,7 @@ public class LocalRepairTables
         public DataSet data()
         {
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ActiveRepairService.instance.coordinators().stream()
+            ActiveRepairService.instance().coordinators().stream()
                                                 .flatMap(s -> s.getSessions().stream())
                                                 .flatMap(s -> s.getJobs().stream())
                                                 .forEach(s -> updateDataset(result, s));
@@ -291,7 +291,7 @@ public class LocalRepairTables
         public DataSet data()
         {
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ActiveRepairService.instance.participates().stream()
+            ActiveRepairService.instance().participates().stream()
                                         .forEach(s -> updateDataset(result, s));
             return result;
         }
@@ -301,7 +301,7 @@ public class LocalRepairTables
         {
             TimeUUID id = TimeUUIDType.instance.compose(partitionKey.getKey());
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ParticipateState state = ActiveRepairService.instance.participate(id);
+            ParticipateState state = ActiveRepairService.instance().participate(id);
             if (state != null)
                 updateDataset(result, state);
             return result;
@@ -352,7 +352,7 @@ public class LocalRepairTables
         public DataSet data()
         {
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ActiveRepairService.instance.validations().stream()
+            ActiveRepairService.instance().validations().stream()
                                                      .forEach(s -> updateDataset(result, s));
             return result;
         }
@@ -362,7 +362,7 @@ public class LocalRepairTables
         {
             UUID id = UUIDType.instance.compose(partitionKey.getKey());
             SimpleDataSet result = new SimpleDataSet(metadata());
-            ValidationState state = ActiveRepairService.instance.validation(id);
+            ValidationState state = ActiveRepairService.instance().validation(id);
             if (state != null)
                 updateDataset(result, state);
             return result;

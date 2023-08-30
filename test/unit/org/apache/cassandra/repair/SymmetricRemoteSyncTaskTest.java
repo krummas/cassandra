@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableList;
 import org.junit.Assert;
 import org.junit.Test;
 
+import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -41,7 +42,7 @@ public class SymmetricRemoteSyncTaskTest extends AbstractRepairTest
     {
         public InstrumentedSymmetricRemoteSyncTask(InetAddressAndPort e1, InetAddressAndPort e2)
         {
-            super(DESC, e1, e2, RANGE_LIST, PreviewKind.NONE);
+            super(SharedContext.Global.instance, DESC, e1, e2, RANGE_LIST, PreviewKind.NONE);
         }
 
         RepairMessage sentMessage = null;

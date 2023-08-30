@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.repair.CommonRange;
@@ -71,6 +72,16 @@ public class SessionState extends AbstractState<SessionState.State, TimeUUID>
     public Set<InetAddressAndPort> getParticipants()
     {
         return commonRange.endpoints;
+    }
+
+    public String status()
+    {
+        State state = getStatus();
+        Result result = getResult();
+        if (result != null)                 return result.kind.name();
+        else if (state == null)             return "init";
+        else if (state == State.JOBS_START) return state.name() + " " + jobs.entrySet().stream().map(e -> e.getKey() + " -> " + e.getValue().status()).collect(Collectors.toList());
+        else                                return state.name();
     }
 
     public void register(JobState state)

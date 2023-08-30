@@ -1899,6 +1899,11 @@ public class DatabaseDescriptor
         return newFailureDetector.get();
     }
 
+    public static void setFailureDetector(Supplier<IFailureDetector> fn)
+    {
+        newFailureDetector = fn;
+    }
+
     public static void setDefaultFailureDetector()
     {
         newFailureDetector = () -> createFailureDetector("FailureDetector");
@@ -3695,6 +3700,12 @@ public class DatabaseDescriptor
         return localDC;
     }
 
+    @VisibleForTesting
+    public static void setLocalDataCenter(String value)
+    {
+        localDC = value;
+    }
+
     public static Comparator<Replica> getLocalComparator()
     {
         return localComparator;
@@ -4905,5 +4916,10 @@ public class DatabaseDescriptor
     public static DataStorageSpec.IntMebibytesBound getSAISegmentWriteBufferSpace()
     {
         return conf.sai_options.segment_write_buffer_size;
+    }
+
+    public static RepairRetrySpec getRepairRetrys()
+    {
+        return conf == null ? new RepairRetrySpec() : conf.repair.retries;
     }
 }
