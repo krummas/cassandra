@@ -478,7 +478,7 @@ public interface StorageServiceMBean extends NotificationEmitter
     /**
      * Get the status of a given parent repair session.
      * @param cmd the int reference returned when issuing the repair
-     * @return status of parent repair from enum {@link RepairCoordinator.Status}
+     * @return status of parent repair from enum {@link ActiveRepairService.ParentRepairStatus}
      * followed by final message or messages of the session
      */
     @Nullable
