@@ -194,7 +194,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         ColumnFamilyStore store = ColumnFamilyStore.getIfExists(desc.keyspace, desc.columnFamily);
                         if (store == null)
                         {
-                            String msg = String.format("Table %s.% was dropped during validation phase of repair %s", desc.keyspace, desc.columnFamily, desc.parentSessionId);
+                            String msg = String.format("Table %s.%s was dropped during validation phase of repair %s", desc.keyspace, desc.columnFamily, desc.parentSessionId);
                             vState.phase.fail(msg);
                             logErrorAndSendFailureResponse(msg, message);
                             ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
