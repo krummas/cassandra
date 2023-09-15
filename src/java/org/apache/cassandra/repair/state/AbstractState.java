@@ -92,4 +92,16 @@ public abstract class AbstractState<T extends Enum<T>, I> extends AbstractComple
         stateTimesNanos[this.currentState = state.ordinal()] = now;
         lastUpdatedAtNs = now;
     }
+
+    protected void maybeUpdateState(T state)
+    {
+        int currentState = this.currentState;
+        if (currentState == state.ordinal())
+            return;
+        if (currentState > state.ordinal())
+            throw new IllegalStateException("State went backwards; current=" + klass.getEnumConstants()[currentState] + ", desired=" + state);
+        long now = Clock.Global.nanoTime();
+        stateTimesNanos[this.currentState = state.ordinal()] = now;
+        lastUpdatedAtNs = now;
+    }
 }

@@ -45,16 +45,15 @@ import static accord.utils.Property.qt;
 public class FailedAckTest extends FuzzTestBase
 {
     private enum RepairStage
-    { PREPARE, VALIDATION, SYNC }
+    { PREPARE, VALIDATION } // TODO (coverage): SYNC doesn't have a good entry point for injecting the failure
     
     @Test
     public void failedAck()
     {
         DatabaseDescriptor.getRepairRetrySpec().maxAttempts = new RetrySpec.MaxAttempt(Integer.MAX_VALUE);
         DatabaseDescriptor.setRepairPendingCompactionRejectThreshold(1);
-//        Gen<RepairJobStage> stageGen = Gens.enums().all(RepairJobStage.class);
-        Gen<RepairStage> stageGen = Gens.constant(RepairStage.PREPARE);
-        qt().withSeed(42220190747834842L).withPure(false).withExamples(10).check(rs -> {
+        Gen<RepairStage> stageGen = Gens.enums().all(RepairStage.class);
+        qt().withPure(false).withExamples(10).check(rs -> {
             Cluster cluster = new Cluster(rs);
             enableMessageFaults(cluster);
 
@@ -105,33 +104,6 @@ public class FailedAckTest extends FuzzTestBase
                         });
                     }
                     break;
-                    case SYNC:
-                    {
-//                        closeables.add(failingNode.doValidation((cfs, validator) -> addMismatch(rs, cfs, validator)));
-//                        List<InetAddressAndPort> addresses = ImmutableList.<InetAddressAndPort>builder().add(coordinator.addressAndPort).addAll(repair.state.getNeighborsAndRanges().participants).build();
-//                        for (InetAddressAndPort address : addresses)
-//                        {
-//                            closeables.add(cluster.nodes.get(address).doSync(plan -> {
-//                                long delayNanos = rs.nextLong(TimeUnit.SECONDS.toNanos(5), TimeUnit.MINUTES.toNanos(10));
-//                                cluster.unorderedScheduled.schedule(() -> {
-//                                    if (address == failingAddress || plan.getCoordinator().getPeers().contains(failingAddress))
-//                                    {
-//                                        SimulatedFault fault = new SimulatedFault("Sync failed");
-//                                        for (StreamEventHandler handler : plan.handlers())
-//                                            handler.onFailure(fault);
-//                                    }
-//                                    else
-//                                    {
-//                                        StreamState success = new StreamState(plan.planId(), plan.streamOperation(), Collections.emptySet());
-//                                        for (StreamEventHandler handler : plan.handlers())
-//                                            handler.onSuccess(success);
-//                                    }
-//                                }, delayNanos, TimeUnit.NANOSECONDS);
-//                                return null;
-//                            }));
-//                        }
-                    }
-                    break;
                     default:
                         throw new IllegalArgumentException("Unknown stage: " + stage);
                 }
@@ -154,22 +126,6 @@ public class FailedAckTest extends FuzzTestBase
                                   .contains("Got VALIDATION_REQ failure from " + failingAddress + ": UNKNOWN");
                     }
                     break;
-                    case SYNC:
-                        AbstractStringAssert<?> a = Assertions.assertThat(repair.state.getResult().message).describedAs("Unexpected state: %s -> %s; example %d", repair.state, repair.state.getResult(), example);
-                        // SymmetricRemoteSyncTask + AsymmetricRemoteSyncTask
-                        // ... Sync failed between /[81fc:714:2c56:a2d3:faf3:eb7c:e4dd:cb9e]:54401 and /220.3.10.72:21402
-                        // LocalSyncTask
-                        // ... failed with error Sync failed
-                        String failingMsg = repair.state.getResult().message;
-                        if (failingMsg.contains("Sync failed between"))
-                        {
-                            a.contains("Sync failed between").contains(failingAddress.toString());
-                        }
-                        else
-                        {
-                            a.contains("failed with error Sync failed");
-                        }
-                        break;
                     default:
                         throw new IllegalArgumentException("Unknown stage: " + stage);
                 }

@@ -31,6 +31,7 @@ import org.apache.cassandra.repair.messages.*;
 import org.apache.cassandra.repair.state.AbstractState;
 import org.apache.cassandra.repair.state.Completable;
 import org.apache.cassandra.repair.state.ParticipateState;
+import org.apache.cassandra.repair.state.SyncState;
 import org.apache.cassandra.repair.state.ValidationState;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.ActiveRepairService;
@@ -253,13 +254,15 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         logErrorAndSendFailureResponse("Unknown repair " + desc.parentSessionId, message);
                         return;
                     }
-                    sendAck(message);
-                    if (!participate.registerStreaming(request.deterministicId()))
+                    SyncState state = new SyncState(request.deterministicId());
+                    if (!participate.register(state))
                     {
                         logger.debug("Duplicate sync message found for parent={}, validation={}", participate.id, desc.determanisticId());
+                        replyDedup(participate.sync(state.id), message);
                         return;
                     }
-                    StreamingRepairTask task = new StreamingRepairTask(ctx, desc,
+                    state.phase.accept();
+                    StreamingRepairTask task = new StreamingRepairTask(ctx, state, desc,
                                                                        request.initiator,
                                                                        request.src,
                                                                        request.dst,
@@ -268,6 +271,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                                                                        request.previewKind,
                                                                        request.asymmetric);
                     task.run();
+                    sendAck(message);
                 }
                     break;
 

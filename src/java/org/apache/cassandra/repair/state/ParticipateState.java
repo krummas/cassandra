@@ -19,11 +19,9 @@ package org.apache.cassandra.repair.state;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 
 import javax.annotation.Nullable;
 
@@ -48,8 +46,7 @@ public class ParticipateState extends AbstractState<ParticipateState.State, Time
     public final PreviewKind previewKind;
 
     private final ConcurrentMap<UUID, ValidationState> validations = new ConcurrentHashMap<>();
-    // TODO (nice to have): streaming state
-    private final Set<UUID> streams = new ConcurrentSkipListSet<>();
+    private final ConcurrentMap<UUID, SyncState> syncs = new ConcurrentHashMap<>();
 
     public final Phase phase = new Phase();
 
@@ -67,7 +64,7 @@ public class ParticipateState extends AbstractState<ParticipateState.State, Time
 
     public boolean register(ValidationState state)
     {
-        updateState(State.VALIDATION);
+        maybeUpdateState(State.VALIDATION);
         ValidationState current = validations.putIfAbsent(state.id, state);
         return current == null;
     }
@@ -78,10 +75,17 @@ public class ParticipateState extends AbstractState<ParticipateState.State, Time
         return validations.get(id);
     }
 
-    public boolean registerStreaming(UUID id)
+    public boolean register(SyncState state)
     {
-        updateState(State.SYNC);
-        return streams.add(id);
+        maybeUpdateState(State.SYNC);
+        SyncState current = syncs.putIfAbsent(state.id, state);
+        return current == null;
+    }
+
+    @Nullable
+    public SyncState sync(UUID id)
+    {
+        return syncs.get(id);
     }
 
     public Collection<ValidationState> validations()
@@ -102,7 +106,7 @@ public class ParticipateState extends AbstractState<ParticipateState.State, Time
                "initiator=" + initiator +
                ", status=" + (result == null ? "pending" : result.kind.name()) +
                ", validations=" + validations.keySet() +
-               ", streams=" + streams +
+               ", syncs=" + syncs +
                '}';
     }
 

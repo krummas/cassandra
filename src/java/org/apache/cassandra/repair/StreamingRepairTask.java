@@ -32,6 +32,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.repair.messages.RepairMessage;
 import org.apache.cassandra.repair.messages.SyncResponse;
+import org.apache.cassandra.repair.state.SyncState;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.streaming.StreamEvent;
 import org.apache.cassandra.streaming.StreamEventHandler;
@@ -55,6 +56,7 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
     private static final Logger logger = LoggerFactory.getLogger(StreamingRepairTask.class);
 
     private final SharedContext ctx;
+    private final SyncState state;
     private final RepairJobDesc desc;
     private final boolean asymmetric;
     private final InetAddressAndPort initiator;
@@ -64,9 +66,10 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
     private final TimeUUID pendingRepair;
     private final PreviewKind previewKind;
 
-    public StreamingRepairTask(SharedContext ctx, RepairJobDesc desc, InetAddressAndPort initiator, InetAddressAndPort src, InetAddressAndPort dst, Collection<Range<Token>> ranges, TimeUUID pendingRepair, PreviewKind previewKind, boolean asymmetric)
+    public StreamingRepairTask(SharedContext ctx, SyncState state, RepairJobDesc desc, InetAddressAndPort initiator, InetAddressAndPort src, InetAddressAndPort dst, Collection<Range<Token>> ranges, TimeUUID pendingRepair, PreviewKind previewKind, boolean asymmetric)
     {
         this.ctx = ctx;
+        this.state = state;
         this.desc = desc;
         this.initiator = initiator;
         this.src = src;
@@ -83,12 +86,14 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
         long start = approxTime.now();
         StreamPlan streamPlan = createStreamPlan(dst);
         logger.info("[streaming task #{}] Stream plan created in {}ms", desc.sessionId, MILLISECONDS.convert(approxTime.now() - start, NANOSECONDS));
+        state.phase.start();
         ctx.streamExecutor().execute(streamPlan);
     }
 
     @VisibleForTesting
     StreamPlan createStreamPlan(InetAddressAndPort dest)
     {
+        state.phase.planning();
         StreamPlan sp = new StreamPlan(StreamOperation.REPAIR, 1, false, pendingRepair, previewKind)
                .listeners(this)
                .flushBeforeTransfer(pendingRepair == null) // sstables are isolated at the beginning of an incremental repair session, so flushing isn't neccessary
@@ -115,6 +120,7 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
     public void onSuccess(StreamState state)
     {
         logger.info("[repair #{}] streaming task succeed, returning response to {}", desc.sessionId, initiator);
+        this.state.phase.success();
         RepairMessage.sendMessageWithRetries(ctx, new SyncResponse(desc, src, dst, true, state.createSummaries()), SYNC_RSP, initiator);
     }
 
@@ -124,6 +130,7 @@ public class StreamingRepairTask implements Runnable, StreamEventHandler
     @Override
     public void onFailure(Throwable t)
     {
+        this.state.phase.fail(t);
         RepairMessage.sendMessageWithRetries(ctx, new SyncResponse(desc, src, dst, false, Collections.emptyList()), SYNC_RSP, initiator);
     }
 }
