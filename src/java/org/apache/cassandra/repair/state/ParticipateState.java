@@ -25,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 
+import javax.annotation.Nullable;
+
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.InetAddressAndPort;
@@ -33,8 +35,10 @@ import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.TimeUUID;
 
-public class ParticipateState extends AbstractCompletable<TimeUUID>
+public class ParticipateState extends AbstractState<ParticipateState.State, TimeUUID>
 {
+    public enum State
+    { ACCEPT, SNAPSHOT, VALIDATION, SYNC }
     public final InetAddressAndPort initiator;
     public final List<TableId> tableIds;
     public final Collection<Range<Token>> ranges;
@@ -51,7 +55,7 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
 
     public ParticipateState(InetAddressAndPort initiator, PrepareMessage msg)
     {
-        super(msg.parentRepairSession);
+        super(msg.parentRepairSession, State.class);
         this.initiator = initiator;
         this.tableIds = msg.tableIds;
         this.ranges = msg.ranges;
@@ -63,12 +67,20 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
 
     public boolean register(ValidationState state)
     {
+        updateState(State.VALIDATION);
         ValidationState current = validations.putIfAbsent(state.id, state);
         return current == null;
     }
 
+    @Nullable
+    public ValidationState validation(UUID id)
+    {
+        return validations.get(id);
+    }
+
     public boolean registerStreaming(UUID id)
     {
+        updateState(State.SYNC);
         return streams.add(id);
     }
 
@@ -96,6 +108,14 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
 
     public class Phase extends BasePhase
     {
+        public void accept()
+        {
+            updateState(State.ACCEPT);
+        }
 
+        public void snapshot()
+        {
+            updateState(State.SNAPSHOT);
+        }
     }
 }

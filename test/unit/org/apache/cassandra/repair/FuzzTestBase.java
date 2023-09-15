@@ -618,6 +618,12 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
         }
     }
 
+    interface MessageListener
+    {
+        default void preHandle(Cluster.Node node, Message<?> msg) {}
+        default void postHandle(Cluster.Node node, Message<?> msg) {}
+    }
+
     static class Cluster
     {
         private static final FailingBiConsumer<ColumnFamilyStore, Validator> DEFAULT_VALIDATION = ValidationManager::doValidation;
@@ -625,13 +631,13 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
         final Map<InetAddressAndPort, Node> nodes;
         private final IFailureDetector failureDetector = Mockito.mock(IFailureDetector.class);
         private final IEndpointSnitch snitch = Mockito.mock(IEndpointSnitch.class);
-        private final ICompactionManager compactionManager = Mockito.mock(ICompactionManager.class);
         private final SimulatedExecutorFactory globalExecutor;
         final ScheduledExecutorPlus unorderedScheduled;
         final ExecutorPlus orderedExecutor;
         private final Gossip gossiper = new Gossip();
         private final MBeanWrapper mbean = Mockito.mock(MBeanWrapper.class);
         private final List<Throwable> failures = new ArrayList<>();
+        private final List<MessageListener> listeners = new ArrayList<>();
         private final RandomSource rs;
         private BiFunction<Node, Message<?>, Set<Faults>> allowedMessageFaults = (a, b) -> Collections.emptySet();
 
@@ -703,6 +709,17 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
                 for (Token token : inst.tokens())
                     tm.updateNormalToken(token, inst.broadcastAddressAndPort());
             }
+        }
+
+        public Closeable addListener(MessageListener listener)
+        {
+            listeners.add(listener);
+            return () -> removeListener(listener);
+        }
+
+        public void removeListener(MessageListener listener)
+        {
+            listeners.remove(listener);
         }
 
         public void allowedMessageFaults(BiFunction<Node, Message<?>, Set<Faults>> fn)
@@ -926,6 +943,7 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
 
         class Node implements SharedContext
         {
+            private final ICompactionManager compactionManager = Mockito.mock(ICompactionManager.class);
             final UUID hostId;
             final InetAddressAndPort addressAndPort;
             final Collection<Token> tokens;
@@ -1000,6 +1018,8 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
                     logger.warn("Got a message that failed to serialize/deserialize");
                     return;
                 }
+                for (MessageListener l : listeners)
+                    l.preHandle(this, msg);
                 if (msg.verb().isResponse())
                 {
                     // handle callbacks
@@ -1030,6 +1050,8 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
                         failures.add(e);
                     }
                 }
+                for (MessageListener l : listeners)
+                    l.postHandle(this, msg);
             }
 
             public UUID hostId()

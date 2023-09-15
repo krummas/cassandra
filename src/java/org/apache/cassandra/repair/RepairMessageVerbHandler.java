@@ -28,6 +28,8 @@ import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.repair.messages.*;
+import org.apache.cassandra.repair.state.AbstractState;
+import org.apache.cassandra.repair.state.Completable;
 import org.apache.cassandra.repair.state.ParticipateState;
 import org.apache.cassandra.repair.state.ValidationState;
 import org.apache.cassandra.schema.TableId;
@@ -93,13 +95,14 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ParticipateState state = new ParticipateState(message.from(), prepareMessage);
                     if (!ctx.repair().register(state))
                     {
-                        sendAck(message);
+                        replyDedup(ctx.repair().participate(state.id), message);
                         return;
                     }
                     if (!ctx.repair().verifyCompactionsPendingThreshold(prepareMessage.parentRepairSession, prepareMessage.previewKind))
                     {
                         // error is logged in verifyCompactionsPendingThreshold
                         state.phase.fail("Too many pending compactions");
+
                         sendFailureResponse(message);
                         return;
                     }
@@ -118,6 +121,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         }
                         columnFamilyStores.add(columnFamilyStore);
                     }
+                    state.phase.accept();
                     ctx.repair().registerParentRepairSession(prepareMessage.parentRepairSession,
                                                                     message.from(),
                                                                     columnFamilyStores,
@@ -152,6 +156,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ActiveRepairService.ParentRepairSession prs = ctx.repair().getParentRepairSession(desc.parentSessionId);
                     if (prs.setHasSnapshots())
                     {
+                        state.phase.snapshot();
                         TableRepairManager repairManager = cfs.getRepairManager();
                         if (prs.isGlobal)
                         {
@@ -182,9 +187,8 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ValidationState vState = new ValidationState(desc, message.from());
                     if (!participate.register(vState))
                     {
-                        // TODO (now, correctness): if later on validation causes the state to fail, don't send success ack!
-                        sendAck(message);
                         logger.debug("Duplicate validation message found for parent={}, validation={}", participate.id, vState.id);
+                        replyDedup(participate.validation(vState.id), message);
                         return;
                     }
                     try
@@ -206,6 +210,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         catch (Throwable t)
                         {
                             JVMStabilityInspector.inspectThrowable(t);
+                            vState.phase.fail(t.toString());
                             logErrorAndSendFailureResponse(t.toString(), message);
                             return;
                         }
@@ -221,6 +226,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                             sendFailureResponse(message);
                             return;
                         }
+                        vState.phase.accept();
                         sendAck(message);
 
                         Validator validator = new Validator(ctx, vState, validationRequest.nowInSec,
@@ -327,6 +333,47 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                 ctx.repair().removeParentRepairSession(desc.parentSessionId);
             }
             throw new RuntimeException(e);
+        }
+    }
+
+    private enum DedupResult { UNKNOWN, ACCEPT, REJECT }
+
+    private static DedupResult dedupResult(AbstractState<?, ?> state)
+    {
+        Object status = state.getStatus();
+        if (status == null) // state was init or completed
+        {
+            Completable.Result result = state.getResult();
+            if (result == null)
+            {
+                // state is in init phase... so not clear if the message was accepted or not
+                return DedupResult.UNKNOWN;
+            }
+            else if (result.kind == Completable.Result.Kind.FAILURE)
+            {
+                return DedupResult.REJECT;
+            }
+        }
+        return DedupResult.ACCEPT;
+    }
+
+    private void replyDedup(AbstractState<?, ?> state, Message<RepairMessage> message)
+    {
+        if (state == null)
+            throw new IllegalStateException("State is null");
+        DedupResult result = dedupResult(state);
+        switch (result)
+        {
+            case ACCEPT:
+                sendAck(message);
+                break;
+            case REJECT:
+                sendFailureResponse(message);
+                break;
+            case UNKNOWN:
+                break;
+            default:
+                throw new IllegalStateException("Unknown result: " + result);
         }
     }
 

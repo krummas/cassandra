@@ -25,7 +25,7 @@ import org.apache.cassandra.repair.RepairJobDesc;
 public class ValidationState extends AbstractState<ValidationState.State, UUID>
 {
     public enum State
-    { START, SENDING_TREES }
+    { ACCEPT, START, SENDING_TREES }
 
     public final Phase phase = new Phase();
     public final RepairJobDesc desc;
@@ -56,6 +56,11 @@ public class ValidationState extends AbstractState<ValidationState.State, UUID>
 
     public final class Phase extends BaseSkipPhase
     {
+        public void accept()
+        {
+            updateState(State.ACCEPT);
+        }
+
         public void start(long estimatedPartitions, long estimatedTotalBytes)
         {
             updateState(State.START);
