@@ -712,8 +712,14 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             {
                 if (pending.decrementAndGet() == 0)
                 {
-                    if (failedNodes.isEmpty()) promise.setSuccess(null);
-                    else                       promise.setFailure(failRepairException(parentRepairSession, "Got negative replies from endpoints " + failedNodes));
+                    if (failedNodes.isEmpty())
+                    {
+                        promise.setSuccess(null);
+                    }
+                    else
+                    {
+                        promise.setFailure(failRepairException(parentRepairSession, "Got negative replies from endpoints " + failedNodes));
+                    }
                 }
             }
         });
