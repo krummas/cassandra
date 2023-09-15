@@ -221,7 +221,7 @@ public abstract class RepairMessage
         {
             if (VERB_TIMEOUT_VERSIONS.containsKey(verb))
             {
-                logger.warn("[#{}] Not failing repair due to remote host {} not supporting repair message timeouts (version = {})", parentSessionId, from, remoteVersion);
+                logger.warn("[#{}] Not failing repair due to remote host {} not supporting repair message timeouts (version is unknown)", parentSessionId, from);
                 return ErrorHandling.NONE;
             }
             return ErrorHandling.TIMEOUT;
