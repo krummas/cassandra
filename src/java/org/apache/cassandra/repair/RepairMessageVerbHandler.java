@@ -36,8 +36,6 @@ import org.apache.cassandra.streaming.PreviewKind;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.TimeUUID;
 
-import static org.apache.cassandra.net.Verb.VALIDATION_RSP;
-
 /**
  * Handles all repair related message.
  *
@@ -184,6 +182,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ValidationState vState = new ValidationState(desc, message.from());
                     if (!participate.register(vState))
                     {
+                        // TODO (now, correctness): if later on validation causes the state to fail, don't send success ack!
                         sendAck(message);
                         logger.debug("Duplicate validation message found for parent={}, validation={}", participate.id, vState.id);
                         return;
@@ -197,7 +196,6 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                             String msg = String.format("Table %s.%s was dropped during validation phase of repair %s", desc.keyspace, desc.columnFamily, desc.parentSessionId);
                             vState.phase.fail(msg);
                             logErrorAndSendFailureResponse(msg, message);
-                            ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
                             return;
                         }
 
