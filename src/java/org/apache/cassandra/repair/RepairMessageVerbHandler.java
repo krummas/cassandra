@@ -209,7 +209,6 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         {
                             JVMStabilityInspector.inspectThrowable(t);
                             logErrorAndSendFailureResponse(t.toString(), message);
-                            ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
                             return;
                         }
                         PreviewKind previewKind;
@@ -222,7 +221,6 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                             logger.warn("Parent repair session {} has been removed, failing repair", desc.parentSessionId);
                             vState.phase.fail(e);
                             sendFailureResponse(message);
-                            ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
                             return;
                         }
                         sendAck(message);
