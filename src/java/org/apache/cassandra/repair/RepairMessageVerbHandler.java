@@ -210,6 +210,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                             JVMStabilityInspector.inspectThrowable(t);
                             logErrorAndSendFailureResponse(t.toString(), message);
                             ctx.messaging().send(Message.out(VALIDATION_RSP, new ValidationResponse(desc)), message.from());
+                            return;
                         }
                         PreviewKind previewKind;
                         try
