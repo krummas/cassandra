@@ -22,6 +22,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
@@ -98,22 +99,17 @@ public abstract class RepairMessage
         return new Backoff.ExponentialBackoff(spec.maxAttempts.value, spec.baseSleepTime.toMilliseconds(), spec.maxSleepTime.toMilliseconds(), ctx.random().get()::nextDouble);
     }
 
-    public interface AllowRetry
+    public static Supplier<Boolean> notDone(Future<?> f)
     {
-        boolean test(InetAddressAndPort from, RequestFailureReason failureReason, int attempt);
+        return () -> !f.isDone();
     }
 
-    public static AllowRetry notDone(Future<?> f)
+    private static Supplier<Boolean> always()
     {
-        return (i1, i2, i3) -> !f.isDone();
+        return () -> true;
     }
 
-    private static AllowRetry always()
-    {
-        return (i1, i2, i3) -> true;
-    }
-
-    public static <T> void sendMessageWithRetries(SharedContext ctx, AllowRetry allowRetry, RepairMessage request, Verb verb, InetAddressAndPort endpoint, RequestCallback<T> finalCallback)
+    public static <T> void sendMessageWithRetries(SharedContext ctx, Supplier<Boolean> allowRetry, RepairMessage request, Verb verb, InetAddressAndPort endpoint, RequestCallback<T> finalCallback)
     {
         sendMessageWithRetries(ctx, backoff(ctx, verb), allowRetry, request, verb, endpoint, finalCallback, 0);
     }
@@ -139,7 +135,7 @@ public abstract class RepairMessage
         }, 0);
     }
 
-    private static <T> void sendMessageWithRetries(SharedContext ctx, Backoff backoff, AllowRetry allowRetry, RepairMessage request, Verb verb, InetAddressAndPort endpoint, RequestCallback<T> finalCallback, int attempt)
+    private static <T> void sendMessageWithRetries(SharedContext ctx, Backoff backoff, Supplier<Boolean> allowRetry, RepairMessage request, Verb verb, InetAddressAndPort endpoint, RequestCallback<T> finalCallback, int attempt)
     {
         RequestCallback<T> callback = new RequestCallback<>()
         {
@@ -163,7 +159,7 @@ public abstract class RepairMessage
                         return;
                     case RETRY:
                         int maxAttempts = backoff.maxAttempts();
-                        if (failureReason == RequestFailureReason.TIMEOUT && attempt < maxAttempts && allowRetry.test(from, failureReason, attempt))
+                        if (failureReason == RequestFailureReason.TIMEOUT && attempt < maxAttempts && allowRetry.get())
                         {
                             ctx.optionalTasks().schedule(() -> sendMessageWithRetries(ctx, backoff, allowRetry, request, verb, endpoint, finalCallback, attempt + 1),
                                                          backoff.computeWaitTime(attempt), backoff.unit());
@@ -187,7 +183,7 @@ public abstract class RepairMessage
                                          callback);
     }
 
-    public static void sendMessageWithFailureCB(SharedContext ctx, AllowRetry allowRetry, RepairMessage request, Verb verb, InetAddressAndPort endpoint, RepairFailureCallback failureCallback)
+    public static void sendMessageWithFailureCB(SharedContext ctx, Supplier<Boolean> allowRetry, RepairMessage request, Verb verb, InetAddressAndPort endpoint, RepairFailureCallback failureCallback)
     {
         RequestCallback<?> callback = new RequestCallback<>()
         {
