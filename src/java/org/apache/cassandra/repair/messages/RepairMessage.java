@@ -91,11 +91,8 @@ public abstract class RepairMessage
 
     private static Backoff backoff(SharedContext ctx, Verb verb)
     {
-        RepairRetrySpec.Verb configVerb = toConfigVerb(verb);
-        if (configVerb == null)
-            return Backoff.None.INSTANCE;
         RepairRetrySpec retrySpec = DatabaseDescriptor.getRepairRetrys();
-        RetrySpec spec = retrySpec.get(configVerb);
+        RetrySpec spec = verb == Verb.VALIDATION_RSP ? retrySpec.getMerkelTreeResponseSpec() : retrySpec;
         if (!spec.isEnabled())
             return Backoff.None.INSTANCE;
         switch (spec.type)
@@ -104,22 +101,6 @@ public abstract class RepairMessage
                 return new Backoff.ExponentialBackoff(spec.maxAttempts.value, spec.baseSleepTime.toMilliseconds(), spec.maxSleepTime.toMilliseconds(), ctx.random().get()::nextDouble);
             default:
                 throw new IllegalArgumentException("Unknown type: " + spec.type);
-        }
-    }
-
-    @Nullable
-    private static RepairRetrySpec.Verb toConfigVerb(Verb verb)
-    {
-        switch (verb)
-        {
-            case PREPARE_MSG: return RepairRetrySpec.Verb.PREPARE;
-            case VALIDATION_REQ: return RepairRetrySpec.Verb.VALIDATION_REQ;
-            case VALIDATION_RSP: return RepairRetrySpec.Verb.VALIDATION_RSP;
-            case SYNC_REQ: return RepairRetrySpec.Verb.SYNC_REQ;
-            case SYNC_RSP: return RepairRetrySpec.Verb.SYNC_RSP;
-            case SNAPSHOT_MSG: return RepairRetrySpec.Verb.SNAPSHOT;
-            case CLEANUP_MSG: return RepairRetrySpec.Verb.CLEANUP;
-            default: return null;
         }
     }
 

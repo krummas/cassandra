@@ -18,35 +18,26 @@
 
 package org.apache.cassandra.config;
 
-import java.util.EnumMap;
-import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public class RepairRetrySpec extends RetrySpec
 {
-    public enum Verb
+    public RetrySpec.Partial merkle_tree_response = null;
+
+    public boolean isMerkleTreeResponseEnabled()
     {
-        PREPARE,
-        VALIDATION_REQ, VALIDATION_RSP,
-        SYNC_REQ, SYNC_RSP,
-        SNAPSHOT,
-        CLEANUP
-    }
-
-    public Map<Verb, RetrySpec.Partial> verbs = new EnumMap<>(Verb.class);
-
-    public RetrySpec get(Verb verb)
-    {
-        if (!verbs.containsKey(verb))
-            return this;
-
-        return verbs.get(verb).withDefaults(this);
-    }
-
-    public boolean isEnabled(Verb verb)
-    {
-        Partial partial = verbs.get(verb);
+        RetrySpec.Partial partial = merkle_tree_response;
         if (partial == null || partial.maxAttempts == null)
             return isEnabled();
         return partial.isEnabled();
+    }
+
+    @JsonIgnore
+    public RetrySpec getMerkelTreeResponseSpec()
+    {
+        RetrySpec.Partial partial = merkle_tree_response;
+        if (partial == null)
+            return this;
+        return partial.withDefaults(this);
     }
 }

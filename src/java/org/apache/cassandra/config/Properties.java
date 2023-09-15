@@ -21,11 +21,8 @@ import java.lang.reflect.Constructor;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
-
-import javax.annotation.Nullable;
 
 import com.google.common.collect.Maps;
 
@@ -69,35 +66,6 @@ public final class Properties
     public static Property andThen(Property root, Property leaf)
     {
         return andThen(root, leaf, DELIMITER);
-    }
-
-    @Nullable
-    public static Property andThenMap(Property root, String key, String delimiter)
-    {
-        if (root == null)
-            return null;
-        if (!root.getType().isAssignableFrom(Map.class))
-            return null;
-        Class<?>[] typeArguments = root.getActualTypeArguments();
-        if (typeArguments == null || typeArguments.length != 2)
-            return null;
-        Object convert = convert(typeArguments[0], key);
-        if (convert == null)
-            return null;
-        return new AndThenMap(root, convert, typeArguments[1], delimiter);
-    }
-
-    @Nullable
-    public static Property andThenMap(Property root, String key)
-    {
-        return andThenMap(root, key, DELIMITER);
-    }
-
-    private static Object convert(Class<?> type, String value)
-    {
-        if (type.isEnum())
-            return Enum.valueOf((Class<? extends Enum>) type, value);
-        return null;
     }
 
     /**
@@ -175,53 +143,6 @@ public final class Properties
     public static Property rename(String newName, Property prop)
     {
         return new ForwardingProperty(newName, prop);
-    }
-
-    private static class AndThenMap extends ForwardingProperty
-    {
-        private final Object key;
-
-        public AndThenMap(Property root, Object key, Class<?> valueType, String delimiter)
-        {
-            super(root.getName() + delimiter + key, valueType, root);
-            this.key = key;
-        }
-
-        @Override
-        public void set(Object object, Object value) throws Exception
-        {
-            Object parent = delegate().get(object);
-            if (parent == null)
-            {
-                if (getType().equals(Map.class))
-                {
-                    parent = new HashMap<>();
-                }
-                else
-                {
-                    throw new UnsupportedOperationException("Unable to create empty map for type " + getType());
-                }
-                delegate().set(object, parent);
-            }
-            ((Map<Object, Object>) parent).put(key, value);
-        }
-
-        @Override
-        public Object get(Object object)
-        {
-            try
-            {
-                Object parent = delegate().get(object);
-                if (parent == null)
-                    return null;
-                return ((Map<Object, Object>) parent).get(key);
-            }
-            catch (Exception e)
-            {
-                e.addSuppressed(new RuntimeException("Error calling get() on " + this));
-                throw e;
-            }
-        }
     }
 
     private static final class AndThen extends ForwardingProperty

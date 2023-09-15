@@ -730,16 +730,13 @@ memtable_allocation_type: heap_buffers
 # repair:
 #   retries:
 #     type: Exponential
-#     max_attempts: 3
+#     max_attempts: 10
 #     base_sleep_time: 200ms
 #     max_sleep_time: 1s
-#     verbs:
-#       # Increase the timeout of validation responses due to them containing the merkle tree
-#       VALIDATION_RSP:
-#         base_sleep_time: 30s
-#         max_sleep_time: 1m
-
-
+#     # Increase the timeout of validation responses due to them containing the merkle tree
+#     merkle_tree_response:
+#       base_sleep_time: 30s
+#       max_sleep_time: 1m
 
 # Total space to use for commit logs on disk.
 #

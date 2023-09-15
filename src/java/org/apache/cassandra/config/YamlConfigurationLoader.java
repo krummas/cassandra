@@ -405,15 +405,6 @@ public class YamlConfigurationLoader implements ConfigurationLoader
                 Property prop = getFlatProperty(type, s);
                 if (prop instanceof MissingProperty)
                 {
-                    if (type.isAssignableFrom(Map.class))
-                    {
-                        // Attempted to define a key for a map, can we handle this case?
-                        root = Properties.andThenMap(root, s);
-                        if (root == null)
-                            break;
-                        type = root.getType();
-                        continue;
-                    }
                     root = null;
                     break;
                 }

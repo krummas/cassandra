@@ -45,7 +45,6 @@ import com.google.common.collect.Multimap;
 import org.apache.cassandra.concurrent.ExecutorPlus;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DurationSpec;
-import org.apache.cassandra.config.RepairRetrySpec;
 import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.exceptions.ConfigurationException;
@@ -671,8 +670,8 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
             }
         }
         // implement timeout to bound the runtime of the future
-        long timeoutMillis = getRepairRetrys().isEnabled(RepairRetrySpec.Verb.PREPARE) ? getRepairRpcTimeout(MILLISECONDS)
-                                                                                       : getRpcTimeout(MILLISECONDS);
+        long timeoutMillis = getRepairRetrys().isEnabled() ? getRepairRpcTimeout(MILLISECONDS)
+                                                           : getRpcTimeout(MILLISECONDS);
         ctx.optionalTasks().schedule(() -> {
             if (promise.isDone())
                 return;

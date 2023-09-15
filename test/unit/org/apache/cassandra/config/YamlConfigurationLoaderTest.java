@@ -25,7 +25,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
@@ -36,7 +35,6 @@ import org.junit.Test;
 
 import org.apache.cassandra.distributed.shared.WithProperties;
 import org.apache.cassandra.io.util.File;
-import org.assertj.core.api.Assertions;
 import org.yaml.snakeyaml.error.YAMLException;
 
 import static org.apache.cassandra.config.CassandraRelevantProperties.CONFIG_ALLOW_SYSTEM_PROPERTIES;
@@ -57,8 +55,7 @@ public class YamlConfigurationLoaderTest
         RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of());
         // repair is empty
         assertThat(repair_retries.isEnabled()).isFalse();
-        for (RepairRetrySpec.Verb v : RepairRetrySpec.Verb.values())
-            assertThat(repair_retries.get(v).isEnabled()).isFalse();
+        assertThat(repair_retries.isMerkleTreeResponseEnabled()).isFalse();
     }
 
     @Test
@@ -68,87 +65,29 @@ public class YamlConfigurationLoaderTest
                                                                         "max_attempts", "3"));
         assertThat(repair_retries.isEnabled()).isTrue();
         assertThat(repair_retries.getMaxAttempts()).isEqualTo(3);
-        for (RepairRetrySpec.Verb v : RepairRetrySpec.Verb.values())
-        {
-            RetrySpec spec = repair_retries.get(v);
-            assertThat(spec.isEnabled()).isTrue();
-            assertThat(spec.getMaxAttempts()).isEqualTo(3);
-        }
+        RetrySpec spec = repair_retries.getMerkelTreeResponseSpec();
+        assertThat(spec.isEnabled()).isTrue();
+        assertThat(spec.getMaxAttempts()).isEqualTo(3);
     }
 
     @Test
     public void repairRetryOverride()
     {
-        RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of("verbs", ImmutableMap.of(
-        "VALIDATION_RSP", ImmutableMap.of("max_attempts", 10,
-                                          "base_sleep_time", "1s",
-                                          "max_sleep_time", "10s")
-        )));
+        RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of(
+        "merkle_tree_response", ImmutableMap.of("max_attempts", 10,
+                                                "base_sleep_time", "1s",
+                                                "max_sleep_time", "10s")
+        ));
         assertThat(repair_retries.isEnabled()).isFalse();
         assertThat(repair_retries.getMaxAttempts()).isNull();
         assertThat(repair_retries.baseSleepTime).isEqualTo(RetrySpec.DEFAULT_BASE_SLEEP);
         assertThat(repair_retries.maxSleepTime).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);
 
-        RetrySpec spec = repair_retries.get(RepairRetrySpec.Verb.VALIDATION_RSP);
+        RetrySpec spec = repair_retries.getMerkelTreeResponseSpec();
         assertThat(spec.isEnabled()).isTrue();
         assertThat(spec.maxAttempts).isEqualTo(10);
         assertThat(spec.baseSleepTime).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);
         assertThat(spec.maxSleepTime).isEqualTo(new DurationSpec.LongMillisecondsBound("10s"));
-    }
-
-    @Test
-    public void repairRetryDisabled()
-    {
-        Map<RepairRetrySpec.Verb, Object> verbs = new EnumMap<>(RepairRetrySpec.Verb.class);
-        for (RepairRetrySpec.Verb v : RepairRetrySpec.Verb.values())
-            verbs.put(v, ImmutableMap.of("max_attempts", 10));
-        RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of("verbs", verbs,
-                                                                         "max_attempts", 10));
-        assertThat(repair_retries.isEnabled()).isTrue();
-        assertThat(repair_retries.getMaxAttempts()).isEqualTo(10);
-        assertThat(repair_retries.getBaseSleepTime()).isEqualTo(RetrySpec.DEFAULT_BASE_SLEEP);
-        assertThat(repair_retries.getMaxSleepTime()).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);
-
-        for (RepairRetrySpec.Verb v : RepairRetrySpec.Verb.values())
-        {
-            RetrySpec spec = repair_retries.get(v);
-            assertThat(spec.isEnabled()).isTrue();
-            assertThat(spec.getMaxAttempts()).isEqualTo(10);
-            assertThat(spec.getBaseSleepTime()).isEqualTo(RetrySpec.DEFAULT_BASE_SLEEP);
-            assertThat(spec.getMaxSleepTime()).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);
-        }
-
-        // disable top level
-        YamlConfigurationLoader.updateFromMap(ImmutableMap.of("enabled", false), true, repair_retries);
-
-        assertThat(repair_retries.isEnabled()).isFalse();
-        assertThat(repair_retries.getMaxAttempts()).isNull();
-        assertThat(repair_retries.getBaseSleepTime()).isNull();
-        assertThat(repair_retries.getMaxSleepTime()).isNull();
-
-        for (RepairRetrySpec.Verb v : RepairRetrySpec.Verb.values())
-        {
-            RetrySpec spec = repair_retries.get(v);
-            assertThat(spec.isEnabled()).isTrue();
-            assertThat(spec.getMaxAttempts()).isEqualTo(10);
-            assertThat(spec.getBaseSleepTime()).isEqualTo(RetrySpec.DEFAULT_BASE_SLEEP);
-            assertThat(spec.getMaxSleepTime()).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);
-        }
-    }
-
-    @Test
-    public void repairNestingWithDot()
-    {
-        String prefix = "repair.retries.";
-        Config config = YamlConfigurationLoader.fromMap(ImmutableMap.of(prefix + "max_attempts", 3,
-                                                                        prefix + "verbs.VALIDATION_RSP.base_sleep_time", "30s",
-                                                                        prefix + "verbs.VALIDATION_RSP.max_sleep_time", "1m"), true, Config.class);
-        RepairRetrySpec retries = config.repair.retries;
-        Assertions.assertThat(retries.maxAttempts).isEqualTo(new RetrySpec.MaxAttempt(3));
-        RetrySpec.Partial partial = retries.verbs.get(RepairRetrySpec.Verb.VALIDATION_RSP);
-        Assertions.assertThat(partial).isNotNull();
-        Assertions.assertThat(partial.baseSleepTime).isEqualTo(new DurationSpec.LongMillisecondsBound("30s"));
-        Assertions.assertThat(partial.maxSleepTime).isEqualTo(new DurationSpec.LongMillisecondsBound("1m"));
     }
 
     private static RepairRetrySpec loadRepairRetry(Map<String, Object> map)
