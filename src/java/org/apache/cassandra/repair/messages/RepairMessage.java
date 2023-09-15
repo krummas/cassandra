@@ -119,7 +119,7 @@ public abstract class RepairMessage
         sendMessageWithRetries(ctx, backoff(ctx, verb), always(), request, verb, endpoint, finalCallback, 0);
     }
 
-    public static <T> void sendMessageWithRetries(SharedContext ctx, RepairMessage request, Verb verb, InetAddressAndPort endpoint)
+    public static void sendMessageWithRetries(SharedContext ctx, RepairMessage request, Verb verb, InetAddressAndPort endpoint)
     {
         sendMessageWithRetries(ctx, backoff(ctx, verb), always(), request, verb, endpoint, new RequestCallback<>()
         {
@@ -148,6 +148,7 @@ public abstract class RepairMessage
             @Override
             public void onFailure(InetAddressAndPort from, RequestFailureReason failureReason)
             {
+                // TODO (now): latest refactor no longer checks that failureReason is timeout...
                 ErrorHandling allowed = errorHandlingSupported(ctx, endpoint, verb, request.parentRepairSession());
                 switch (allowed)
                 {
