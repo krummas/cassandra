@@ -37,7 +37,7 @@ public class HappyPathFuzzTest extends FuzzTestBase
     public void happyPath()
     {
         // disable all retries, no delays/drops are possible
-        DatabaseDescriptor.getRepairRetrys().maxAttempts = RetrySpec.MaxAttempt.DISABLED;
+        DatabaseDescriptor.getRepairRetrySpec().maxAttempts = RetrySpec.MaxAttempt.DISABLED;
         qt().withPure(false).withExamples(10).check(rs -> {
             Cluster cluster = new Cluster(rs);
             Gen<Cluster.Node> coordinatorGen = Gens.pick(cluster.nodes.keySet()).map(cluster.nodes::get);

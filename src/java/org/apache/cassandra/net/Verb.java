@@ -479,12 +479,12 @@ class VerbTimeouts
 
     // repair verbs need to have different timeouts based off if retries are enabled or not
     static final ToLongFunction<TimeUnit> repairWithBackoffTimeout      = units -> {
-        if (!DatabaseDescriptor.getRepairRetrys().isEnabled())
+        if (!DatabaseDescriptor.getRepairRetrySpec().isEnabled())
             return repairTimeout.applyAsLong(units);
         return rpcTimeout.applyAsLong(units);
     };
     static final ToLongFunction<TimeUnit> repairValidationRspTimeout    = units -> {
-        if (!DatabaseDescriptor.getRepairRetrys().isMerkleTreeResponseEnabled())
+        if (!DatabaseDescriptor.getRepairRetrySpec().isMerkleTreeResponseEnabled())
             return longTimeout.applyAsLong(units);
         return rpcTimeout.applyAsLong(units);
     };

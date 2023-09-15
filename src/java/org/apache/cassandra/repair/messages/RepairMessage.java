@@ -91,7 +91,7 @@ public abstract class RepairMessage
 
     private static Backoff backoff(SharedContext ctx, Verb verb)
     {
-        RepairRetrySpec retrySpec = DatabaseDescriptor.getRepairRetrys();
+        RepairRetrySpec retrySpec = DatabaseDescriptor.getRepairRetrySpec();
         RetrySpec spec = verb == Verb.VALIDATION_RSP ? retrySpec.getMerkelTreeResponseSpec() : retrySpec;
         if (!spec.isEnabled())
             return Backoff.None.INSTANCE;

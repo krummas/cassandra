@@ -42,7 +42,7 @@ public class ConcurrentIrWithPreviewFuzzTest extends FuzzTestBase
     public void concurrentIrWithPreview()
     {
         // to avoid unlucky timing issues, retry until success; given enough retries we should eventually become success
-        DatabaseDescriptor.getRepairRetrys().maxAttempts = new RetrySpec.MaxAttempt(Integer.MAX_VALUE);
+        DatabaseDescriptor.getRepairRetrySpec().maxAttempts = new RetrySpec.MaxAttempt(Integer.MAX_VALUE);
         qt().withPure(false).withExamples(5).withTimeout(Duration.ofMinutes(2)).check(rs -> {
             Cluster cluster = new Cluster(rs);
             enableMessageFaults(cluster);

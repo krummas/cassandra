@@ -4918,7 +4918,7 @@ public class DatabaseDescriptor
         return conf.sai_options.segment_write_buffer_size;
     }
 
-    public static RepairRetrySpec getRepairRetrys()
+    public static RepairRetrySpec getRepairRetrySpec()
     {
         return conf == null ? new RepairRetrySpec() : conf.repair.retries;
     }
