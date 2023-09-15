@@ -46,8 +46,7 @@ public class CassandraTableRepairManager implements TableRepairManager
 
     public CassandraTableRepairManager(ColumnFamilyStore cfs)
     {
-        this.cfs = cfs;
-        this.ctx = SharedContext.Global.instance;
+        this(cfs, SharedContext.Global.instance);
     }
 
     public CassandraTableRepairManager(ColumnFamilyStore cfs, SharedContext ctx)
