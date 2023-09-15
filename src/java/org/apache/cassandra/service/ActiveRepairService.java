@@ -633,8 +633,8 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
 
         long repairedAt = getRepairedAt(options, isForcedRepair);
         registerParentRepairSession(parentRepairSession, coordinator, columnFamilyStores, options.getRanges(), options.isIncremental(), repairedAt, options.isGlobal(), options.getPreviewKind());
-        final AtomicInteger pending = new AtomicInteger(endpoints.size());
-        final Set<String> failedNodes = synchronizedSet(new HashSet<>());
+        AtomicInteger pending = new AtomicInteger(endpoints.size());
+        Set<String> failedNodes = synchronizedSet(new HashSet<>());
         AsyncPromise<Void> promise = new AsyncPromise<>();
 
         List<TableId> tableIds = new ArrayList<>(columnFamilyStores.size());
