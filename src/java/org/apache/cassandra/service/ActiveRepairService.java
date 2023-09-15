@@ -29,7 +29,6 @@ import java.util.concurrent.TimeoutException;
 import javax.management.openmbean.CompositeData;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -46,7 +45,6 @@ import org.apache.cassandra.concurrent.ExecutorPlus;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DurationSpec;
 import org.apache.cassandra.config.SharedContext;
-import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.EndpointsByRange;
@@ -191,7 +189,6 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     // map of top level repair id (parent repair id) -> participate state
     private final Cache<TimeUUID, ParticipateState> participates;
     public final SharedContext ctx;
-    private final IntSupplier pendingTasks;
 
     private volatile ScheduledFuture<?> irCleanup;
 
@@ -228,12 +225,11 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
 
     public ActiveRepairService()
     {
-        this(SharedContext.Global.instance, CompactionManager.instance::getPendingTasks);
+        this(SharedContext.Global.instance);
     }
 
     @VisibleForTesting
-    public ActiveRepairService(SharedContext ctx,
-                               IntSupplier pendingTasks)
+    public ActiveRepairService(SharedContext ctx)
     {
         this.ctx = ctx;
         consistent = new ConsistentSessions(ctx);
@@ -247,7 +243,6 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
                                              // We assume each entry is unlikely to be much more than 100 bytes, so bounding the size should be sufficient.
                                              .maximumSize(PARENT_REPAIR_STATUS_CACHE_SIZE.getLong())
                                              .build();
-        this.pendingTasks = pendingTasks;
 
         DurationSpec.LongNanosecondsBound duration = getRepairStateExpires();
         int numElements = getRepairStateSize();
@@ -620,7 +615,7 @@ public class ActiveRepairService implements IEndpointStateChangeSubscriber, IFai
     public boolean verifyCompactionsPendingThreshold(TimeUUID parentRepairSession, PreviewKind previewKind)
     {
         // Snapshot values so failure message is consistent with decision
-        int pendingCompactions = pendingTasks.getAsInt();
+        int pendingCompactions = ctx.compactionManager().getPendingTasks();
         int pendingThreshold = getRepairPendingCompactionRejectThreshold();
         if (pendingCompactions > pendingThreshold)
         {

@@ -73,6 +73,7 @@ import org.apache.cassandra.config.SharedContext;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Digest;
+import org.apache.cassandra.db.compaction.ICompactionManager;
 import org.apache.cassandra.db.marshal.EmptyType;
 import org.apache.cassandra.db.repair.CassandraTableRepairManager;
 import org.apache.cassandra.db.repair.PendingAntiCompaction;
@@ -624,6 +625,7 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
         final Map<InetAddressAndPort, Node> nodes;
         private final IFailureDetector failureDetector = Mockito.mock(IFailureDetector.class);
         private final IEndpointSnitch snitch = Mockito.mock(IEndpointSnitch.class);
+        private final ICompactionManager compactionManager = Mockito.mock(ICompactionManager.class);
         private final SimulatedExecutorFactory globalExecutor;
         final ScheduledExecutorPlus unorderedScheduled;
         final ExecutorPlus orderedExecutor;
@@ -949,7 +951,7 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
                 this.addressAndPort = addressAndPort;
                 this.tokens = tokens;
                 this.messaging = messaging;
-                this.activeRepairService = new ActiveRepairService(this, () -> 0);
+                this.activeRepairService = new ActiveRepairService(this);
                 this.validationManager = (cfs, validator) -> unorderedScheduled.submit(() -> {
                     try
                     {
@@ -1061,6 +1063,12 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
             public IGossiper gossiper()
             {
                 return gossiper;
+            }
+
+            @Override
+            public ICompactionManager compactionManager()
+            {
+                return compactionManager;
             }
 
             public ExecutorFactory executorFactory()

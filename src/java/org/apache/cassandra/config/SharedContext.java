@@ -25,6 +25,8 @@ import org.apache.cassandra.concurrent.ExecutorFactory;
 import org.apache.cassandra.concurrent.ScheduledExecutorPlus;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.compaction.ICompactionManager;
 import org.apache.cassandra.gms.FailureDetector;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.gms.IFailureDetector;
@@ -63,7 +65,7 @@ public interface SharedContext
     IFailureDetector failureDetector();
     IEndpointSnitch snitch();
     IGossiper gossiper();
-
+    ICompactionManager compactionManager();
     ActiveRepairService repair();
     IValidationManager validationManager();
     TableRepairManager repairManager(ColumnFamilyStore store);
@@ -131,6 +133,12 @@ public interface SharedContext
         public IGossiper gossiper()
         {
             return Gossiper.instance;
+        }
+
+        @Override
+        public ICompactionManager compactionManager()
+        {
+            return CompactionManager.instance;
         }
 
         @Override
