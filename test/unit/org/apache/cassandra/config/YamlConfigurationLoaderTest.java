@@ -61,8 +61,7 @@ public class YamlConfigurationLoaderTest
     @Test
     public void repairRetryInheritance()
     {
-        RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of("type", "Exponential",
-                                                                        "max_attempts", "3"));
+        RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of("max_attempts", "3"));
         assertThat(repair_retries.isEnabled()).isTrue();
         assertThat(repair_retries.getMaxAttempts()).isEqualTo(3);
         RetrySpec spec = repair_retries.getMerkelTreeResponseSpec();

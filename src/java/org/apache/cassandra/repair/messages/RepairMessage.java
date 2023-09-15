@@ -95,13 +95,7 @@ public abstract class RepairMessage
         RetrySpec spec = verb == Verb.VALIDATION_RSP ? retrySpec.getMerkelTreeResponseSpec() : retrySpec;
         if (!spec.isEnabled())
             return Backoff.None.INSTANCE;
-        switch (spec.type)
-        {
-            case Exponential:
-                return new Backoff.ExponentialBackoff(spec.maxAttempts.value, spec.baseSleepTime.toMilliseconds(), spec.maxSleepTime.toMilliseconds(), ctx.random().get()::nextDouble);
-            default:
-                throw new IllegalArgumentException("Unknown type: " + spec.type);
-        }
+        return new Backoff.ExponentialBackoff(spec.maxAttempts.value, spec.baseSleepTime.toMilliseconds(), spec.maxSleepTime.toMilliseconds(), ctx.random().get()::nextDouble);
     }
 
     public interface AllowRetry

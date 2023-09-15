@@ -26,8 +26,6 @@ import org.apache.cassandra.config.DurationSpec.LongMillisecondsBound;
 
 public class RetrySpec
 {
-    public enum Type { Exponential }
-
     public static class MaxAttempt
     {
         public static final MaxAttempt DISABLED = new MaxAttempt();
@@ -74,7 +72,6 @@ public class RetrySpec
     {
         public Partial()
         {
-            this.type = null;
             this.maxAttempts = null;
             this.baseSleepTime = null;
             this.maxSleepTime = null;
@@ -82,11 +79,10 @@ public class RetrySpec
 
         public RetrySpec withDefaults(RetrySpec defaultValues)
         {
-            Type type = nonNull(this.type, defaultValues.getType(), DEFAULT_TYPE);
             MaxAttempt maxAttempts = nonNull(this.maxAttempts, defaultValues.getMaxAttempts(), DEFAULT_MAX_ATTEMPTS);
             LongMillisecondsBound baseSleepTime = nonNull(this.baseSleepTime, defaultValues.getBaseSleepTime(), DEFAULT_BASE_SLEEP);
             LongMillisecondsBound maxSleepTime = nonNull(this.maxSleepTime, defaultValues.getMaxSleepTime(), DEFAULT_MAX_SLEEP);
-            return new RetrySpec(type, maxAttempts, baseSleepTime, maxSleepTime);
+            return new RetrySpec(maxAttempts, baseSleepTime, maxSleepTime);
         }
 
         private static <T> T nonNull(@Nullable T left, @Nullable T right, T defaultValue)
@@ -99,12 +95,10 @@ public class RetrySpec
         }
     }
 
-    public static final Type DEFAULT_TYPE = Type.Exponential;
     public static final MaxAttempt DEFAULT_MAX_ATTEMPTS = MaxAttempt.DISABLED;
     public static final LongMillisecondsBound DEFAULT_BASE_SLEEP = new LongMillisecondsBound("200ms");
     public static final LongMillisecondsBound DEFAULT_MAX_SLEEP = new LongMillisecondsBound("1s");
 
-    public Type type = DEFAULT_TYPE;
     /**
      * Represents how many retry attempts are allowed.  If the value is 2, this will cause 2 retries + 1 original request, for a total of 3 requests!
      * <p/>
@@ -119,9 +113,8 @@ public class RetrySpec
     {
     }
 
-    public RetrySpec(Type type, MaxAttempt maxAttempts, LongMillisecondsBound baseSleepTime, LongMillisecondsBound maxSleepTime)
+    public RetrySpec(MaxAttempt maxAttempts, LongMillisecondsBound baseSleepTime, LongMillisecondsBound maxSleepTime)
     {
-        this.type = type;
         this.maxAttempts = maxAttempts;
         this.baseSleepTime = baseSleepTime;
         this.maxSleepTime = maxSleepTime;
@@ -145,12 +138,6 @@ public class RetrySpec
     }
 
     @Nullable
-    public Type getType()
-    {
-        return !isEnabled() ? null : type;
-    }
-
-    @Nullable
     public MaxAttempt getMaxAttempts()
     {
         return !isEnabled() ? null : maxAttempts;
@@ -171,8 +158,7 @@ public class RetrySpec
     public String toString()
     {
         return "RetrySpec{" +
-               "type=" + type +
-               ", maxAttempts=" + maxAttempts +
+               "maxAttempts=" + maxAttempts +
                ", baseSleepTime=" + baseSleepTime +
                ", maxSleepTime=" + maxSleepTime +
                '}';

@@ -729,7 +729,6 @@ memtable_allocation_type: heap_buffers
 #
 # repair:
 #   retries:
-#     type: Exponential
 #     max_attempts: 10
 #     base_sleep_time: 200ms
 #     max_sleep_time: 1s
