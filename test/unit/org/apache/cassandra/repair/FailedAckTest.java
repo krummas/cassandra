@@ -36,7 +36,6 @@ import org.apache.cassandra.repair.consistent.LocalSession;
 import org.apache.cassandra.repair.messages.ValidationRequest;
 import org.apache.cassandra.repair.state.Completable;
 import org.apache.cassandra.utils.Closeable;
-import org.assertj.core.api.AbstractStringAssert;
 import org.assertj.core.api.Assertions;
 import org.mockito.Mockito;
 
