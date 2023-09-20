@@ -98,7 +98,7 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
     }
 
     @Nullable
-    public SyncState sync(RepairJobDesc desc, UUID id)
+    public SyncState sync(RepairJobDesc desc, SyncState.Id id)
     {
         Job job = job(desc);
         if (job == null)
@@ -108,7 +108,7 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
 
     public RegisterStatus register(SyncState state)
     {
-        return getOrCreateJob(state.desc).register(state);
+        return getOrCreateJob(state.id.desc).register(state);
     }
 
     public Collection<ValidationState> validations()
@@ -152,7 +152,7 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
         public enum State { ACCEPT, SNAPSHOT, VALIDATION, SYNC }
 
         private final AtomicReference<ValidationState> validation = new AtomicReference<>(null);
-        private final ConcurrentMap<UUID, SyncState> syncs = new ConcurrentHashMap<>();
+        private final ConcurrentMap<SyncState.Id, SyncState> syncs = new ConcurrentHashMap<>();
 
         public Job(RepairJobDesc desc)
         {
@@ -207,7 +207,7 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
         }
 
         @Nullable
-        public SyncState sync(UUID id)
+        public SyncState sync(SyncState.Id id)
         {
             return syncs.get(id);
         }

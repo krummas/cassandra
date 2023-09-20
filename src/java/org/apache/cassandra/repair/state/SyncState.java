@@ -18,23 +18,21 @@
 
 package org.apache.cassandra.repair.state;
 
-import java.util.UUID;
+import java.util.Objects;
 
+import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.repair.RepairJobDesc;
 
-public class SyncState extends AbstractState<SyncState.State, UUID>
+public class SyncState extends AbstractState<SyncState.State, SyncState.Id>
 {
     public enum State
     { ACCEPT, PLANNING, START }
 
     public final Phase phase = new Phase();
-    public final RepairJobDesc desc;
 
-    // TODO (now): can remove a UUID and replace with a pair of (desc, initiator, src, dst) as that is what makes a sync unique.  This will let us drop org.apache.cassandra.repair.messages.SyncRequest.deterministicId
-    public SyncState(RepairJobDesc desc, UUID id)
+    public SyncState(RepairJobDesc desc, InetAddressAndPort initiator, InetAddressAndPort src, InetAddressAndPort dst)
     {
-        super(id, State.class);
-        this.desc = desc;
+        super(new Id(desc, initiator, src, dst), State.class);
     }
 
     public final class Phase extends BaseSkipPhase
@@ -52,6 +50,35 @@ public class SyncState extends AbstractState<SyncState.State, UUID>
         public void start()
         {
             updateState(State.START);
+        }
+    }
+
+    public static class Id
+    {
+        public final RepairJobDesc desc;
+        public final InetAddressAndPort initiator, src, dst;
+
+        public Id(RepairJobDesc desc, InetAddressAndPort initiator, InetAddressAndPort src, InetAddressAndPort dst)
+        {
+            this.desc = desc;
+            this.initiator = initiator;
+            this.src = src;
+            this.dst = dst;
+        }
+
+        @Override
+        public boolean equals(Object o)
+        {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Id id = (Id) o;
+            return desc.equals(id.desc) && initiator.equals(id.initiator) && src.equals(id.src) && dst.equals(id.dst);
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return Objects.hash(desc, initiator, src, dst);
         }
     }
 }

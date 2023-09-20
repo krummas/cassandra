@@ -255,7 +255,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         logErrorAndSendFailureResponse("Unknown repair " + desc.parentSessionId, message);
                         return;
                     }
-                    SyncState state = new SyncState(desc, request.deterministicId());
+                    SyncState state = new SyncState(desc, request.initiator, request.src, request.dst);
                     if (!register(message, participate, state,
                                   participate::register,
                                   participate::sync))
