@@ -621,7 +621,6 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
     interface MessageListener
     {
         default void preHandle(Cluster.Node node, Message<?> msg) {}
-        default void postHandle(Cluster.Node node, Message<?> msg) {}
     }
 
     static class Cluster
@@ -1050,8 +1049,6 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
                         failures.add(e);
                     }
                 }
-                for (MessageListener l : listeners)
-                    l.postHandle(this, msg);
             }
 
             public UUID hostId()
