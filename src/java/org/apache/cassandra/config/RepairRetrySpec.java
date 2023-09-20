@@ -33,7 +33,7 @@ public class RepairRetrySpec extends RetrySpec
     }
 
     @JsonIgnore
-    public RetrySpec getMerkelTreeResponseSpec()
+    public RetrySpec getMerkleTreeResponseSpec()
     {
         RetrySpec.Partial partial = merkle_tree_response;
         if (partial == null)

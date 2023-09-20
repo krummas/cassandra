@@ -64,7 +64,7 @@ public class YamlConfigurationLoaderTest
         RepairRetrySpec repair_retries = loadRepairRetry(ImmutableMap.of("max_attempts", "3"));
         assertThat(repair_retries.isEnabled()).isTrue();
         assertThat(repair_retries.getMaxAttempts()).isEqualTo(3);
-        RetrySpec spec = repair_retries.getMerkelTreeResponseSpec();
+        RetrySpec spec = repair_retries.getMerkleTreeResponseSpec();
         assertThat(spec.isEnabled()).isTrue();
         assertThat(spec.getMaxAttempts()).isEqualTo(3);
     }
@@ -82,7 +82,7 @@ public class YamlConfigurationLoaderTest
         assertThat(repair_retries.baseSleepTime).isEqualTo(RetrySpec.DEFAULT_BASE_SLEEP);
         assertThat(repair_retries.maxSleepTime).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);
 
-        RetrySpec spec = repair_retries.getMerkelTreeResponseSpec();
+        RetrySpec spec = repair_retries.getMerkleTreeResponseSpec();
         assertThat(spec.isEnabled()).isTrue();
         assertThat(spec.maxAttempts).isEqualTo(10);
         assertThat(spec.baseSleepTime).isEqualTo(RetrySpec.DEFAULT_MAX_SLEEP);

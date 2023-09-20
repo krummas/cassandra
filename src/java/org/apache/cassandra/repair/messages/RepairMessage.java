@@ -93,7 +93,7 @@ public abstract class RepairMessage
     private static Backoff backoff(SharedContext ctx, Verb verb)
     {
         RepairRetrySpec retrySpec = DatabaseDescriptor.getRepairRetrySpec();
-        RetrySpec spec = verb == Verb.VALIDATION_RSP ? retrySpec.getMerkelTreeResponseSpec() : retrySpec;
+        RetrySpec spec = verb == Verb.VALIDATION_RSP ? retrySpec.getMerkleTreeResponseSpec() : retrySpec;
         if (!spec.isEnabled())
             return Backoff.None.INSTANCE;
         return new Backoff.ExponentialBackoff(spec.maxAttempts.value, spec.baseSleepTime.toMilliseconds(), spec.maxSleepTime.toMilliseconds(), ctx.random().get()::nextDouble);
