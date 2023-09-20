@@ -142,7 +142,6 @@ public class DatabaseDescriptorRefTest
     "org.apache.cassandra.config.ParameterizedClass",
     "org.apache.cassandra.config.RepairConfig",
     "org.apache.cassandra.config.RepairRetrySpec",
-    "org.apache.cassandra.config.RepairRetrySpec$Verb",
     "org.apache.cassandra.config.RetrySpec",
     "org.apache.cassandra.config.RetrySpec$MaxAttempt",
     "org.apache.cassandra.config.RetrySpec$Type",
