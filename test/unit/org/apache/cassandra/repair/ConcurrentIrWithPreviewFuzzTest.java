@@ -54,24 +54,18 @@ public class ConcurrentIrWithPreviewFuzzTest extends FuzzTestBase
             {
                 Cluster.Node irCoordinator = coordinatorGen.next(rs);
                 Cluster.Node previewCoordinator = coordinatorGen.next(rs);
-                RepairCoordinator ir;
-                {
-                    ir = irCoordinator.repair(KEYSPACE, irOption(rs, irCoordinator, KEYSPACE, ignore -> TABLES));
-                    ir.run();
-                }
-                RepairCoordinator preview;
-                {
-                    preview = previewCoordinator.repair(KEYSPACE, previewOption(rs, previewCoordinator, KEYSPACE, ignore -> TABLES), false);
-                    preview.run();
+                RepairCoordinator ir = irCoordinator.repair(KEYSPACE, irOption(rs, irCoordinator, KEYSPACE, ignore -> TABLES));
+                ir.run();
+                RepairCoordinator preview = previewCoordinator.repair(KEYSPACE, previewOption(rs, previewCoordinator, KEYSPACE, ignore -> TABLES), false);
+                preview.run();
 
-                    closeables.add(cluster.nodes.get(pickParticipant(rs, previewCoordinator, preview)).doValidation(ignore -> (cfs, validator) -> addMismatch(rs, cfs, validator)));
-                    // cause a delay in validation to have more failing previews
-                    closeables.add(cluster.nodes.get(pickParticipant(rs, previewCoordinator, preview)).doValidation(next -> (cfs, validator) -> {
-                        if (validator.desc.parentSessionId.equals(preview.state.id))
-                            cluster.unorderedScheduled.schedule(() -> next.accept(cfs, validator), 1, TimeUnit.HOURS);
-                        else next.acceptOrFail(cfs, validator);
-                    }));
-                }
+                closeables.add(cluster.nodes.get(pickParticipant(rs, previewCoordinator, preview)).doValidation(ignore -> (cfs, validator) -> addMismatch(rs, cfs, validator)));
+                // cause a delay in validation to have more failing previews
+                closeables.add(cluster.nodes.get(pickParticipant(rs, previewCoordinator, preview)).doValidation(next -> (cfs, validator) -> {
+                    if (validator.desc.parentSessionId.equals(preview.state.id))
+                        cluster.unorderedScheduled.schedule(() -> next.accept(cfs, validator), 1, TimeUnit.HOURS);
+                    else next.acceptOrFail(cfs, validator);
+                }));
                 // make sure listeners don't leak
                 closeables.add(LocalSessions::unsafeClearListeners);
 
