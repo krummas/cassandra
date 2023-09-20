@@ -211,5 +211,11 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
         {
             return syncs.get(id);
         }
+
+        @Override
+        public String toString()
+        {
+            return super.toString();
+        }
     }
 }

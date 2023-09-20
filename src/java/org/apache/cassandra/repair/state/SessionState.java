@@ -74,6 +74,7 @@ public class SessionState extends AbstractState<SessionState.State, TimeUUID>
         return commonRange.endpoints;
     }
 
+    @Override
     public String status()
     {
         State state = getStatus();

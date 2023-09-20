@@ -52,15 +52,6 @@ public class JobState extends AbstractState<JobState.State, UUID>
         return endpoints;
     }
 
-    public String status()
-    {
-        State state = getStatus();
-        Result result = getResult();
-        if (result != null)     return result.kind.name();
-        else if (state == null) return "init";
-        else                    return state.name();
-    }
-
     public final class Phase extends BasePhase
     {
         public void start()

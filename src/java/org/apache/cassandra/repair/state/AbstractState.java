@@ -72,6 +72,25 @@ public abstract class AbstractState<T extends Enum<T>, I> extends AbstractComple
         return klass.getEnumConstants()[current];
     }
 
+    public String status()
+    {
+        T state = getStatus();
+        Result result = getResult();
+        if (result != null) return result.kind.name();
+        if (state == null) return "init";
+        return state.name();
+    }
+
+    @Override
+    public String toString()
+    {
+        return getClass().getSimpleName() + "{" +
+               "id=" + id +
+               ", status=" + status() +
+               ", lastUpdatedAtNs=" + lastUpdatedAtNs +
+               '}';
+    }
+
     public int getCurrentState()
     {
         return currentState;

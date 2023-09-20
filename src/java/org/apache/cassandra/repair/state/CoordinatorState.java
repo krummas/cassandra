@@ -116,7 +116,8 @@ public class CoordinatorState extends AbstractState<CoordinatorState.State, Time
         return neighborsAndRanges.filterCommonRanges(keyspace, getColumnFamilyNames());
     }
 
-    private String status()
+    @Override
+    public String status()
     {
         State currentState = getStatus();
         Result result = getResult();
