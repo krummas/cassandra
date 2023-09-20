@@ -27,6 +27,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.cql3.statements.schema.CreateTableStatement;
 import org.apache.cassandra.db.DecoratedKey;
@@ -322,7 +323,7 @@ public class LocalRepairTables
             result.column("preview_kind", state.previewKind.name());
             if (state.repairedAt != 0)
                 result.column("repaired_at", new Date(state.repairedAt));
-            result.column("validations", state.validationIds());
+            result.column("validations", ImmutableSet.copyOf(state.validationIds()));
             result.column("ranges", toStringList(state.ranges));
         }
     }
