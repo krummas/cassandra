@@ -1219,15 +1219,18 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
         }
     }
 
+    /**
+     * Since the clock is accessable via {@link Global#currentTimeMillis()} and {@link Global#nanoTime()}, and only repair subsystem has the requirement not to touch that, this class
+     * acts as a safty check that validates that repair does not touch these methods but allows the other subsystems to do so.
+     */
     public static class ClockAccess implements Clock
     {
-        private static final Set<Thread> OTHER_OWNERS = Collections.synchronizedSet(new HashSet<>());
+        private static final Set<Thread> OWNERS = Collections.synchronizedSet(new HashSet<>());
         private final Clock delegate = new Default();
-        private final Thread owner = Thread.currentThread();
 
         public static void includeThreadAsOwner()
         {
-            OTHER_OWNERS.add(Thread.currentThread());
+            OWNERS.add(Thread.currentThread());
         }
 
         @Override
@@ -1287,7 +1290,7 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
                 case REJECT:
                     throw new IllegalStateException("Rejecting access");
                 case MAIN_THREAD_ONLY:
-                    if (current != owner || !OTHER_OWNERS.contains(current)) throw new IllegalStateException("Accessed in wrong thread: " + current);
+                    if (!OWNERS.contains(current)) throw new IllegalStateException("Accessed in wrong thread: " + current);
                     break;
             }
         }
