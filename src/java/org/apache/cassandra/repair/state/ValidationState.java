@@ -35,6 +35,7 @@ public class ValidationState extends AbstractState<ValidationState.State, UUID>
     public long partitionsProcessed;
     public long bytesRead;
 
+    // TODO (now): replace UUID with RepairJobDesc as the unique key...
     public ValidationState(RepairJobDesc desc, InetAddressAndPort initiator)
     {
         super(desc.determanisticId(), State.class);

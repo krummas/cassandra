@@ -30,7 +30,8 @@ public class SyncState extends AbstractState<SyncState.State, UUID>
     public final Phase phase = new Phase();
     public final RepairJobDesc desc;
 
-    public SyncState(UUID id, RepairJobDesc desc)
+    // TODO (now): can remove a UUID and replace with a pair of (desc, initiator, src, dst) as that is what makes a sync unique.  This will let us drop org.apache.cassandra.repair.messages.SyncRequest.deterministicId
+    public SyncState(RepairJobDesc desc, UUID id)
     {
         super(id, State.class);
         this.desc = desc;
