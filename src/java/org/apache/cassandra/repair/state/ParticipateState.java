@@ -150,7 +150,7 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
     public static class Job extends AbstractState<Job.State, RepairJobDesc>
     {
         public enum State { ACCEPT, SNAPSHOT, VALIDATION, SYNC }
-        
+
         private final AtomicReference<ValidationState> validation = new AtomicReference<>(null);
         private final ConcurrentMap<UUID, SyncState> syncs = new ConcurrentHashMap<>();
 
@@ -172,7 +172,6 @@ public class ParticipateState extends AbstractCompletable<TimeUUID>
 
         public RegisterStatus register(ValidationState state)
         {
-
             return register(s -> validation.compareAndSet(null, s) ? null : validation(), State.VALIDATION, state);
         }
 
