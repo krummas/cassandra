@@ -23,6 +23,26 @@ import org.apache.cassandra.utils.Clock;
 
 public abstract class AbstractState<T extends Enum<T>, I> extends AbstractCompletable<I> implements State<T, I>
 {
+    protected enum UpdateType {
+        NO_CHANGE, ACCEPTED,
+        LARGER_STATE_SEEN, ALREADY_COMPLETED;
+
+        protected boolean isRejected()
+        {
+            switch (this)
+            {
+                case NO_CHANGE:
+                case ACCEPTED:
+                    return false;
+                case LARGER_STATE_SEEN:
+                case ALREADY_COMPLETED:
+                    return true;
+                default:
+                    throw new IllegalStateException("Unknown type: " + this);
+            }
+        }
+    }
+
     public static final int INIT = -1;
     public static final int COMPLETE = -2;
 
@@ -35,6 +55,12 @@ public abstract class AbstractState<T extends Enum<T>, I> extends AbstractComple
         super(id);
         this.klass = klass;
         this.stateTimesNanos = new long[klass.getEnumConstants().length];
+    }
+
+    @Override
+    public boolean isAccepted()
+    {
+        return currentState == INIT ? false : true;
     }
 
     @Override
@@ -85,23 +111,22 @@ public abstract class AbstractState<T extends Enum<T>, I> extends AbstractComple
 
     protected void updateState(T state)
     {
-        int currentState = this.currentState;
-        if (currentState >= state.ordinal())
+        if (maybeUpdateState(state).isRejected())
             throw new IllegalStateException("State went backwards; current=" + klass.getEnumConstants()[currentState] + ", desired=" + state);
-        long now = Clock.Global.nanoTime();
-        stateTimesNanos[this.currentState = state.ordinal()] = now;
-        lastUpdatedAtNs = now;
     }
 
-    protected void maybeUpdateState(T state)
+    protected UpdateType maybeUpdateState(T state)
     {
         int currentState = this.currentState;
+        if (currentState == COMPLETE)
+            return UpdateType.ALREADY_COMPLETED;
         if (currentState == state.ordinal())
-            return;
+            return UpdateType.NO_CHANGE;
         if (currentState > state.ordinal())
-            throw new IllegalStateException("State went backwards; current=" + klass.getEnumConstants()[currentState] + ", desired=" + state);
+            return UpdateType.LARGER_STATE_SEEN;
         long now = Clock.Global.nanoTime();
         stateTimesNanos[this.currentState = state.ordinal()] = now;
         lastUpdatedAtNs = now;
+        return UpdateType.ACCEPTED;
     }
 }

@@ -20,16 +20,20 @@ package org.apache.cassandra.repair.state;
 
 import java.util.UUID;
 
+import org.apache.cassandra.repair.RepairJobDesc;
+
 public class SyncState extends AbstractState<SyncState.State, UUID>
 {
     public enum State
     { ACCEPT, PLANNING, START }
 
     public final Phase phase = new Phase();
+    public final RepairJobDesc desc;
 
-    public SyncState(UUID id)
+    public SyncState(UUID id, RepairJobDesc desc)
     {
         super(id, State.class);
+        this.desc = desc;
     }
 
     public final class Phase extends BaseSkipPhase

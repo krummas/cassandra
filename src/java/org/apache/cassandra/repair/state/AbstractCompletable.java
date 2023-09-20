@@ -24,8 +24,10 @@ import com.google.common.base.Throwables;
 
 import org.apache.cassandra.utils.Clock;
 
-public class AbstractCompletable<I> implements Completable<I>
+public abstract class AbstractCompletable<I> implements Completable<I>
 {
+    public enum Status { INIT, ACCEPTED, COMPLETED }
+
     private final long creationTimeMillis = Clock.Global.currentTimeMillis(); // used to convert from nanos to millis
     private final long creationTimeNanos = Clock.Global.nanoTime();
     private final AtomicReference<Result> result = new AtomicReference<>(null);
@@ -35,6 +37,16 @@ public class AbstractCompletable<I> implements Completable<I>
     public AbstractCompletable(I id)
     {
         this.id = id;
+    }
+
+    public abstract boolean isAccepted();
+
+    public Status getCompletionStatus()
+    {
+        Result result = getResult();
+        if (result != null)
+            return Status.COMPLETED;
+        return isAccepted() ? Status.ACCEPTED : Status.INIT;
     }
 
     @Override

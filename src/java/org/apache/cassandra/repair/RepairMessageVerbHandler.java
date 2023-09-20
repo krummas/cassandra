@@ -18,6 +18,8 @@
 package org.apache.cassandra.repair;
 
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,7 @@ import org.apache.cassandra.exceptions.RequestFailureReason;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.Message;
 import org.apache.cassandra.repair.messages.*;
+import org.apache.cassandra.repair.state.AbstractCompletable;
 import org.apache.cassandra.repair.state.AbstractState;
 import org.apache.cassandra.repair.state.Completable;
 import org.apache.cassandra.repair.state.ParticipateState;
@@ -157,7 +160,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ActiveRepairService.ParentRepairSession prs = ctx.repair().getParentRepairSession(desc.parentSessionId);
                     if (prs.setHasSnapshots())
                     {
-                        state.phase.snapshot();
+                        state.getOrCreateJob(desc).snapshot();
                         TableRepairManager repairManager = cfs.getRepairManager();
                         if (prs.isGlobal)
                         {
@@ -186,12 +189,10 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     }
 
                     ValidationState vState = new ValidationState(desc, message.from());
-                    if (!participate.register(vState))
-                    {
-                        logger.debug("Duplicate validation message found for parent={}, validation={}", participate.id, vState.id);
-                        replyDedup(participate.validation(vState.id), message);
+                    if (!register(message, participate, vState,
+                                  participate::register,
+                                  participate::validation))
                         return;
-                    }
                     try
                     {
                         // trigger read-only compaction
@@ -254,13 +255,11 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                         logErrorAndSendFailureResponse("Unknown repair " + desc.parentSessionId, message);
                         return;
                     }
-                    SyncState state = new SyncState(request.deterministicId());
-                    if (!participate.register(state))
-                    {
-                        logger.debug("Duplicate sync message found for parent={}, validation={}", participate.id, desc.determanisticId());
-                        replyDedup(participate.sync(state.id), message);
+                    SyncState state = new SyncState(request.deterministicId(), desc);
+                    if (!register(message, participate, state,
+                                  participate::register,
+                                  participate::sync))
                         return;
-                    }
                     state.phase.accept();
                     StreamingRepairTask task = new StreamingRepairTask(ctx, state, desc,
                                                                        request.initiator,
@@ -340,28 +339,51 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
         }
     }
 
-    private enum DedupResult { UNKNOWN, ACCEPT, REJECT }
-
-    private static DedupResult dedupResult(AbstractState<?, ?> state)
+    private <I, T extends AbstractState<?, I>> boolean register(Message<RepairMessage> message,
+                                                                ParticipateState participate,
+                                                                T vState,
+                                                                Function<T, ParticipateState.RegisterStatus> register,
+                                                                BiFunction<RepairJobDesc, I, T> getter)
     {
-        Object status = state.getStatus();
-        if (status == null) // state was init or completed
+        ParticipateState.RegisterStatus registerStatus = register.apply(vState);
+        switch (registerStatus)
         {
-            Completable.Result result = state.getResult();
-            if (result == null)
-            {
-                // state is in init phase... so not clear if the message was accepted or not
-                return DedupResult.UNKNOWN;
-            }
-            else if (result.kind == Completable.Result.Kind.FAILURE)
-            {
-                return DedupResult.REJECT;
-            }
+            case ACCEPTED:
+                return true;
+            case EXISTS:
+                logger.debug("Duplicate validation message found for parent={}, validation={}", participate.id, vState.id);
+                replyDedup(getter.apply(message.payload.desc, vState.id), message);
+                return false;
+            case ALREADY_COMPLETED:
+            case STATUS_REJECTED:
+                // the repair is complete (most likely failed as we don't know success always), or is at a later phase such as sync
+                // so send a nack saying that the validation could not be accepted
+                sendFailureResponse(message);
+                return false;
+            default:
+                throw new IllegalStateException("Unexpected status: " + registerStatus);
         }
-        return DedupResult.ACCEPT;
     }
 
-    private void replyDedup(AbstractState<?, ?> state, Message<RepairMessage> message)
+    private enum DedupResult { UNKNOWN, ACCEPT, REJECT }
+
+    private static DedupResult dedupResult(AbstractCompletable<?> state)
+    {
+        AbstractCompletable.Status status = state.getCompletionStatus();
+        switch (status)
+        {
+            case INIT:
+                return DedupResult.UNKNOWN;
+            case ACCEPTED:
+                return DedupResult.ACCEPT;
+            case COMPLETED:
+                return state.getResult().kind == Completable.Result.Kind.FAILURE ? DedupResult.REJECT: DedupResult.ACCEPT;
+            default:
+                throw new IllegalStateException("Unknown status: " + state);
+        }
+    }
+
+    private void replyDedup(AbstractCompletable<?> state, Message<RepairMessage> message)
     {
         if (state == null)
             throw new IllegalStateException("State is null");
