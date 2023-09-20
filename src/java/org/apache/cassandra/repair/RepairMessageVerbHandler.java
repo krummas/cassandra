@@ -191,7 +191,7 @@ public class RepairMessageVerbHandler implements IVerbHandler<RepairMessage>
                     ValidationState vState = new ValidationState(desc, message.from());
                     if (!register(message, participate, vState,
                                   participate::register,
-                                  participate::validation))
+                                  (d, i) -> participate.validation(d)))
                         return;
                     try
                     {
