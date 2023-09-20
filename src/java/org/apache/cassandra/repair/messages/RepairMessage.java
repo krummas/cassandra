@@ -148,7 +148,6 @@ public abstract class RepairMessage
             @Override
             public void onFailure(InetAddressAndPort from, RequestFailureReason failureReason)
             {
-                // TODO (now): latest refactor no longer checks that failureReason is timeout...
                 ErrorHandling allowed = errorHandlingSupported(ctx, endpoint, verb, request.parentRepairSession());
                 switch (allowed)
                 {
