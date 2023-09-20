@@ -582,7 +582,6 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
         DELAY, DROP;
 
         public static final Set<Faults> NONE = Collections.emptySet();
-        public static final Set<Faults> DELAYED = EnumSet.of(DELAY);
         public static final Set<Faults> DROPPED = EnumSet.of(DELAY, DROP);
     }
 
