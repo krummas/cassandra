@@ -148,6 +148,7 @@ import static org.apache.cassandra.config.CassandraRelevantProperties.ORG_APACHE
 
 public abstract class FuzzTestBase extends CQLTester.InMemory
 {
+    private static final int MISMATCH_NUM_PARTITIONS = 1;
     private static final Gen<String> IDENTIFIER_GEN = fromQT(Generators.IDENTIFIER_GEN);
     private static final Gen<String> KEYSPACE_NAME_GEN = fromQT(CassandraGenerators.KEYSPACE_NAME_GEN);
     private static final Gen<TableId> TABLE_ID_GEN = fromQT(CassandraGenerators.TABLE_ID_GEN);
@@ -429,14 +430,13 @@ public abstract class FuzzTestBase extends CQLTester.InMemory
     static void addMismatch(RandomSource rs, ColumnFamilyStore cfs, Validator validator)
     {
         ValidationState state = validator.state;
-        int numPartitions = 1;
         int maxDepth = DatabaseDescriptor.getRepairSessionMaxTreeDepth();
-        state.phase.start(numPartitions, 1024);
+        state.phase.start(MISMATCH_NUM_PARTITIONS, 1024);
 
         MerkleTrees trees = new MerkleTrees(cfs.getPartitioner());
         for (Range<Token> range : validator.desc.ranges)
         {
-            int depth = numPartitions > 0 ? (int) Math.min(Math.ceil(Math.log(numPartitions) / Math.log(2)), maxDepth) : 0;
+            int depth = (int) Math.min(Math.ceil(Math.log(MISMATCH_NUM_PARTITIONS) / Math.log(2)), maxDepth);
             trees.addMerkleTree((int) Math.pow(2, depth), range);
         }
         Set<Token> allTokens = new HashSet<>();
