@@ -35,9 +35,9 @@ public class ValidationState extends AbstractState<ValidationState.State, UUID>
     public long partitionsProcessed;
     public long bytesRead;
 
-    // TODO (now): replace UUID with RepairJobDesc as the unique key...
     public ValidationState(RepairJobDesc desc, InetAddressAndPort initiator)
     {
+        // UUID is used to make the validations table easier for users to lookup by a single key rather than a composite key
         super(desc.determanisticId(), State.class);
         this.desc = desc;
         this.initiator = initiator;
