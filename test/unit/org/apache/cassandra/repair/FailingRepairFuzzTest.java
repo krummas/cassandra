@@ -20,8 +20,11 @@ package org.apache.cassandra.repair;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import org.junit.Test;
@@ -66,6 +69,8 @@ public class FailingRepairFuzzTest extends FuzzTestBase
                 InetAddressAndPort failingAddress = pickParticipant(rs, coordinator, repair);
                 Cluster.Node failingNode = cluster.nodes.get(failingAddress);
                 RepairJobStage stage = stageGen.next(rs);
+                // because of local syncs reaching out to the failing address, a different address may actually be what failed
+                Set<InetAddressAndPort> syncFailedAddresses = new HashSet<>();
                 switch (stage)
                 {
                     case VALIDATION:
@@ -87,6 +92,7 @@ public class FailingRepairFuzzTest extends FuzzTestBase
                                 cluster.unorderedScheduled.schedule(() -> {
                                     if (address == failingAddress || plan.getCoordinator().getPeers().contains(failingAddress))
                                     {
+                                        syncFailedAddresses.add(address);
                                         SimulatedFault fault = new SimulatedFault("Sync failed");
                                         for (StreamEventHandler handler : plan.handlers())
                                             handler.onFailure(fault);
@@ -113,7 +119,13 @@ public class FailingRepairFuzzTest extends FuzzTestBase
                 {
                     case VALIDATION:
                     {
-                        Assertions.assertThat(repair.state.getResult().message).describedAs("Unexpected state: %s -> %s; example %d", repair.state, repair.state.getResult(), example).contains("Validation failed in " + failingAddress);
+                        // Got VALIDATION_REQ failure from Ero2.MJ.N8kkw2.w3iFYdDw.HJiVYC32.mWb.b.xwi3tZ.s5k1l.mb.asTy_7QmQ.Q3.u.kjgh.GKjx.g1aKfkjB.YlyKg9.DyQszn7F.Ox2DMYIph.xlgH.EV.A9yEz2J.l6UHdC.C6FYLXE.J0CNHBH./[4905:e9f:2f00:e418:baac:b8d9:9ff9:6604]:33363: UNKNOWN"
+                        Assertions.assertThat(repair.state.getResult().message)
+                                  .describedAs("Unexpected state: %s -> %s; example %d", repair.state, repair.state.getResult(), example)
+                                  // ValidationResponse with null tree seen
+                                  .containsAnyOf("Validation failed in " + failingAddress,
+                                                 // ack was dropped and on retry the participate detected dup so rejected as the task failed
+                                                 "Got VALIDATION_REQ failure from " + failingAddress + ": UNKNOWN");
                     }
                     break;
                     case SYNC:
@@ -122,10 +134,17 @@ public class FailingRepairFuzzTest extends FuzzTestBase
                         // ... Sync failed between /[81fc:714:2c56:a2d3:faf3:eb7c:e4dd:cb9e]:54401 and /220.3.10.72:21402
                         // LocalSyncTask
                         // ... failed with error Sync failed
+                        // Dedup nack, but may be remote or local sync!
+                        // ... Got SYNC_REQ failure from ...: UNKNOWN
                         String failingMsg = repair.state.getResult().message;
                         if (failingMsg.contains("Sync failed between"))
                         {
                             a.contains("Sync failed between").contains(failingAddress.toString());
+                        }
+                        else if (failingMsg.contains("Got SYNC_REQ failure from"))
+                        {
+                            Assertions.assertThat(syncFailedAddresses).isNotEmpty();
+                            a.containsAnyOf(syncFailedAddresses.stream().map(s -> "Got SYNC_REQ failure from " + s + ": UNKNOWN").collect(Collectors.toList()).toArray(String[]::new));
                         }
                         else
                         {
