@@ -38,6 +38,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.CassandraGenerators;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.FixedMonotonicClock;
+import org.apache.cassandra.utils.StorageCompatibilityMode;
 import org.assertj.core.api.Assertions;
 import org.mockito.Mockito;
 
@@ -60,6 +61,7 @@ public class MessageSerializationPropertyTest implements Serializable
         CLOCK_MONOTONIC_APPROX.setString(FixedMonotonicClock.class.getName());
 
         DatabaseDescriptor.daemonInitialization();
+        DatabaseDescriptor.setStorageCompatibilityMode(StorageCompatibilityMode.CASSANDRA_4);
         ClusterMetadataTestHelper.setInstanceForTest();
     }
 
