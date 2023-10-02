@@ -66,20 +66,20 @@ public class Rebuild
             throw new IllegalStateException("Node is still rebuilding. Check nodetool netstats.");
         }
 
-        if (sourceDc != null)
-        {
-            if (sourceDc.equals(DatabaseDescriptor.getLocalDataCenter()) && excludeLocalDatacenterNodes) // fail if source DC is local and --exclude-local-dc is set
-                throw new IllegalArgumentException("Cannot set source data center to be local data center, when excludeLocalDataCenter flag is set");
-            Set<String> availableDCs = ClusterMetadata.current().directory.knownDatacenters();
-            if (!availableDCs.contains(sourceDc))
-            {
-                throw new IllegalArgumentException(String.format("Provided datacenter '%s' is not a valid datacenter, available datacenters are: %s",
-                                                                 sourceDc, String.join(",", availableDCs)));
-            }
-        }
-
         try
         {
+            if (sourceDc != null)
+            {
+                if (sourceDc.equals(DatabaseDescriptor.getLocalDataCenter()) && excludeLocalDatacenterNodes) // fail if source DC is local and --exclude-local-dc is set
+                    throw new IllegalArgumentException("Cannot set source data center to be local data center, when excludeLocalDataCenter flag is set");
+                Set<String> availableDCs = ClusterMetadata.current().directory.knownDatacenters();
+                if (!availableDCs.contains(sourceDc))
+                {
+                    throw new IllegalArgumentException(String.format("Provided datacenter '%s' is not a valid datacenter, available datacenters are: %s",
+                                                                     sourceDc, String.join(",", availableDCs)));
+                }
+            }
+
             // check the arguments
             if (keyspace == null && tokens != null)
             {

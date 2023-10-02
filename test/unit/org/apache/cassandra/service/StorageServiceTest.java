@@ -22,28 +22,25 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.cassandra.ServerTestUtils;
 import org.apache.cassandra.concurrent.ScheduledExecutors;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.dht.RandomPartitioner;
-import org.apache.cassandra.dht.Range;
-import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.distributed.test.log.ClusterMetadataTestHelper;
 import org.apache.cassandra.locator.AbstractEndpointSnitch;
-import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.IEndpointSnitch;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.Replica;
 import org.apache.cassandra.locator.ReplicaCollection;
 import org.apache.cassandra.locator.ReplicaMultimap;
 import org.apache.cassandra.locator.SimpleSnitch;
-import org.apache.cassandra.locator.SimpleStrategy;
+import org.apache.cassandra.utils.FBUtilities;
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.apache.cassandra.config.CassandraRelevantProperties.ORG_APACHE_CASSANDRA_DISABLE_MBEAN_REGISTRATION;
 import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -52,38 +49,11 @@ import static org.junit.Assert.fail;
 
 public class StorageServiceTest
 {
-    static InetAddressAndPort aAddress;
-    static InetAddressAndPort bAddress;
-    static InetAddressAndPort cAddress;
-    static InetAddressAndPort dAddress;
-    static InetAddressAndPort eAddress;
-
     @BeforeClass
-    public static void setUpClass() throws Exception
+    public static void setUp()
     {
-        aAddress = InetAddressAndPort.getByName("127.0.0.1");
-        bAddress = InetAddressAndPort.getByName("127.0.0.2");
-        cAddress = InetAddressAndPort.getByName("127.0.0.3");
-        dAddress = InetAddressAndPort.getByName("127.0.0.4");
-        eAddress = InetAddressAndPort.getByName("127.0.0.5");
-    }
-
-    private static final Token threeToken = new RandomPartitioner.BigIntegerToken("3");
-    private static final Token sixToken = new RandomPartitioner.BigIntegerToken("6");
-    private static final Token nineToken = new RandomPartitioner.BigIntegerToken("9");
-    private static final Token elevenToken = new RandomPartitioner.BigIntegerToken("11");
-    private static final Token oneToken = new RandomPartitioner.BigIntegerToken("1");
-
-    Range<Token> aRange = new Range<>(oneToken, threeToken);
-    Range<Token> bRange = new Range<>(threeToken, sixToken);
-    Range<Token> cRange = new Range<>(sixToken, nineToken);
-    Range<Token> dRange = new Range<>(nineToken, elevenToken);
-    Range<Token> eRange = new Range<>(elevenToken, oneToken);
-
-    @Before
-    public void setUp()
-    {
-        DatabaseDescriptor.daemonInitialization();
+        ORG_APACHE_CASSANDRA_DISABLE_MBEAN_REGISTRATION.setBoolean(true);
+        ServerTestUtils.prepareServerNoRegister();
         DatabaseDescriptor.setTransientReplicationEnabledUnsafe(true);
         IEndpointSnitch snitch = new AbstractEndpointSnitch()
         {
@@ -104,13 +74,7 @@ public class StorageServiceTest
         };
 
         DatabaseDescriptor.setEndpointSnitch(snitch);
-        CommitLog.instance.start();
-    }
-
-    private AbstractReplicationStrategy simpleStrategy()
-    {
-        return new SimpleStrategy("MoveTransientTest",
-                                  com.google.common.collect.ImmutableMap.of("replication_factor", "3/1"));
+        ClusterMetadataTestHelper.register(FBUtilities.getBroadcastAddressAndPort(), SimpleSnitch.DATA_CENTER_NAME, SimpleSnitch.RACK_NAME);
     }
 
     public static <K, C extends ReplicaCollection<? extends C>>  void assertMultimapEqualsIgnoreOrder(ReplicaMultimap<K, C> a, ReplicaMultimap<K, C> b)
@@ -139,32 +103,7 @@ public class StorageServiceTest
     public static String formatClassAndValue(Object value)
     {
         String className = value == null ? "null" : value.getClass().getName();
-        return className + "<" + String.valueOf(value) + ">";
-    }
-
-    @Test
-    public void testGetChangedReplicasForLeaving() throws Exception
-    {
-//        TokenMetadata tmd = new TokenMetadata();
-//        tmd.updateNormalToken(threeToken, aAddress);
-//        tmd.updateNormalToken(sixToken, bAddress);
-//        tmd.updateNormalToken(nineToken, cAddress);
-//        tmd.updateNormalToken(elevenToken, dAddress);
-//        tmd.updateNormalToken(oneToken, eAddress);
-//
-//        tmd.addLeavingEndpoint(aAddress);
-//
-//        AbstractReplicationStrategy strat = simpleStrategy();
-//
-//        EndpointsByReplica result = StorageService.getChangedReplicasForLeaving("StorageServiceTest", aAddress, tmd, strat);
-//        System.out.println(result);
-//        EndpointsByReplica.Builder expectedResult = new EndpointsByReplica.Builder();
-//        expectedResult.put(new Replica(aAddress, aRange, true), new Replica(cAddress, new Range<>(oneToken, sixToken), true));
-//        expectedResult.put(new Replica(aAddress, aRange, true), new Replica(dAddress, new Range<>(oneToken, sixToken), false));
-//        expectedResult.put(new Replica(aAddress, eRange, true), new Replica(bAddress, eRange, true));
-//        expectedResult.put(new Replica(aAddress, eRange, true), new Replica(cAddress, eRange, false));
-//        expectedResult.put(new Replica(aAddress, dRange, false), new Replica(bAddress, dRange, false));
-//        assertMultimapEqualsIgnoreOrder(result, expectedResult.build());
+        return className + "<" + value + ">";
     }
 
     @Test
@@ -310,7 +249,7 @@ public class StorageServiceTest
     {
         try
         {
-            getStorageService().rebuild(DatabaseDescriptor.getLocalDataCenter(), "StorageServiceTest", null, null, true);
+            StorageService.instance.rebuild(DatabaseDescriptor.getLocalDataCenter(), "StorageServiceTest", null, null, true);
             fail();
         }
         catch (IllegalArgumentException e)
@@ -326,7 +265,7 @@ public class StorageServiceTest
 
         try
         {
-            getStorageService().rebuild(nonExistentDC, "StorageServiceTest", null, null, true);
+            StorageService.instance.rebuild(nonExistentDC, "StorageServiceTest", null, null, true);
             fail();
         }
         catch (IllegalArgumentException ex)
@@ -339,38 +278,17 @@ public class StorageServiceTest
     }
 
     @Test
-    public void testRebuildingWithTokensWithoutKeyspace() throws Exception
+    public void testRebuildingWithTokensWithoutKeyspace()
     {
         try
         {
-            getStorageService().rebuild("datacenter1", null, "123", null);
+
+            StorageService.instance.rebuild("datacenter1", null, "123", null);
             fail();
         }
         catch (IllegalArgumentException ex)
         {
             assertEquals("Cannot specify tokens without keyspace.", ex.getMessage());
         }
-    }
-
-    private StorageService getStorageService()
-    {
-        // TODO reimplement with TCM
-        throw new AssertionError("FAIL");
-//        ImmutableMultimap.Builder<String, InetAddressAndPort> builder = ImmutableMultimap.builder();
-//        builder.put(SimpleSnitch.DATA_CENTER_NAME, aAddress);
-//
-//        TokenMetadata.Topology tokenMetadataTopology = Mockito.mock(TokenMetadata.Topology.class);
-//        Mockito.when(tokenMetadataTopology.getDatacenterEndpoints()).thenReturn(builder.build());
-//
-//        TokenMetadata metadata = new TokenMetadata(new SimpleSnitch());
-//        TokenMetadata spiedMetadata = Mockito.spy(metadata);
-//
-//        Mockito.when(spiedMetadata.getTopology()).thenReturn(tokenMetadataTopology);
-//
-//        StorageService spiedStorageService = Mockito.spy(StorageService.instance);
-//        Mockito.when(spiedStorageService.getTokenMetadata()).thenReturn(spiedMetadata);
-//        Mockito.when(spiedMetadata.cloneOnlyTokenMap()).thenReturn(spiedMetadata);
-//
-//        return spiedStorageService;
     }
 }
