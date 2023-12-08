@@ -716,14 +716,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
                            () -> {
                                 if (config.has(NETWORK))
                                 {
-                                    try
-                                    {
-                                        MessagingService.instance().waitUntilListening();
-                                    }
-                                    catch (InterruptedException e)
-                                    {
-                                        throw new RuntimeException(e);
-                                    }
+                                    MessagingService.instance().waitUntilListeningUnchecked();
                                 }
                                 else
                                 {
