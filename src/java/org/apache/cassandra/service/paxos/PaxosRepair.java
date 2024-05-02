@@ -288,8 +288,7 @@ public class PaxosRepair extends AbstractPaxosRepair
 
         public void run()
         {
-            boolean isUrgent = participants.keyspace.getMetadata().params.replication.isMeta();
-            Message<Request> message = Message.out(PAXOS2_REPAIR_REQ, new Request(partitionKey(), table), isUrgent);
+            Message<Request> message = Message.out(PAXOS2_REPAIR_REQ, new Request(partitionKey(), table), participants.isUrgent());
 
             for (int i = 0, size = participants.sizeOfPoll(); i < size ; ++i)
                 MessagingService.instance().sendWithCallback(message, participants.voter(i), this);

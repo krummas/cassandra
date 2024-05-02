@@ -358,8 +358,7 @@ public class PaxosPrepare extends PaxosRequestCallback<PaxosPrepare.Response> im
     private static PaxosPrepare prepareWithBallotInternal(Participants participants, Request request, boolean acceptEarlyReadPermission, Consumer<Status> onDone)
     {
         PaxosPrepare prepare = new PaxosPrepare(participants, request, acceptEarlyReadPermission, onDone);
-        boolean isUrgent = participants.keyspace.getMetadata().params.replication.isMeta();
-        Message<Request> message = Message.out(PAXOS2_PREPARE_REQ, request, isUrgent);
+        Message<Request> message = Message.out(PAXOS2_PREPARE_REQ, request, participants.isUrgent());
         start(prepare, participants, message, RequestHandler::execute);
         return prepare;
     }

@@ -175,12 +175,11 @@ public class PaxosCommit<OnDone extends Consumer<? super PaxosCommit.Status>> ex
     void start(Participants participants, boolean async)
     {
         boolean executeOnSelf = false;
-        boolean isUrgent = participants.keyspace.getMetadata().params.replication.isMeta();
-        Message<Agreed> commitMessage = Message.out(PAXOS_COMMIT_REQ, commit, isUrgent);
+        Message<Agreed> commitMessage = Message.out(PAXOS_COMMIT_REQ, commit, participants.isUrgent());
 
         Message<Mutation> mutationMessage = null;
         if (ENABLE_DC_LOCAL_COMMIT && consistencyForConsensus.isDatacenterLocal())
-            mutationMessage = Message.out(PAXOS2_COMMIT_REMOTE_REQ, commit.makeMutation(), isUrgent);
+            mutationMessage = Message.out(PAXOS2_COMMIT_REMOTE_REQ, commit.makeMutation(), participants.isUrgent());
 
         for (int i = 0, mi = participants.allLive.size(); i < mi ; ++i)
             executeOnSelf |= isSelfOrSend(commitMessage, mutationMessage, participants.allLive.endpoint(i));
