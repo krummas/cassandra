@@ -1130,6 +1130,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     {
         if (!joined)
         {
+            if (DatabaseDescriptor.getRingChangesDisabled())
+            {
+                String msg = "Ring changes are disabled, can't join";
+                logger.warn(msg);
+                throw new ConfigurationException(msg);
+            }
+
             Map<ApplicationState, VersionedValue> appStates = new EnumMap<>(ApplicationState.class);
 
             if (SystemKeyspace.wasDecommissioned())
@@ -5268,6 +5275,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
 
     public void decommission(boolean force) throws InterruptedException
     {
+        if (DatabaseDescriptor.getRingChangesDisabled())
+        {
+            String msg = "Ring changes are disabled, can't run decommission";
+            logger.warn(msg);
+            throw new IllegalStateException(msg);
+        }
+
         if (operationMode == DECOMMISSIONED)
         {
             logger.info("This node was already decommissioned. There is no point in decommissioning it again.");
@@ -5520,6 +5534,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
         if (newToken == null)
             throw new IOException("Can't move to the undefined (null) token.");
 
+        if (DatabaseDescriptor.getRingChangesDisabled())
+        {
+            String msg = "Ring changes are disabled, can't move to " + newToken;
+            logger.warn(msg);
+            throw new IllegalStateException(msg);
+        }
+
         if (tokenMetadata.sortedTokens().contains(newToken))
             throw new IOException("target token " + newToken + " is already owned by another node.");
 
@@ -5653,6 +5674,13 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
      */
     public void removeNode(String hostIdString)
     {
+        if (DatabaseDescriptor.getRingChangesDisabled())
+        {
+            String msg = "Can't remove node " + hostIdString + ": ring changes are disabled";
+            logger.warn(msg);
+            throw new IllegalStateException(msg);
+        }
+
         InetAddressAndPort myAddress = FBUtilities.getBroadcastAddressAndPort();
         UUID localHostId = tokenMetadata.getHostId(myAddress);
         UUID hostId = UUID.fromString(hostIdString);
@@ -7685,5 +7713,29 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     public boolean getPaxosRepairRaceWait()
     {
         return DatabaseDescriptor.getPaxosRepairRaceWait();
+    }
+
+    @Override
+    public boolean getSchemaModificationsDisabled()
+    {
+        return DatabaseDescriptor.getSchemaModificationsDisabled();
+    }
+
+    @Override
+    public void setSchemaModificationsDisabled(boolean value)
+    {
+        DatabaseDescriptor.setSchemaModificationsDisabled(value);
+    }
+
+    @Override
+    public boolean getRingChangesDisabled()
+    {
+        return DatabaseDescriptor.getRingChangesDisabled();
+    }
+
+    @Override
+    public void setRingChangesDisabled(boolean val)
+    {
+        DatabaseDescriptor.setRingChangesDisabled(val);
     }
 }

@@ -21,6 +21,9 @@ import java.util.Set;
 
 import com.google.common.collect.ImmutableSet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.auth.AuthenticatedUser;
 import org.apache.cassandra.auth.IResource;
 import org.apache.cassandra.config.DatabaseDescriptor;
@@ -42,6 +45,8 @@ import static org.apache.cassandra.schema.KeyspaceMetadata.validateKeyspaceName;
 
 abstract public class AlterSchemaStatement implements CQLStatement.SingleKeyspaceCqlStatement, SchemaTransformation
 {
+    private static final Logger logger = LoggerFactory.getLogger(AlterSchemaStatement.class);
+
     protected final String keyspaceName; // name of the keyspace affected by the statement
     protected ClientState state;
 
@@ -115,6 +120,17 @@ abstract public class AlterSchemaStatement implements CQLStatement.SingleKeyspac
 
         validateKeyspaceName(keyspaceName, AlterSchemaStatement::ire);
 
+        if (DatabaseDescriptor.getSchemaModificationsDisabled())
+        {
+            Keyspaces before = Schema.instance.distributedKeyspaces();
+            Keyspaces after = this.apply(before);
+            KeyspacesDiff diff = Keyspaces.diff(before, after);
+            if (diff.isEmpty())
+                return new ResultMessage.Void();
+
+            logger.warn("Rejecting schema change, schema modifications are disabled");
+            throw new InvalidRequestException("Schema modifications are currently disabled");
+        }
         SchemaTransformationResult result = Schema.instance.transform(this, locally);
 
         clientWarnings(result.diff).forEach(ClientWarn.instance::warn);

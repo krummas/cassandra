@@ -1034,6 +1034,12 @@ public class DatabaseDescriptor
         // run audit logging options through sanitation and validation
         if (conf.audit_logging_options != null)
             setAuditLoggingOptions(conf.audit_logging_options);
+
+        if (conf.ring_changes_disabled)
+            logger.warn("Ring changes are disabled - no host replacements or bootstraps are allowed");
+
+        if (conf.schema_modifications_disabled)
+            logger.warn("Schema modifications are disabled - schema changes will not work when executed against this node");
     }
 
     @VisibleForTesting
@@ -5308,5 +5314,25 @@ public class DatabaseDescriptor
     public static void setPaxosRepairRaceWait(boolean paxosRepairRaceWait)
     {
         conf.paxos_repair_race_wait = paxosRepairRaceWait;
+    }
+
+    public static void setSchemaModificationsDisabled(boolean val)
+    {
+        conf.schema_modifications_disabled = val;
+    }
+
+    public static boolean getSchemaModificationsDisabled()
+    {
+        return conf.schema_modifications_disabled;
+    }
+
+    public static void setRingChangesDisabled(boolean val)
+    {
+        conf.ring_changes_disabled = val;
+    }
+
+    public static boolean getRingChangesDisabled()
+    {
+        return conf.ring_changes_disabled;
     }
 }

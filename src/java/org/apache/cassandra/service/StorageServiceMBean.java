@@ -1328,4 +1328,10 @@ public interface StorageServiceMBean extends NotificationEmitter
     boolean getPaxosRepairRaceWait();
 
     public void dropPreparedStatements(boolean memoryOnly);
+
+    boolean getSchemaModificationsDisabled();
+    void setSchemaModificationsDisabled(boolean value);
+
+    boolean getRingChangesDisabled();
+    void setRingChangesDisabled(boolean val);
 }

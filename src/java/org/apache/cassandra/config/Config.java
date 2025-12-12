@@ -1384,4 +1384,7 @@ public class Config
     public boolean enforce_native_deadline_for_hints = false;
 
     public boolean paxos_repair_race_wait = true;
+
+    public boolean schema_modifications_disabled = false;
+    public boolean ring_changes_disabled = false;
 }
