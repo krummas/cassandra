@@ -36,14 +36,14 @@ public class ClusterMetadataUpgradeReplaceTest extends UpgradeTestBase
         .nodesToUpgrade(1, 2)
         .withConfig((cfg) -> cfg.with(Feature.NETWORK, Feature.GOSSIP)
                                 .set(Constants.KEY_DTEST_FULL_STARTUP, true))
-        .upgradesToCurrentFrom(v404)
+        .upgradesToCurrentFrom(v50)
         .setup((cluster) -> {
             cluster.schemaChange(withKeyspace("ALTER KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor':2}"));
             cluster.schemaChange("CREATE TABLE " + KEYSPACE + ".tbl (pk int, ck int, v int, PRIMARY KEY (pk, ck))");
         })
         .runAfterClusterUpgrade((cluster) -> {
             cluster.get(3).shutdown().get();
-            cluster.get(3).setVersion(Versions.find().getLatest(v405));
+            cluster.get(3).setVersion(Versions.find().getLatest(v60));
             String address = cluster.get(3).config().getString("broadcast_address");
             try (WithProperties x = new WithProperties().set(CassandraRelevantProperties.REPLACE_ADDRESS_FIRST_BOOT, address))
             {
